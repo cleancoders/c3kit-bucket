@@ -1,0 +1,8 @@
+/resources/public/cljs/
+/checkouts
+/classes
+/lib
+/target
+.cpcache
+.specljs-timestamp
+*.iml
