@@ -2,7 +2,7 @@
 
 ![Bucket](https://github.com/cleancoders/c3kit/blob/master/img/bucket_200.png?raw=true)
 
-A Clojure library component of [c3kit - Clean Coders Clojure Kit](https://github.com/cleancoders/c3kit).
+A library component of [c3kit - Clean Coders Clojure Kit](https://github.com/cleancoders/c3kit).
 
 _"Most men give advice by the bucket, but take it by the grain."_ - William R. Alger
 
