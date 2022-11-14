@@ -13,10 +13,10 @@
 /checkouts
 /classes
 /lib
+/node_modules
 /resources/public/cljs/
 /target
 hs_err_*.log
-node_modules
 package-lock.json
 pom.xml
 pom.xml.asc
