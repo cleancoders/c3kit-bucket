@@ -1,81 +1,74 @@
 /*
- Speclj Runner
+ Speclj + Headless Chrome Test Runner
 
  Usage:
- phantomjs resources/public/specs/speclj.js [auto]
+ node speclj.js [auto]
 
  auto: will only run specs updated after the last run. (default: false)
 
  Each run produced/touches a timestamp file, .specljs-timestamp
  */
 
+const path = require('path');
+const fs = require("fs");
+var autoArg = process.argv.pop();
+var timestampFile = path.resolve(__dirname, "../../.specljs-timestamp");
+var specsHTMLFile = path.resolve(__dirname, "specs.html");
 var nsPrefix = "c3kit.bucket"
 
-var fs = require("fs");
-var p = require('webpage').create();
-var system = require('system');
-
-String.prototype.endsWith = function (suffix) {
-  return this.indexOf(suffix, this.length - suffix.length) !== -1;
-};
-String.prototype.startsWith = function (str) {
-  return this.slice(0, str.length) == str;
+function lastModified(filepath) {
+  try {
+    var stats = fs.statSync(filepath);
+    return stats.mtime;
+  } catch (error) {
+    return null;
+  }
 };
 
-p.onConsoleMessage = function (x) {
-  fs.write("/dev/stdout", x + "\n", "w");
+function writeTimestamp() {
+  if (lastModified(timestampFile) != null) {
+    fs.unlinkSync(timestampFile);
+  }
+  fs.closeSync(fs.openSync(timestampFile, 'w'));
 };
 
-var timestampFile = ".specljs-timestamp";
-writeTimestamp = function () {
-  if(fs.lastModified(timestampFile) != null)
-    fs.remove(timestampFile);
-  fs.touch(timestampFile);
+function readTimestamp() {
+  return lastModified(timestampFile);
 };
 
-readTimestamp = function () {
-  return fs.lastModified(timestampFile);
+function autoMode() {
+  return autoArg == "auto" && readTimestamp() != null;
 };
 
-var autoMode = function () {
-  return system.args[1] == "auto" && readTimestamp() != null;
-};
-
-// var logList = function (title, list) {
-//   console.log(title + ":");
-//   for(var i in list)
-//     console.log(i);
-// };
-
-findUpdatedSpecs = function (rdeps, deps) {
+function findUpdatedSpecs(rdeps, deps) {
   var minMillis = readTimestamp().getTime();
   var updated = {};
-  for(var ns in rdeps) {
+  for (var ns in rdeps) {
     var file = deps.idToPath_[ns];
     var path = file.substring(7);
-    if(fs.lastModified(path).getTime() >= minMillis) {
+    if (lastModified(path).getTime() >= minMillis) {
       updated[ns] = true;
     }
   }
   return updated;
 };
 
-buildReverseDeps = function (deps) {
+function buildReverseDeps(deps) {
   var rdeps = {};
-  for(var ns in deps.idToPath_) {
-    if(ns.startsWith(nsPrefix)) {
+  for (var ns in deps.idToPath_) {
+    if (ns.startsWith(nsPrefix)) {
       var file = deps.idToPath_[ns];
       var requires = deps.dependencies_[file].requires
-      for(var i = 0; i < requires.length; i++) {
+      for (var i = 0; i < requires.length; i++) {
         var rdep = requires[i];
-        if(rdep.startsWith(nsPrefix)) {
-          if(!(rdep in rdeps)) {
+        if (rdep.startsWith(nsPrefix)) {
+          if (!(rdep in rdeps)) {
             rdeps[rdep] = {}
           }
           rdeps[rdep][ns] = true;
         }
       }
-      if(!(ns in rdeps)) {
+      if (!(ns in rdeps)) {
         rdeps[ns] = {}
       }
     }
@@ -84,28 +77,25 @@ buildReverseDeps = function (deps) {
 };
 
 
-reduceToSpecs = function (affected) {
+function reduceToSpecs(affected) {
   var result = {};
-  for(var ns in affected) {
-    if(ns.endsWith("_spec")) {
+  for (var ns in affected) {
+    if (ns.endsWith("_spec")) {
       result[ns.replace(/_/g, "-")] = true
     }
   }
   return result;
 };
 
-findAffectedSpecs = function () {
-  var deps = p.evaluate(function () {
-    return goog.debugLoader_;
-  });
+function findAffectedSpecs(deps) {
   var rdeps = buildReverseDeps(deps);
   var updated = findUpdatedSpecs(rdeps, deps);
 
   var result = {};
 
   var walkDeps = function (nses) {
-    for(var ns in nses) {
-      if(!(ns in result)) {
+    for (var ns in nses) {
+      if (!(ns in result)) {
         result[ns] = true;
         walkDeps(rdeps[ns])
       }
@@ -116,20 +106,38 @@ findAffectedSpecs = function () {
   return reduceToSpecs(result);
 };
 
-p.open("dev/specs/specs.html", function (status) {
-  try {
-    var specs = autoMode() ? findAffectedSpecs() : null;
+const puppeteer = require('puppeteer');
 
-    var result = p.evaluate(function (specSet) {
-      return runSpecsPhantom(specSet);
-    }, specs);
+(async () => {
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.exposeFunction('autoMode', () => autoMode());
+  await page.exposeFunction('findAffectedSpecs', (deps) => findAffectedSpecs(deps));
+  await page.exposeFunction('writeTimestamp', () => writeTimestamp());
+  await page.goto('file://' + specsHTMLFile);
+  page.on('console', msg => {
+    if (msg.text() === "Failed to load resource: net::ERR_FILE_NOT_FOUND") {
+      return; // because we aren't loading specs.html over http, many local resources (images, fonts) are not found.
+    }
+    if (msg.type() === "error") {
+      console.log("Error:");
+      console.log(msg);
+    }
+    else
+      console.log(msg.text());
+  });
+  var code = await page.evaluate(async () => {
+    try {
+      var specs = await window.autoMode() ? await window.findAffectedSpecs(goog.debugLoader_) : null;
+      var result = runSpecsFiltered(specs);
+      await window.writeTimestamp();
+      return result;
+    } catch (e) {
+      console.error(e);
+      return 1;
+    }
+  });
 
-    writeTimestamp();
-    phantom.exit(result);
-  }
-  catch(e) {
-    console.error(e);
-    phantom.exit(-1);
-  }
-
-});
+  await browser.close();
+  process.exit(code);
+})();
