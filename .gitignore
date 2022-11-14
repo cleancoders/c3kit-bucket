@@ -4,10 +4,6 @@
 .DS_Store
 .cpcache
 .idea
-.lein-deps-sum
-.lein-failures
-.lein-plugins
-.lein-repl-history
 .nrepl-port
 .specljs-timestamp
 /checkouts
