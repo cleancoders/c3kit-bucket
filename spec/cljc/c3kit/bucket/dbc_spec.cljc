@@ -1,15 +1,10 @@
 (ns c3kit.bucket.dbc-spec
-  (:require
-    [speclj.core #?(:clj :refer :cljs :refer-macros) [context describe it xit should= should-contain
-                                                      should-not-contain should-throw should-be-a with
-                                                      should-not= before should should-not should-not-throw
-                                                      focus-it]]
-    [c3kit.bucket.db :as db]
-    [c3kit.apron.log :as log]
-    [c3kit.apron.time :as time :refer [seconds ago from-now]]
-    [c3kit.apron.schema :as s]
-    [c3kit.bucket.spec-helper :as helper]
-    ))
+  (:require [speclj.core #?(:clj :refer :cljs :refer-macros) [context describe it should= should-be-nil should-throw
+                                                              with before should should-not should-not-throw]]
+            [c3kit.apron.schema :as s]
+            [c3kit.apron.time :as time :refer [seconds ago from-now]]
+            [c3kit.bucket.db :as db]
+            [c3kit.bucket.spec-helper :as helper]))
 
 (def bibelot
   {:kind  (s/kind :bibelot)
@@ -54,10 +49,10 @@
     (helper/with-db-schemas [bibelot])
 
     (it "returns nil on missing id"
-      (should= nil (db/entity -1))
-      (should= nil (db/entity nil))
-      (should= nil (db/entity ""))
-      (should= nil (db/entity "-1")))
+      (should-be-nil (db/entity -1))
+      (should-be-nil (db/entity nil))
+      (should-be-nil (db/entity ""))
+      (should-be-nil (db/entity "-1")))
 
     (it "tx nil entities"
       (should-not-throw (db/tx nil))
@@ -78,7 +73,7 @@
     (it "entity-of-kind"
       (let [saved (db/tx {:kind :bibelot :name "thingy"})]
         (should= saved (db/entity-of-kind :bibelot (:id saved)))
-        (should= nil (db/entity-of-kind :other (:id saved)))))
+        (should-be-nil (db/entity-of-kind :other (:id saved)))))
 
     (it "entity-of-kind!"
       (let [saved (db/tx {:kind :bibelot :name "thingy"})]
@@ -96,13 +91,13 @@
     (it "retracting via metadata"
       (let [saved   (db/tx {:kind :bibelot :name "thingy"})
             updated (db/tx (with-meta saved {:retract true}))]
-        (should= nil (db/entity (:id saved)))
+        (should-be-nil (db/entity (:id saved)))
         (should= {:kind :db/retract :id (:id saved)} updated)))
 
     (it "retracting via :kind :db/retract"
       (let [saved   (db/tx {:kind :bibelot :name "thingy"})
             updated (db/tx (assoc saved :kind :db/retract))]
-        (should= nil (db/entity (:id saved)))
+        (should-be-nil (db/entity (:id saved)))
         (should= {:kind :db/retract :id (:id saved)} updated)))
 
     (it "retracting when passed an entity"
@@ -201,8 +196,8 @@
         (should= [b1 b2 b3] (db/find-by :bibelot :name ["Bee" "Ant"]))
         (should= [b3] (db/find-by :bibelot :name ['or "BLAH" "Ant"]))
         (should= [] (db/find-by :bibelot :name ['or "BLAH" "ARG"]))
-        (should= [] (db/find-by :bibelot :name ['or ]))
-        (should= [] (db/find-by :bibelot :name ['or ] :size 1))))
+        (should= [] (db/find-by :bibelot :name ['or]))
+        (should= [] (db/find-by :bibelot :name ['or] :size 1))))
 
     (it "or multi-value"
       (let [d1 (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
@@ -380,7 +375,7 @@
     (it "retracting [string] value"
       (let [saved   (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
             updated (db/tx saved :names nil)]
-        (should= nil (seq (:names updated)))))
+        (should-be-nil (seq (:names updated)))))
 
     (it "retracting one value from [string]"
       (let [saved   (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
@@ -405,7 +400,7 @@
             child2  (db/tx {:kind :bibelot :name "child2" :color "silver"})
             saved   (db/tx {:kind :doodad :things [(:id child1) (:id child2)]})
             updated (db/tx saved :things nil)]
-        (should= nil (seq (:things updated)))))
+        (should-be-nil (seq (:things updated)))))
 
     (it "removing one [ref] values"
       (let [child1  (db/tx {:kind :bibelot :name "child1" :color "golden"})
@@ -413,6 +408,10 @@
             saved   (db/tx {:kind :doodad :things [(:id child1) (:id child2)]})
             updated (db/tx saved :things [(:id child1)])]
         (should= #{(:id child1)} (set (:things updated)))))
+
+    (it "no [ref] values"
+      (let [saved (db/tx {:kind :doodad :things []})]
+        (should-be-nil (:things saved))))
 
     (it "adding one [ref] values"
       (let [child1  (db/tx {:kind :bibelot :name "child1" :color "golden"})
@@ -438,23 +437,23 @@
 
     (it "can set a string to nil"
       (let [result (db/tx (assoc @original :foo nil))]
-        (should= nil (:foo result))
-        (should= nil (:foo (db/reload @original)))))
+        (should-be-nil (:foo result))
+        (should-be-nil (:foo (db/reload @original)))))
 
     (it "can set a ref to nil"
       (let [result (db/tx (assoc @original :bar nil))]
-        (should= nil (:bar result))
-        (should= nil (:bar (db/reload @original)))))
+        (should-be-nil (:bar result))
+        (should-be-nil (:bar (db/reload @original)))))
 
     (it "can set a long to nil"
       (let [result (db/tx (dissoc @original :fizz))]
-        (should= nil (:fizz result))
-        (should= nil (:fizz (db/reload @original)))))
+        (should-be-nil (:fizz result))
+        (should-be-nil (:fizz (db/reload @original)))))
 
     (it "can set a keyword to nil"
       (let [result (db/tx (dissoc @original :bang))]
-        (should= nil (:bang result))
-        (should= nil (:bang (db/reload @original)))))
+        (should-be-nil (:bang result))
+        (should-be-nil (:bang (db/reload @original)))))
     )
 
   (context "transactions"
@@ -474,14 +473,14 @@
             g2     (db/tx {:kind :gewgaw :name "2"})
             result (db/tx* [(assoc g1 :name "one") (dissoc g2 :name)])]
         (should= "one" (:name (db/reload (first result))))
-        (should= nil (:name (db/reload (second result))))))
+        (should-be-nil (:name (db/reload (second result))))))
 
     (it "retract with meta-data on any of the entities"
       (let [g1 (db/tx {:kind :gewgaw :name "1"})
             g2 (db/tx {:kind :gewgaw :name "2"})
             [u1 u2] (db/tx* [(assoc g1 :name "one") (assoc g2 :kind :db/retract)])]
         (should= "one" (:name (db/reload u1)))
-        (should= nil (db/reload u2))
+        (should-be-nil (db/reload u2))
         (should= {:kind :db/retract :id (:id g2)} u2)))
 
     (it "temp-ids are resolved"

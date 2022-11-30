@@ -34,12 +34,18 @@
         (update :all dissoc id)
         (update kind dissoc id))))
 
+(def seq-or-value? (complement (every-pred coll? empty?)))
+
+(defn- remove-empty-seqs [e]
+  (reduce-kv (fn [m k v] (cond-> m (seq-or-value? v) (assoc k v))) {} e))
+
 (defn- install-entity [db e]
   (assert (:id e) (str "entity missing id!: " e))
   (let [original (get-in db [:all (:id e)])
         e        (-> (utilc/keywordize-kind e)
                      (merge-with-original original)
-                     legend/coerce!)]
+                     legend/coerce!
+                     remove-empty-seqs)]
     (-> db
         (update :all assoc (:id e) e)
         (update (:kind e) assoc (:id e) e))))
@@ -126,11 +132,11 @@
     (map tx-result entities)))
 
 (defn count-all
-  ([kind attr] (count-all kind))                            ;; MDM - compatibility with datomic db
+  ([kind attr] (count-all kind)) ;; MDM - compatibility with datomic db
   ([kind] (count (get @db kind))))
 
 (defn find-all
-  ([kind attr] (find-all kind))                             ;; MDM - compatibility with datomic db
+  ([kind attr] (find-all kind)) ;; MDM - compatibility with datomic db
   ([kind] (vals (get @db kind))))
 
 (defn find-by [kind & kvs]
