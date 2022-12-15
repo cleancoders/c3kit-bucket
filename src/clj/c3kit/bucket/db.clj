@@ -343,6 +343,22 @@
   See find-by for value matching options."
   [kind & pairs] (apply do-search count-where 0 kind pairs))
 
+(defn min-by
+  "Minimum of all entities where the attribute(s) match the value(s).
+  See find-by for value matching options."
+  [kind attr & pairs]
+  (->> (apply find-by kind pairs)
+       (sort-by attr)
+       first))
+
+(defn max-by
+  "Maximum of all entities where the attribute(s) match the value(s).
+  See find-by for value matching options."
+  [kind attr & pairs]
+  (->> (apply find-by kind pairs)
+       (sort-by attr)
+       last))
+
 (defn ffind-by
   "Same as (first (find-by ...))"
   ([kind attr value] (first (find-by kind attr value)))
@@ -368,6 +384,24 @@
                         :in $ ?attribute
                         :where [?e ?attribute]] (db) (->attr-kw kind attr)))
        0)))
+
+(defn min
+  "Finds min of all entities where the attribute(s) match the value(s).
+  See find-by for value matching options."
+  ([kind] (throw (ex-info "an attribute is required when using datomic" {:kind kind})))
+  ([kind attr] (or (ffirst (api/q '[:find (min ?x)
+                                    :in $ ?attribute
+                                    :where [?e ?attribute ?x]] (db) (->attr-kw kind attr)))
+                   0)))
+
+(defn max
+  "Finds max of all entities where the attribute(s) match the value(s).
+  See find-by for value matching options."
+  ([kind] (throw (ex-info "an attribute is required when using datomic" {:kind kind})))
+  ([kind attr] (or (ffirst (api/q '[:find (max ?x)
+                                    :in $ ?attribute
+                                    :where [?e ?attribute ?x]] (db) (->attr-kw kind attr)))
+                   0)))
 
 (defn find-all
   "Attribute must be a qualified attribute name like :user/email :airport/code
