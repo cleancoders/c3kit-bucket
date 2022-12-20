@@ -116,7 +116,7 @@
 
 (defn- tx-result [entity]
   (if (dbc/retract? entity)
-    {:kind :db/retract :id (:id entity)}
+    (dbc/soft-retract (:id entity))
     (reload entity)))
 
 (defn tx [& args]
@@ -152,6 +152,5 @@
 
 (defn retract [id-or-entity]
   (if-let [entity (entity id-or-entity)]
-    (tx (assoc entity :kind :db/retract))
+    (-> entity dbc/soft-retract tx)
     (log/warn "Attempt to retract missing entity: " id-or-entity)))
-

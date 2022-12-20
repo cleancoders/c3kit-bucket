@@ -8,6 +8,10 @@
   (when (and e (= kind (:kind e)))
     e))
 
+(defn soft-retract [id-or-entity]
+  (-> (if (number? id-or-entity) {:id id-or-entity} id-or-entity)
+      (assoc :kind :db/retract)))
+
 (defn entity-of-kind! [e kind id]
   (or (entity-of-kind e kind)
       (throw (ex-info "Entity kind mismatch" {:expected kind :actual (:kind e) :id id}))))

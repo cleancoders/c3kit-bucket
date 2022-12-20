@@ -202,7 +202,7 @@
 (defn- tx-result [id]
   (if-let [e (entity id)]
     e
-    {:kind :db/retract :id id}))
+    (dbc/soft-retract id)))
 
 (defn tx
   "Transacts (save, update, or retract) the entity.
@@ -386,9 +386,7 @@
 (defn retract
   "Basically 'deletes' an entity."
   [id-or-entity]
-  (-> (if (number? id-or-entity) {:id id-or-entity} id-or-entity)
-      (assoc :kind :db/retract)
-      tx))
+  (-> id-or-entity dbc/soft-retract tx))
 
 (defn cas
   "compare-and-swap - Returns entity with CAS metadata.  When transacted, only the specified attributes will be saved.
