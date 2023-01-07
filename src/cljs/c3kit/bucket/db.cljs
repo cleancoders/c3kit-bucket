@@ -1,13 +1,11 @@
 (ns c3kit.bucket.db
   "A Simple in-memory database.
    Data pulled from the server is stored here to be easily retrieved some time later."
-  (:require
-    [c3kit.apron.corec :as ccc]
-    [c3kit.apron.legend :as legend]
-    [c3kit.apron.log :as log]
-    [c3kit.apron.utilc :as utilc]
-    [c3kit.bucket.dbc :as dbc]
-    ))
+  (:require [c3kit.apron.corec :as ccc]
+            [c3kit.apron.legend :as legend]
+            [c3kit.apron.log :as log]
+            [c3kit.apron.utilc :as utilc]
+            [c3kit.bucket.dbc :as dbc]))
 
 (def ^:private db (atom {:all {}}))
 (defn replace-db-atom! [new-atom]
@@ -55,7 +53,7 @@
     (retract-entity db e)
     (install-entity db e)))
 
-(defn- multi? [ev] (or (sequential? ev) (set? ev)))
+(def ^:private multi? (some-fn sequential? set?))
 
 (defn- normal-tester [f v]
   (fn [ev]
@@ -74,7 +72,7 @@
 (defmethod -tester 'not [[_ v]]
   (fn [ev]
     (if (multi? ev)
-      (not (some #(= v %) ev))
+      (not-any? #(= v %) ev)
       (not= v ev))))
 (defmethod -tester '> [[_ v]] (normal-tester > v))
 (defmethod -tester '< [[_ v]] (normal-tester < v))
@@ -89,9 +87,7 @@
   (let [tester (cond (set? v) (or-tester v)
                      (sequential? v) (-tester v)
                      :else (eq-tester v))]
-    (fn [e]
-      (let [ev (get e k)]
-        (tester ev)))))
+    (fn [e] (tester (get e k)))))
 
 (defn- spec->tester [spec]
   (let [testers (map kv->tester spec)]
@@ -112,9 +108,9 @@
 (defn entity! [id] (dbc/entity! (entity id) id))
 (defn entity-of-kind! [kind id] (dbc/entity-of-kind! (entity id) kind id))
 (defn entity-of-kind [kind id] (dbc/entity-of-kind (entity id) kind))
-(defn reload [e] (when-let [id (:id e)] (entity id)))
+(defn reload [e] (some-> e :id entity))
 
-(defn- tx-result [entity]
+(defn tx-result [entity]
   (if (dbc/retract? entity)
     (dbc/soft-retract (:id entity))
     (reload entity)))
@@ -127,8 +123,8 @@
         (tx-result e)))))
 
 (defn tx* [entities]
-  (let [entities (map ensure-id (remove nil? entities))]
-    (swap! db (fn [db] (reduce #(tx-entity %1 %2) db entities)))
+  (let [entities (sequence (comp (remove nil?) (map ensure-id)) entities)]
+    (swap! db (fn [db] (reduce tx-entity db entities)))
     (map tx-result entities)))
 
 (defn count-all
@@ -139,18 +135,21 @@
   ([kind attr] (find-all kind)) ;; MDM - compatibility with datomic db
   ([kind] (vals (get @db kind))))
 
-(defn find-by [kind & kvs]
-  ;(assert (even? (count kvs)) "Each attribute must have a value")
-  (let [kv-pairs (partition 2 kvs)
-        kinds    (vals (get @db kind))]
+(defn- find-by-tester [kvs]
+  (let [kv-pairs (partition 2 kvs)]
     (assert (every? keyword? (map first kv-pairs)) "Attributes must be keywords")
-    (let [tester (spec->tester kv-pairs)] (filter tester kinds))))
+    (spec->tester kv-pairs)))
 
-(defn ffind-by [kind & kvs] (first (apply find-by kind kvs)))
-(defn find-ids-by [kind & kvs] (map :id (apply find-by kind kvs)))
-(defn count-by [kind & kvs] (count (apply find-by kind kvs)))
+(defn find-by [kind & kvs] (filter (find-by-tester kvs) (find-all kind)))
+(defn ffind-by [kind & kvs] (ccc/ffilter (find-by-tester kvs) (find-all kind)))
+
+(defn find-ids-by [kind & kvs]
+  (sequence (comp (filter (find-by-tester kvs)) (map :id)) (find-all kind)))
+
+(defn count-by [kind & kvs]
+  (let [tester (find-by-tester kvs)]
+    (reduce #(if (tester %2) (inc %1) %1) 0 (find-all kind))))
 
 (defn retract [id-or-entity]
-  (if-let [entity (entity id-or-entity)]
-    (-> entity dbc/soft-retract tx)
-    (log/warn "Attempt to retract missing entity: " id-or-entity)))
+  (or (some-> id-or-entity entity dbc/soft-retract tx)
+      (log/warn "Attempt to retract missing entity: " id-or-entity)))
