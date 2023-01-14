@@ -123,7 +123,7 @@
         (tx-result e)))))
 
 (defn tx* [entities]
-  (let [entities (sequence (comp (remove nil?) (map ensure-id)) entities)]
+  (let [entities (ccc/some-map ensure-id entities)]
     (swap! db (fn [db] (reduce tx-entity db entities)))
     (map tx-result entities)))
 

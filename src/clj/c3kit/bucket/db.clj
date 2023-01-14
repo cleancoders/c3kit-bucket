@@ -219,7 +219,7 @@
 (defn tx*
   "Transact multiple entities, synchronously"
   [entities]
-  (let [id-forms (map tx-form (remove nil? entities))
+  (let [id-forms (ccc/some-map tx-form entities)
         tx-form  (mapcat second id-forms)
         result   @(api/transact @connection tx-form)
         ids      (map #(resolve-id result (first %)) id-forms)]
