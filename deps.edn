@@ -1,7 +1,7 @@
 {
  :paths   ["src/clj" "src/cljc" "src/cljs"]
  :deps    {
-           com.cleancoders.c3kit/apron {:git/url "git@github.com:cleancoders/c3kit-apron.git" :git/sha "583a4cded2edade57c973f09d3c63198ec4c345f"}
+           com.cleancoders.c3kit/apron {:git/url "git@github.com:cleancoders/c3kit-apron.git" :git/sha "8cf34a91b648188beef3730817096f61416c348d"}
            cljsjs/hashids              {:mvn/version "1.0.2-0"}
            jstrutz/hashids             {:mvn/version "1.0.1"}
            org.clojure/clojure         {:mvn/version "1.11.1"}
