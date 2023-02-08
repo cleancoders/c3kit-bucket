@@ -43,6 +43,7 @@
         e        (-> (utilc/keywordize-kind e)
                      (merge-with-original original)
                      legend/coerce!
+                     (select-keys (keys e))
                      remove-empty-seqs)]
     (-> db
         (update :all assoc (:id e) e)

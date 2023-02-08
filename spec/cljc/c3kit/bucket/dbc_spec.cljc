@@ -7,11 +7,12 @@
             [c3kit.bucket.spec-helper :as helper]))
 
 (def bibelot
-  {:kind  (s/kind :bibelot)
-   :id    s/id
-   :name  {:type :string}
-   :size  {:type :long}
-   :color {:type :string}})
+  {:kind   (s/kind :bibelot)
+   :id     s/id
+   :name   {:type :string}
+   :size   {:type :long}
+   :happy? {:type :boolean}
+   :color  {:type :string}})
 
 (def gewgaw
   {:kind  (s/kind :gewgaw)
@@ -142,12 +143,13 @@
         (should-not (db/ffind-by :thingy :foo "ringo" :bar (:id bibby) :fizz 2 :bang :paul))))
 
     (it "find by nil"
-      (let [b1 (db/tx :kind :bibelot :name "Bee" :size 1)
+      (let [b1 (db/tx :kind :bibelot :name "Bee" :size 1 :happy? true)
             b2 (db/tx :kind :bibelot :name "Bee" :color "blue")
             b3 (db/tx :kind :bibelot :size 1 :color "blue")]
         (should= [b1] (db/find-by :bibelot :name "Bee" :color nil))
         (should= [b2] (db/find-by :bibelot :name "Bee" :size nil))
-        (should= [b3] (db/find-by :bibelot :color "blue" :name nil))))
+        (should= [b3] (db/find-by :bibelot :color "blue" :name nil))
+        (should= [b2] (db/find-by :bibelot :name "Bee" :happy? nil))))
 
     (it "find by not nil"
       (let [b1 (db/tx :kind :bibelot :name "Bee" :size 1)
@@ -206,6 +208,14 @@
         (should= [d1 d2] (db/find-by :doodad :names ["bar" "bang"]))
         (should= [d1] (db/find-by :doodad :names ["bar" "BLAH"]))
         (should= [] (db/find-by :doodad :names ["ARG" "BLAH"]))))
+
+    (it "boolean"
+      (let [b1 (db/tx :kind :bibelot :happy? true)
+            b2 (db/tx :kind :bibelot :happy? false)
+            b3 (db/tx :kind :bibelot :name "foo")]
+        (should= [b1] (db/find-by :bibelot :happy? true))
+        (should= [b2] (db/find-by :bibelot :happy? false))
+        (should= [b3] (db/find-by :bibelot :name "foo" :happy? nil))))
 
     (context "<>: "
 
