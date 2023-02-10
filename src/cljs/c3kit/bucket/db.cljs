@@ -147,8 +147,7 @@
   (sequence (comp (filter (find-by-tester kvs)) (map :id)) (find-all kind)))
 
 (defn count-by [kind & kvs]
-  (let [tester (find-by-tester kvs)]
-    (reduce #(if (tester %2) (inc %1) %1) 0 (find-all kind))))
+  (ccc/count-where (find-by-tester kvs) (find-all kind)))
 
 (defn retract [id-or-entity]
   (or (some-> id-or-entity entity dbc/soft-retract tx)
