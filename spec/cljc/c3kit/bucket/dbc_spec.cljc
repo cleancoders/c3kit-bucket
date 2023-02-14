@@ -1,5 +1,6 @@
 (ns c3kit.bucket.dbc-spec
-  (:require [speclj.core #?(:clj :refer :cljs :refer-macros) [context describe it should= should-be-nil should-throw
+  (:require [c3kit.apron.corec :as ccc]
+            [speclj.core #?(:clj :refer :cljs :refer-macros) [context describe it should= should-be-nil should-throw
                                                               with before should should-not should-not-throw]]
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time :refer [seconds ago from-now]]
@@ -313,12 +314,12 @@
     (it "find all bibelot/name"
       (let [all (db/find-all :bibelot :name)]
         (should= 3 (count all))
-        (should= #{1 2 3} (set (map :size all)))))
+        (should= #{1 2 3} (ccc/map-set :size all))))
 
     (it "find all bibelot/color"
       (let [all (db/find-all :bibelot :color)]
         (should= 3 (count all))
-        (should= #{1 2 3} (set (map :size all)))))
+        (should= #{1 2 3} (ccc/map-set :size all))))
     )
 
   (context "count-all"

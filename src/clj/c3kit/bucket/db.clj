@@ -76,10 +76,7 @@
 (defn scope-attribute [kind attr] (keyword (name kind) (name attr)))
 
 (defn scope-attributes [kind attributes]
-  (into {}
-        (map
-          (fn [[k v]] [(scope-attribute kind k) v])
-          attributes)))
+  (reduce-kv (fn [m k v] (assoc m (scope-attribute kind k) v)) {} attributes))
 
 (defn transact!
   ([transaction] (transact! transaction @connection))
@@ -94,17 +91,17 @@
 (defn attributes->entity
   ([attributes id]
    (when (seq attributes)
-     (let [kind (namespace (first (first attributes)))]
+     (let [kind (namespace (ffirst attributes))]
        (attributes->entity attributes id kind))))
   ([attributes id kind]
-   (into {:id id :kind (keyword kind)}
-         (map
-           (fn [[k v]]
-             [(keyword (name k))
-              (if (set? v)
-                (set (map value-or-id v))
-                (value-or-id v))])
-           attributes))))
+   (reduce-kv
+     (fn [m k v]
+       (assoc m (keyword (name k))
+                (if (set? v)
+                  (ccc/map-set value-or-id v)
+                  (value-or-id v))))
+     {:id id :kind (keyword kind)}
+     attributes)))
 
 (defn entity [id]
   (cond
@@ -150,7 +147,7 @@
   (reduce (fn [form [key val]]
             (if (or (set? val) (sequential? val))
               (let [id      (:db/id updated)
-                    o-val   (set (map id-or-val (get original key)))
+                    o-val   (ccc/map-set id-or-val (get original key))
                     missing (set/difference o-val (set val))]
                 (reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form missing))
               form))
@@ -221,9 +218,8 @@
   [entities]
   (let [id-forms (ccc/some-map tx-form entities)
         tx-form  (mapcat second id-forms)
-        result   @(api/transact @connection tx-form)
-        ids      (map #(resolve-id result (first %)) id-forms)]
-    (map tx-result ids)))
+        result   @(api/transact @connection tx-form)]
+    (map #(tx-result (resolve-id result (first %))) id-forms)))
 
 (defn atx*
   "Asynchronous transact.  Returns a future containing the transacted entities.
@@ -235,9 +231,8 @@
     (future
       (loop [done? (future-done? tx)]
         (if done?
-          (let [result @tx
-                ids    (map first id-forms)]
-            (map #(entity (resolve-id result %)) ids))
+          (let [result @tx]
+            (map #(entity (resolve-id result (first %))) id-forms))
           (do
             (Thread/yield)
             (recur (future-done? tx))))))))

@@ -1,8 +1,7 @@
 (ns c3kit.bucket.db-spec
-  (:require-macros [speclj.core :refer [describe context it should-not-be-nil should-be-nil should= should-not
-                                        should-not= should-have-invoked after before with-stubs with around
-                                        should-contain should-not-contain should-throw should should-not-throw]])
-  (:require [c3kit.bucket.db :as db]
+  (:require-macros [speclj.core :refer [before context describe it should=]])
+  (:require [c3kit.apron.corec :as ccc]
+            [c3kit.bucket.db :as db]
             [c3kit.bucket.dbc-spec :as dbc-spec]
             [c3kit.bucket.spec-helper :as helper]))
 
@@ -31,6 +30,6 @@
     (it "doesn't required attribute"
       (let [all (db/find-all :bibelot)]
         (should= 3 (count all))
-        (should= #{1 2 3} (set (map :size all)))))
+        (should= #{1 2 3} (ccc/map-set :size all))))
     )
   )
