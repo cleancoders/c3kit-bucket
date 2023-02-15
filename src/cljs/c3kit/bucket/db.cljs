@@ -127,13 +127,14 @@
     (swap! db (fn [db] (reduce tx-entity db entities)))
     (map tx-result entities)))
 
-(defn count-all
-  ([kind attr] (count-all kind)) ;; MDM - compatibility with datomic db
-  ([kind] (count (get @db kind))))
-
+(defn- attr-tester [attr] #(some? (get % attr)))
 (defn find-all
-  ([kind attr] (find-all kind)) ;; MDM - compatibility with datomic db
+  ([kind attr] (filter (attr-tester attr) (find-all kind))) ;; MDM - compatibility with datomic db
   ([kind] (vals (get @db kind))))
+
+(defn count-all
+  ([kind attr] (ccc/count-where (attr-tester attr) (find-all kind))) ;; MDM - compatibility with datomic db
+  ([kind] (count (get @db kind))))
 
 (defn- find-by-tester [kvs]
   (let [kv-pairs (partition 2 kvs)]

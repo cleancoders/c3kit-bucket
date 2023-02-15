@@ -320,6 +320,13 @@
       (let [all (db/find-all :bibelot :color)]
         (should= 3 (count all))
         (should= #{1 2 3} (ccc/map-set :size all))))
+
+    (it "find all with attribute"
+      (db/tx :kind :bibelot :name "greg" :size 4 :happy? true)
+      (db/tx :kind :bibelot :name "carl" :size 5 :happy? false)
+      (let [all (db/find-all :bibelot :happy?)]
+        (should= 2 (count all))
+        (should= #{4 5} (ccc/map-set :size all))))
     )
 
   (context "count-all"
@@ -333,6 +340,11 @@
     (it "find all bibelot/name"
       (should= 0 (db/count-all :thingy :foo))
       (should= 3 (db/count-all :bibelot :name)))
+
+    (it "find all with attribute"
+      (db/tx :kind :bibelot :name "greg" :size 4 :happy? true)
+      (db/tx :kind :bibelot :name "carl" :size 5 :happy? false)
+      (should= 2 (db/count-all :bibelot :happy?)))
     )
 
 
