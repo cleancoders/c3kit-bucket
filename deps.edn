@@ -8,14 +8,17 @@
            }
  :aliases {
            :test {:extra-deps    {
-                                  com.cleancoders.c3kit/scaffold {:local/root "../scaffold" :exclusions [com.google.code.findbugs/jsr305]}
-                                  com.datomic/datomic-free       {:mvn/version "0.9.5697" :exclusions [com.google.guava/guava]}
-                                  org.clojure/clojurescript      {:mvn/version "1.11.60"}
-                                  speclj/speclj                  {:mvn/version "3.4.1"}
+                                  com.cleancoders.c3kit/scaffold    {:local/root "../scaffold" :exclusions [com.google.code.findbugs/jsr305]}
+                                  com.datomic/datomic-free          {:mvn/version "0.9.5697" :exclusions [com.google.guava/guava]}
+                                  com.github.seancorfield/next.jdbc {:mvn/version "1.2.761"}
+                                  com.microsoft.sqlserver/sqljdbc4  {:mvn/version "4.0"}
+                                  com.h2database/h2                 {:mvn/version "2.1.214"}
+                                  org.clojure/clojurescript         {:mvn/version "1.11.60"}
+                                  speclj/speclj                     {:mvn/version "3.4.3"}
                                   }
                   :override-deps {com.cleancoders.c3kit/apron {:local/root "../apron"}}
                   :extra-paths   ["dev" "spec/clj" "spec/cljc" "spec/cljs"]}
-           :spec {:main-opts ["-m" "speclj.main" "-c"]}
+           :spec {:main-opts ["-m" "speclj.main" "-c" "-t" "~slow"]}
            :cljs {:main-opts ["-m" "c3kit.scaffold.cljs"]}
            }
  }

@@ -16,7 +16,7 @@
 
 (defn test-connection-from-schemas [schemas]
   (let [schemas (if (sequential? schemas) (flatten schemas) [schemas])
-        schema (mapcat migrate/->db-schema schemas)]
+        schema  (mapcat migrate/->db-schema schemas)]
     (test-connection schema)))
 
 (defn with-db-schemas [schemas]
