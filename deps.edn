@@ -14,6 +14,7 @@
                                   com.microsoft.sqlserver/sqljdbc4  {:mvn/version "4.0"}
                                   com.h2database/h2                 {:mvn/version "2.1.214"}
                                   org.clojure/clojurescript         {:mvn/version "1.11.60"}
+                                  org.postgresql/postgresql         {:mvn/version "42.1.1"}
                                   speclj/speclj                     {:mvn/version "3.4.3"}
                                   }
                   :override-deps {com.cleancoders.c3kit/apron {:local/root "../apron"}}

@@ -2,12 +2,12 @@
   (:require [c3kit.apron.schema :as schema]
             [c3kit.apron.schema]
             [c3kit.bucket.api-spec :as spec]
-            [c3kit.bucket.jdbc :as sut]
+            [c3kit.bucket.mssql :as sut]
+            [c3kit.bucket.jdbc :as jdbc]
             [c3kit.bucket.jdbc-spec :as jdbc-spec]
             [speclj.core :refer :all]))
 
-(def test-db-config {:dialect  :mssql
-                     :host     "localhost"
+(def test-db-config {:host     "localhost"
                      :port     1433
                      :dbtype   "sqlserver"
                      :dbname   "bucketTest"
@@ -32,7 +32,7 @@
 
   (describe "MS SQL Server"
 
-    (before-all (reset! sut/development? true))
+    (before-all (reset! jdbc/development? true))
     (with-stubs)
 
     (context "slow"

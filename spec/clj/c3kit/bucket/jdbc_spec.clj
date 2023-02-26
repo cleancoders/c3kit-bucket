@@ -3,6 +3,7 @@
             [c3kit.apron.schema :as s]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
+            [c3kit.bucket.h2 :as h2]
             [c3kit.bucket.jdbc :as sut]
             [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all]))
@@ -17,13 +18,7 @@
    :id    {:type :string :db {:type "varchar(255) PRIMARY KEY"} :strategy :pre-populated}
    :value {:type :int}})
 
-(def reserved-word-entity
-  {:kind  (assoc (s/kind :reserved-word-entity) :db {:table "reserved_word_entity"})
-   :id    {:type :int :db {:type "serial PRIMARY KEY"}}
-   :limit {:type :int}})                                    ;; limit is a reserved word in psql
-
-(def db (sut/create-db {:dialect :h2
-                        :jdbcUrl "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;"}))
+(def db (h2/create-db { :jdbcUrl "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;"}))
 (def ds (.ds db))
 
 (def bibelot
@@ -52,27 +47,27 @@
       (context "create table"
 
         (it "name"
-          (should= "CREATE TABLE foo ()" (sut/sql-create-table {:kind {:value :foo}}))
-          (should= "CREATE TABLE bar ()" (sut/sql-create-table {:kind {:value :foo :db {:table "bar"}}})))
+          (should= "CREATE TABLE foo ()" (sut/sql-create-table :foo {:kind {:value :foo}}))
+          (should= "CREATE TABLE bar ()" (sut/sql-create-table :foo {:kind {:value :foo :db {:table "bar"}}})))
 
         (it "id"
-          (should= "\"id\" int auto_increment PRIMARY KEY" (sut/sql-table-col :id {:type :int :db {:type "int auto_increment PRIMARY KEY"}}))
-          (should= "\"eyeD\" uniqueidentifier" (sut/sql-table-col :id {:type :uuid :db {:column "eyeD"}}))
-          (should= "\"eyeD\" varchar" (sut/sql-table-col :id {:type :uuid :db {:column "eyeD" :type "varchar"}})))
+          (should= "\"id\" int auto_increment PRIMARY KEY" (sut/sql-table-col :foo :id {:type :int :db {:type "int auto_increment PRIMARY KEY"}}))
+          (should= "\"eyeD\" uuid" (sut/sql-table-col :foo :id {:type :uuid :db {:column "eyeD"}}))
+          (should= "\"eyeD\" varchar" (sut/sql-table-col :foo :id {:type :uuid :db {:column "eyeD" :type "varchar"}})))
 
         (it "bibelot"
           (should= (str "CREATE TABLE bibelot ("
                         "\"id\" serial PRIMARY KEY,"
                         "\"name\" varchar(42),"
-                        "\"size\" bigint,"
+                        "\"size\" int4,"
                         "\"color\" varchar(55)"
                         ")")
-                   (sut/sql-create-table bibelot)))
+                   (sut/sql-create-table :foo bibelot)))
 
         (it "schema-type to db-type"
-          (should= "int" (sut/schema-type->db-type :int))
-          (should= "bigint" (sut/schema-type->db-type :long))
-          (should= "bit" (sut/schema-type->db-type :boolean)))
+          (should= "int4" (sut/schema-type->db-type :foo :int))
+          (should= "int4" (sut/schema-type->db-type :foo :long))
+          (should= "bool" (sut/schema-type->db-type :foo :boolean)))
         )
       )
 
@@ -124,22 +119,5 @@
           (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"})
           (should= 0 (api/count-all :str-id-entity)))
         )
-
-      #_(context "column with reserved word as name"
-
-          (helper/with-schemas db [reserved-word-entity])
-
-          (it "crud"
-            (let [e (api/tx {:kind :reserved-word-entity :limit 123})]
-              (should= 123 (:limit e))
-              (should= 123 (:limit (api/reload e)))
-              (api/delete e)
-              (should= nil (api/reload e))))
-
-          (it "search"
-            (let [e (api/tx {:kind :reserved-word-entity :limit 123})]
-              (should= e (api/ffind-by :reserved-word-entity :limit 123))))
-
-          )
       )
     ))

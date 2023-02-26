@@ -57,7 +57,8 @@
         (should= nil (sut/entity :bibelot -1))
         (should= nil (sut/entity :bibelot nil))
         (should= nil (sut/entity :bibelot ""))
-        (should= nil (sut/entity :bibelot "-1"))))
+        (should= nil (sut/entity :bibelot "-1"))
+        ))
 
     (it "tx nil entities"
       (should-not-throw (sut/tx nil))
