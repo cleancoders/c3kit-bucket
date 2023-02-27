@@ -12,6 +12,7 @@
 
 (defprotocol DB
   "API for database operations"
+  (-install-schema [this schemas])
   (-clear [this])
   (-count-all [this kind])
   (-count-by [this kind key-vals])
@@ -31,25 +32,31 @@
    :cljs (def impl (atom nil)))
 #?(:cljs (def set-impl! (partial reset! impl)))
 
-(defn id-type [kind] (get-in (legend/for-kind kind) [:id :type]))
-(defn coerced-id [kind id]
-  (let [type   (id-type kind)
+(defn id-type [legend kind] (get-in (legend/for-kind @legend kind) [:id :type]))
+(defn coerced-id [legend kind id]
+  (let [type   (id-type legend kind)
         coerce (schema/type-coercer! type)]
     (try (coerce id)
          (catch #?(:clj Exception :cljs :default) e
            (log/warn (str "failed to coerce id of kind " kind " - " (ex-message e)))
            id))))
 
-(defn- -maybe-generate-id-helper [e]
-  (case (id-type (:kind e))
+(defn- -maybe-generate-id-helper [legend e]
+  (case (id-type legend (:kind e))
     :uuid (assoc e :id (ccc/new-uuid))
     :int (-maybe-add-int-id @impl e)
     (throw (ex-info (str "don't know how to generate id of type" id-type) {}))))
 
-(defn -maybe-add-id [e]
+(defn -maybe-add-id [legend e]
   (cond (delete? e) e
         (:id e) e
-        :else (-maybe-generate-id-helper e)))
+        :else (-maybe-generate-id-helper legend e)))
+
+(defn legend [db] (deref (.-legend db)))
+
+(defn install-schema
+  ([schemas] (install-schema @impl schemas))
+  ([db schemas] (-install-schema db schemas)))
 
 (defn entity [kind id]
   (when id

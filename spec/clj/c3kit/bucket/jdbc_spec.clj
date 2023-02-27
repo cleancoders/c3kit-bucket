@@ -18,8 +18,7 @@
    :id    {:type :string :db {:type "varchar(255) PRIMARY KEY"} :strategy :pre-populated}
    :value {:type :int}})
 
-(def db (h2/create-db { :jdbcUrl "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;"}))
-(def ds (.ds db))
+(defn new-db [] (h2/create-db {:jdbcUrl "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;"}))
 
 (def bibelot
   (schema/merge-schemas
@@ -90,17 +89,17 @@
 
     (context "slow"
 
-      (spec/crud-specs db)
-      (spec/nil-value-specs db)
-      (spec/find-all db)
-      (spec/find-by db)
-      (spec/reduce-by db)
-      (spec/count-all db)
-      (spec/count-by db)
+      (spec/crud-specs (new-db))
+      (spec/nil-value-specs (new-db))
+      (spec/find-all (new-db))
+      (spec/find-by (new-db))
+      (spec/reduce-by (new-db))
+      (spec/count-all (new-db))
+      (spec/count-by (new-db))
 
       (context "SQL Injection"
 
-        (helper/with-schemas db [spec/bibelot str-id-entity])
+        (helper/with-schemas (new-db) [spec/bibelot str-id-entity])
 
         (it "finds by always true"
           (api/tx {:kind :bibelot :name "John" :size 5 :color "Red"})

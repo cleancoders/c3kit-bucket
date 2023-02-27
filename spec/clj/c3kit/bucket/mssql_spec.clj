@@ -7,15 +7,13 @@
             [c3kit.bucket.jdbc-spec :as jdbc-spec]
             [speclj.core :refer :all]))
 
-(def test-db-config {:host     "localhost"
-                     :port     1433
-                     :dbtype   "sqlserver"
-                     :dbname   "bucketTest"
-                     :user     "sa"
-                     :password "Pala2023"})
-
-(def db (sut/create-db test-db-config))
-(def ds (.ds db))
+(defn new-db []
+  (sut/create-db {:host     "localhost"
+                  :port     1433
+                  :dbtype   "sqlserver"
+                  :dbname   "bucketTest"
+                  :user     "sa"
+                  :password "Pala2023"}))
 
 (def bibelot
   (schema/merge-schemas
@@ -39,13 +37,13 @@
 
       (tags :slow)
 
-      (spec/crud-specs db)
-      (spec/nil-value-specs db)
-      (spec/find-all db)
-      (spec/find-by db)
-      (spec/reduce-by db)
-      (spec/count-all db)
-      (spec/count-by db)
+      (spec/crud-specs (new-db))
+      (spec/nil-value-specs (new-db))
+      (spec/find-all (new-db))
+      (spec/find-by (new-db))
+      (spec/reduce-by (new-db))
+      (spec/count-all (new-db))
+      (spec/count-by (new-db))
 
       )
     ))

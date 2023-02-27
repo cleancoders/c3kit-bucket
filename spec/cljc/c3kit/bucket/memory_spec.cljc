@@ -12,8 +12,7 @@
                                                               should<= should= should== should> should>= stub tags
                                                               with with-all with-stubs xit]]
             [c3kit.bucket.api-spec :as spec]
-            [c3kit.bucket.memory :as sut]
-            ))
+            [c3kit.bucket.memory :as sut]))
 
 (describe "Memory DB"
   (spec/crud-specs (sut/create-db))
