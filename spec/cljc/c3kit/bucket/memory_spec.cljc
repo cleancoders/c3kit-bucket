@@ -22,4 +22,5 @@
   (spec/find-by (sut/create-db))
   (spec/find-all (sut/create-db))
   (spec/reduce-by (sut/create-db))
+  (spec/broken-in-datomic (sut/create-db))
   )

@@ -131,7 +131,7 @@
 
 (defn- tx-result [legend store entity]
   (if (api/delete? entity)
-    {:kind (:kind entity) :id (:id entity) :db/delete? true}
+    (api/soft-delete entity)
     (reload legend store entity)))
 
 (defn- do-tx [legend store e]
@@ -156,7 +156,7 @@
     (assert (every-keyword? (map first kv-pairs)) "Attributes must be keywords")
     (filter (spec->tester kv-pairs) kinds)))
 
-(defn- do-find-by [legend store kind & [kvs]]
+(defn- do-find-by [legend store kind kvs]
   (ensure-schema! legend kind)
   (let [kinds (vals (get @store kind))]
     (filter-by-kvs kvs kinds)))

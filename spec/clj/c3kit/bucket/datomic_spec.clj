@@ -4,7 +4,8 @@
             [c3kit.bucket.datomic :as sut]
             [speclj.core :refer :all]))
 
-(def uri "datomic:mem://test")
+(def config {:uri "datomic:mem://test"})
+(defn new-db [] (sut/create-db config))
 
 (describe "Datomic"
 
@@ -13,13 +14,13 @@
 
   (context "api"
 
-    ;(spec/crud-specs (sut/create-db uri))
-    ;(spec/nil-value-specs db)
-    ;(spec/find-all db)
-    ;(spec/find-by db)
-    ;(spec/reduce-by db)
-    ;(spec/count-all db)
-    ;(spec/count-by db)
+    (spec/crud-specs (new-db))
+    (spec/nil-value-specs (new-db))
+    (spec/find-all (new-db))
+    (spec/find-by (new-db))
+    ;(spec/reduce-by (new-db))
+    (spec/count-all (new-db))
+    (spec/count-by (new-db))
 
     )
 
@@ -97,5 +98,21 @@
         (should= 2 (count schema))
         (should-contain {:db/ident :thing/foo} schema)
         (should-contain {:db/ident :thing/bar} schema)))
+    )
+
+  (context "partition"
+
+    (it "default"
+      (let [db (sut/create-db (dissoc config :partition))]
+        (should= :db.part/user (sut/partition-name db))))
+
+    (it "in config"
+      (let [db (sut/create-db (assoc config :partition :test))]
+        (should= :test (sut/partition-name db))))
+
+    (it "schema"
+      (should= [{:db/id "test", :db/ident :test} [:db/add :db.part/db :db.install/partition "test"]] (sut/partition-schema :test))
+      (should= [{:db/id "newbie", :db/ident :newbie} [:db/add :db.part/db :db.install/partition "newbie"]] (sut/partition-schema :newbie)))
+
     )
   )

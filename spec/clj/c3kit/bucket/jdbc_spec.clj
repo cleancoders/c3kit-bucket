@@ -96,6 +96,7 @@
       (spec/reduce-by (new-db))
       (spec/count-all (new-db))
       (spec/count-by (new-db))
+      (spec/broken-in-datomic (new-db))
 
       (context "SQL Injection"
 

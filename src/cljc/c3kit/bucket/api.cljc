@@ -65,6 +65,7 @@
 (defn entity! [kind id]
   (or (entity kind id) (throw (ex-info "Entity missing!" {:kind kind :id id}))))
 
+;; TODO - MDM: consider wrapping the args in a map, maybe validate then, for the impls.
 (defn find-by [kind & kvs]
   (-find-by @impl kind kvs))
 
@@ -123,6 +124,10 @@
   "Delete an entity"
   ([entity] (tx (assoc entity :db/delete? true)))
   ([kind id] (tx {:kind kind :id id :db/delete? true})))
+
+(defn soft-delete
+  ([entity] {:kind (:kind entity) :id (:id entity) :db/delete? true})
+  ([kind id] {:kind kind :id id :db/delete? true}))
 
 (defn reload [e] (when-let [id (:id e)] (entity (:kind e) id)))
 

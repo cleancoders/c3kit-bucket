@@ -1,10 +1,16 @@
 (ns c3kit.bucket.datomic
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
+            [c3kit.apron.log :as log]
+            [c3kit.bucket.api]
             [c3kit.bucket.api :as api]
+            [clojure.set :as set]
+            [clojure.string :as str]
             [datomic.api :as datomic]))
 
 (def development? (atom false))
+
+;; ---- schema -----
 
 (defn partition-schema
   "Return transact-able form to add a partition with name"
@@ -55,42 +61,286 @@
     (:enum schema) (->enum-schema schema)
     :else (throw (ex-info "Invalid schema" schema))))
 
+;; ^^^^^ schema ^^^^^
+
 (defn connect [uri]
   (datomic/create-database uri)
   (datomic/connect uri))
 
+(defn datomic-db [db] (datomic/db @(.-conn db)))
+
 (defn transact! [connection transaction]
   (datomic/transact connection transaction))
 
-(defn do-install-schema [schemas legend new-schemas]
-  (swap! schemas (fn [existing]
-                   (let [new-schemas (remove #(ccc/index-of % existing) new-schemas)]
-                     (concat existing new-schemas))))
-  (swap! legend merge (legend/build new-schemas)))
+(defn do-install-schema [db new-schemas]
+  (swap! (.-db-schema db) (fn [existing]
+                            (let [db-schemas     (->> (flatten new-schemas) (mapcat ->db-schema))
+                                  new-db-schemas (remove #(ccc/index-of % existing) db-schemas)]
+                              (concat existing new-db-schemas))))
+  (swap! (.-legend db) merge (legend/build new-schemas)))
 
-(defn do-clear [uri legend conn]
-  (assert @development? "Refuse to clear non-development database")
-  (datomic/delete-database uri)
-  (reset! conn (connect uri))
-  #_(let [schema (mapcat ->db-schema schemas)]
-    @(transact! @conn schema)))
+(defn do-clear [db]
+  (let [uri (:uri (.-config db))]
+    (assert @development? "Refuse to clear non-development database")
+    (datomic/delete-database uri)
+    (reset! (.-conn db) (connect uri))
+    @(transact! @(.-conn db) @(.-db-schema db))))
 
-(deftype DatomicDB [schemas legend uri conn]
+(defn scope-attribute [kind attr] (keyword (name kind) (name attr)))
+
+(defn scope-attributes [kind attributes]
+  (reduce-kv (fn [m k v] (assoc m (scope-attribute kind k) v)) {} attributes))
+
+(defn- kind! [entity]
+  (or (:kind entity)
+      (throw (Exception. (str ":kind missing for " entity)))))
+
+(defn partition-name [db] (or (:partition (.-config db)) :db.part/user))
+
+(defn tempid [db] (datomic/tempid (partition-name db)))
+(def tempid? (comp (fnil neg? 0) :idx))
+
+(defn value-or-id [v]
+  (if (and (instance? datomic.query.EntityMap v) (contains? v :db/id))
+    (:db/id v)
+    v))
+
+(defn attributes->entity
+  ([attributes id]
+   (when (seq attributes)
+     (let [kind (namespace (ffirst attributes))]
+       (attributes->entity attributes id kind))))
+  ([attributes id kind]
+   (reduce-kv
+     (fn [m k v]
+       (assoc m (keyword (name k))
+                (if (set? v)
+                  (ccc/map-set value-or-id v)
+                  (value-or-id v))))
+     {:id id :kind (keyword kind)}
+     attributes)))
+
+(defn entity [db id]
+  (cond
+    (number? id) (when-let [attributes (seq (datomic/entity (datomic/db @(.-conn db)) id))]
+                   (attributes->entity attributes id))
+    (nil? id) nil
+    (string? id) (when-not (str/blank? id) (entity db (Long/parseLong id)))
+    :else (attributes->entity (seq id) (:db/id id))))
+
+;(defn entity! [id] (dbc/entity! (entity id) id))
+;(defn entity-of-kind! [kind id] (dbc/entity-of-kind! (entity id) kind id))
+;(defn entity-of-kind [kind id] (dbc/entity-of-kind (entity id) kind))
+(defn reload [db e] (when-let [id (:id e)] (entity db id)))
+
+(defn q->entities [db result] (map #(entity db (first %)) result))
+(defn q->ids [result] (map first result))
+
+(defn- id-or-val [thing] (or (:db/id thing) thing))
+
+(defn insert-form [id entity]
+  (list (-> entity ccc/remove-nils (assoc :db/id id))))
+
+(defn- retract-field-forms [id original retracted-keys]
+  (reduce (fn [form key]
+            (let [o-val (get original key)]
+              (if (set? o-val)
+                (reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form o-val)
+                (conj form [:db/retract id key (id-or-val o-val)]))))
+          [] retracted-keys))
+
+(defn- cardinality-many-retract-forms [updated original]
+  (reduce (fn [form [key val]]
+            (if (or (set? val) (sequential? val))
+              (let [id      (:db/id updated)
+                    o-val   (ccc/map-set id-or-val (get original key))
+                    missing (set/difference o-val (set val))]
+                (reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form missing))
+              form))
+          [] updated))
+
+(defn update-form [db id updated]
+  (let [original          (into {} (datomic/entity (datomic/db @(.-conn db)) id))
+        retracted-keys    (doall (filter #(= nil (get updated %)) (keys original)))
+        updated           (-> (apply dissoc updated retracted-keys)
+                              ccc/remove-nils
+                              (assoc :db/id id))
+        seq-retractions   (cardinality-many-retract-forms updated original)
+        field-retractions (retract-field-forms id original retracted-keys)]
+    (concat [updated] seq-retractions field-retractions)))
+
+(defn maybe-retract-form [entity]
+  (when (api/delete? entity)
+    (if-let [id (:id entity)]
+      (list (list (:kind entity) id) (list [:db.fn/retractEntity id]))
+      (throw (Exception. "Can't retract entity without an :id")))))
+
+(defn maybe-cas-form [entity]
+  (when-let [old-vals (:cas (meta entity))]
+    (let [kind (:kind entity)
+          id   (:id entity)]
+      [(list kind id)
+       (map (fn [[k v]]
+              (vector :db/cas id (scope-attribute kind k) v (get entity k)))
+            old-vals)])))
+
+(defn tx-entity-form [db entity]
+  (let [kind (kind! entity)
+        id   (or (:id entity) (tempid db))
+        e    (scope-attributes kind (dissoc entity :kind :id))]
+    (if (tempid? id)
+      (list (list kind id) (insert-form id e))
+      (list (list kind id) (update-form db id e)))))
+
+(defn tx-form [db entity]
+  (or (maybe-retract-form entity)
+      (maybe-cas-form entity)
+      (tx-entity-form db entity)))
+
+(defn resolve-id [result id]
+  (if (tempid? id)
+    (datomic/resolve-tempid (:db-after result) (:tempids result) id)
+    id))
+
+(defn- tx-result [db kind id]
+  (if-let [e (entity db id)]
+    e
+    (api/soft-delete kind id)))
+
+(defn tx [db e]
+  (let [[[kind id] form] (tx-form db e)
+        result @(datomic/transact @(.-conn db) form)
+        id     (resolve-id result id)]
+    (tx-result db kind id)))
+
+(defn tx* [db entities]
+  (let [id-forms (ccc/some-map #(tx-form db %) entities)
+        tx-forms (mapcat second id-forms)
+        result   @(datomic/transact @(.-conn db) tx-forms)]
+    (map (fn [[kind id]] (tx-result db kind (resolve-id result id))) (map first id-forms))))
+
+
+(defn- ->attr-kw [kind attr] (keyword (name kind) (name attr)))
+
+(declare where-clause)
+(defmulti ^:private seq-where-clause (fn [_attr value] (first value)))
+(defmethod seq-where-clause 'not [attr [_ value]]
+  (if (nil? value)
+    (list ['?e attr])
+    (list (list 'not ['?e attr value]))))
+
+(defmethod seq-where-clause 'not= [attr [_ value]]
+  (if (nil? value)
+    (list ['?e attr])
+    (list (list 'not ['?e attr value]))))
+
+(defn- simple-where-fn [attr value f-sym]
+  (let [attr-sym (gensym (str "?" (name attr)))]
+    (list ['?e attr attr-sym]
+          [(list f-sym attr-sym value)])))
+
+(defmethod seq-where-clause '> [attr [_ value]] (simple-where-fn attr value '>))
+(defmethod seq-where-clause '< [attr [_ value]] (simple-where-fn attr value '<))
+(defmethod seq-where-clause '>= [attr [_ value]] (simple-where-fn attr value '>=))
+(defmethod seq-where-clause '<= [attr [_ value]] (simple-where-fn attr value '<=))
+
+(defn- or-where-clause [attr values]
+  (let [values (set values)]
+    (if (seq values)
+      (list (cons 'or (mapcat #(where-clause attr %) values)))
+      [nil])))
+
+(defmethod seq-where-clause '= [attr [_ & values]] (or-where-clause attr values))
+
+(defmethod seq-where-clause 'or [attr values] (or-where-clause attr (rest values)))
+(defmethod seq-where-clause :default [attr values] (or-where-clause attr values))
+
+(defn where-clause [attr value]
+  (cond (nil? value) (list [(list 'missing? '$ '?e attr)])
+        (set? value) (or-where-clause attr value)
+        (sequential? value) (seq-where-clause attr value)
+        :else (list ['?e attr value])))
+
+(defn find-where
+  "Search for all entities that match the datalog 'where' clause passed in."
+  [db where]
+  (if (some nil? where)
+    []
+    (let [query  (concat '[:find ?e :in $ :where] where)
+          result (datomic/q query (datomic-db db))]
+      (q->entities db result))))
+
+(defn find-ids-where
+  "Search for ids of entities that match the datalog 'where' clause passed in."
+  [db where]
+  (if (some nil? where)
+    []
+    (let [query (concat '[:find ?e :in $ :where] where)]
+      (q->ids (datomic/q query (datomic-db db))))))
+
+(defn count-where
+  "Count all entities that match the datalog 'where' clause passed in."
+  [db where]
+  (if (some nil? where)
+    0
+    (let [query (concat '[:find (count ?e) :in $ :where] where)]
+      (or (ffirst (datomic/q query (datomic-db db))) 0))))
+
+(defn- do-search [db q-fn default kind kvs]
+  (if (= 2 (count kvs))
+    (let [[attr value] kvs]
+      (if (nil? value)
+        (do (log/warn (str "search for nil value (" kind " " attr "), returning no results.")) default)
+        (q-fn db (where-clause (->attr-kw kind attr) value))))
+    (let [pairs (partition 2 kvs)
+          attrs (map #(->attr-kw kind %) (map first pairs))
+          vals  (map second pairs)]
+      (q-fn db (mapcat where-clause attrs vals)))))
+
+(defn find-by [db kind kvs] (do-search db find-where [] kind kvs))
+(defn ffind-by [db kind kvs] (first (find-by db kind kvs)))
+(defn count-by [db kind kvs] (do-search db count-where 0 kind kvs))
+
+(defn- query-all [db kind thing]
+  (let [schema       (legend/for-kind @(.-legend db) kind)
+        attrs        (keys (dissoc schema :id :kind))
+        scoped-attrs (map #(scope-attribute kind %) attrs)
+        where        (cons 'or (map (fn [a] ['?e a]) scoped-attrs))]
+    (conj [:find thing :in '$ :where] where)))
+
+(defn find-all [db kind]
+  (let [query (query-all db kind '?e)]
+    (q->entities db (datomic/q query (datomic-db db)))))
+
+(defn delete-all [db kind]
+  (->> (find-all db kind)
+       (partition-all 100)
+       (map (fn [batch] (tx* db (map api/soft-delete batch))))
+       doall))
+
+(defn count-all [db kind]
+  (let [query (query-all db kind '(count ?e))]
+    (or (ffirst (datomic/q query (datomic-db db))) 0)))
+
+(deftype DatomicDB [db-schema legend config conn]
   api/DB
-  (-install-schema [_ new-schemas] (do-install-schema schemas legend new-schemas))
-  (-clear [_] (do-clear uri legend conn))
-  ;(-delete-all [_ kind] (do-delete-all dialect ds kind mappings))
-  ;(-count-all [_ kind] (do-count dialect ds mappings kind))
-  ;(-count-by [_ kind kvs] (do-count-by dialect ds mappings kind kvs))
-  ;(-entity [_ kind id] (fetch-entity dialect ds (key-map mappings kind) kind id))
-  ;(-find-all [_ kind] (do-find-all dialect ds mappings kind))
-  ;(-find-by [_ kind kvs] (do-find-by dialect ds mappings kind kvs))
-  ;(-ffind-by [_ kind kvs] (do-ffind-by dialect ds mappings kind kvs))
+  (-install-schema [this new-schemas] (do-install-schema this new-schemas))
+  (-clear [this] (do-clear this))
+  (-delete-all [this kind] (delete-all this kind))
+  (-count-all [this kind] (count-all this kind))
+  (-count-by [this kind kvs] (count-by this kind kvs))
+  (-entity [this kind id] (entity this id))
+  (-find-all [this kind] (find-all this kind))
+  (-find-by [this kind kvs] (find-by this kind kvs))
+  (-ffind-by [this kind kvs] (ffind-by this kind kvs))
   ;(-reduce-by [_ kind f val kvs] (do-reduce-by dialect ds mappings kind f val kvs))
-  ;(-tx [_ entity] (do-tx dialect ds mappings entity))
-  ;(-tx* [_ entities] (do-tx* dialect ds mappings entities))
+  (-tx [this entity] (tx this entity))
+  (-tx* [this entities] (tx* this entities))
   )
 
 (defn create-db
-  ([uri] (create-db uri []))
-  ([uri schemas] (DatomicDB. (atom schemas) (atom (legend/build schemas)) uri (atom (connect uri)))))
+  ([config] (create-db config []))
+  ([config schemas]
+   (let [legend     (legend/build schemas)
+         connection (connect (:uri config))]
+     (DatomicDB. (atom schemas) (atom legend) config (atom connection)))))

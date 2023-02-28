@@ -204,7 +204,7 @@
   (let [sql    (build-delete-sql dialect t-map entity)
         result (execute-one! ds sql)]
     (when-not (= 1 (:next.jdbc/update-count result)) (throw (ex-info "delete failed" {:entity entity :result result})))
-    {:kind (:kind entity) :id (:id entity) :db/delete? true}))
+    (api/soft-delete entity)))
 
 (defn- update-entity [legend dialect ds t-map entity]
   (let [command (build-update-sql dialect t-map entity)]
