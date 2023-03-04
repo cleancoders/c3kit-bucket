@@ -21,30 +21,30 @@
       (apply dissoc merged retracted-keys))
     updated))
 
-(defn- retract-entity [db entity]
+(defn- retract-entity [store entity]
   (let [id   (:id entity)
-        kind (get-in db [:all id :kind])]
-    (-> db
+        kind (get-in store [:all id :kind])]
+    (-> store
         (update :all dissoc id)
         (update kind dissoc id))))
 
-(defn- install-entity [legend db e]
+(defn- install-entity [legend store e]
   (assert (:id e) (str "entity missing id!: " e))
-  (let [original (get-in db [:all (:id e)])
+  (let [original (get-in store [:all (:id e)])
         schema   (legend/for-kind @legend (:kind e))
         e        (->> (utilc/keywordize-kind e)
                       ensure-id
                       (merge-with-original original)
                       (api/-update-timestamps schema)
                       (schema/coerce! schema))]
-    (-> db
+    (-> store
         (update :all assoc (:id e) e)
         (update (:kind e) assoc (:id e) e))))
 
-(defn- tx-entity [legend db e]
+(defn- tx-entity [legend store e]
   (if (api/delete? e)
-    (retract-entity db e)
-    (install-entity legend db e)))
+    (retract-entity store e)
+    (install-entity legend store e)))
 
 ;(defn- multi? [ev] (or (sequential? ev) (set? ev)))
 
@@ -118,35 +118,35 @@
 
 ;; db api -----------------------------------
 
-(defn- entity [legend store kind id]
+(defn- entity [db kind id]
   (cond
     (nil? id) nil
-    (map? id) (get-in @store [kind (api/coerced-id legend kind (:id id))])
-    :else (get-in @store [kind (api/coerced-id legend kind id)])))
+    (map? id) (get-in @(.-store db) [kind (api/coerced-id (.-legend db) kind (:id id))])
+    :else (get-in @(.-store db) [kind (api/coerced-id (.-legend db) kind id)])))
 
-(defn- do-clear [store] (reset! store {:all {}}))
-(defn- do-count [kind] (count (api/find-all kind)))
+(defn- clear [store] (reset! store {:all {}}))
+(defn- count-all [kind] (count (api/find-all kind)))
 
-(defn- reload [legend store e] (when-let [id (:id e)] (entity legend store (:kind e) id)))
+(defn- reload [db e] (when-let [id (:id e)] (entity db (:kind e) id)))
 
-(defn- tx-result [legend store entity]
+(defn- tx-result [db entity]
   (if (api/delete? entity)
     (api/soft-delete entity)
-    (reload legend store entity)))
+    (reload db entity)))
 
-(defn- do-tx [legend store e]
+(defn- tx [db e]
   (let [e (ensure-id e)]
-    (swap! store #(tx-entity legend % e))
-    (tx-result legend store e)))
+    (swap! (.-store db) #(tx-entity (.-legend db) % e))
+    (tx-result db e)))
 
-(defn- do-tx* [legend store entities]
+(defn- tx* [db entities]
   (let [entities (map ensure-id entities)]
-    (swap! store (fn [db] (reduce #(tx-entity legend %1 %2) db entities)))
-    (map #(tx-result legend store %) entities)))
+    (swap! (.-store db) (fn [store] (reduce #(tx-entity (.-legend db) %1 %2) store entities)))
+    (map #(tx-result db %) entities)))
 
-(defn- do-find-all [legend store kind]
-  (ensure-schema! legend kind)
-  (or (vals (get-in @store [kind])) []))
+(defn- find-all [db kind]
+  (ensure-schema! (.-legend db) kind)
+  (or (vals (get-in @(.-store db) [kind])) []))
 
 (defn every-keyword? [ks]
   (every? (fn [k] (or (keyword? k) (every? keyword? k))) ks))
@@ -156,34 +156,34 @@
     (assert (every-keyword? (map first kv-pairs)) "Attributes must be keywords")
     (filter (spec->tester kv-pairs) kinds)))
 
-(defn- do-find-by [legend store kind kvs]
-  (ensure-schema! legend kind)
-  (let [kinds (vals (get @store kind))]
+(defn- find-by [db kind kvs]
+  (ensure-schema! (.-legend db) kind)
+  (let [kinds (vals (get @(.-store db) kind))]
     (filter-by-kvs kvs kinds)))
 
-(defn- do-ffind-by [legend store kind & kvs]
-  (first (apply do-find-by legend store kind kvs)))
+(defn- ffind-by [db kind & kvs]
+  (first (apply find-by db kind kvs)))
 
-(defn- do-delete-all [store kind]
-  (let [all-ids (keys (get @store kind))]
-    (swap! store (fn [db]
-                   (-> (update db [:all] #(apply dissoc % all-ids))
-                       (dissoc kind))))))
+(defn- delete-all [db kind]
+  (let [all-ids (keys (get @(.-store db) kind))]
+    (swap! (.-store db) (fn [db]
+                          (-> (update db [:all] #(apply dissoc % all-ids))
+                              (dissoc kind))))))
 
 (deftype MemoryDB [legend store]
   api/DB
   (-install-schema [_ schemas] (swap! legend merge (legend/build schemas)))
-  (-clear [_] (do-clear store))
-  (-count-all [_ kind] (do-count kind))
-  (-count-by [_ kind kvs] (count (do-find-by legend store kind kvs)))
-  (-delete-all [_ kind] (do-delete-all store kind))
-  (-entity [_ kind id] (entity legend store kind id))
-  (-find-all [_ kind] (do-find-all legend store kind))
-  (-find-by [_ kind kvs] (do-find-by legend store kind kvs))
-  (-ffind-by [_ kind kvs] (do-ffind-by legend store kind kvs))
-  (-reduce-by [_ kind f val kvs] (reduce f val (do-find-by legend store kind kvs)))
-  (-tx [_ entity] (do-tx legend store entity))
-  (-tx* [_ entities] (do-tx* legend store entities))
+  (-clear [_] (clear store))
+  (-count-all [_ kind] (count-all kind))
+  (-count-by [this kind kvs] (count (find-by this kind kvs)))
+  (-delete-all [this kind] (delete-all this kind))
+  (-entity [this kind id] (entity this kind id))
+  (-find-all [this kind] (find-all this kind))
+  (-find-by [this kind kvs] (find-by this kind kvs))
+  (-ffind-by [this kind kvs] (ffind-by this kind kvs))
+  (-reduce-by [this kind f val kvs] (reduce f val (find-by this kind kvs)))
+  (-tx [this entity] (tx this entity))
+  (-tx* [this entities] (tx* this entities))
   )
 
 (defn create-db

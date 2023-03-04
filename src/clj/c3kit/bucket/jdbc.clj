@@ -14,19 +14,19 @@
 (def development? (atom false))
 
 (defn execute-one!
-  ([ds command] (execute-one! ds command {}))
-  ([ds command options]
+  ([conn command] (execute-one! conn command {}))
+  ([conn command options]
    (try
-     (jdbc/execute-one! ds command options)
+     (jdbc/execute-one! conn command options)
      (catch Exception e
        (log/error "Choked on SQL: " command)
        (throw e)))))
 
 (defn execute!
-  ([ds command] (execute! ds command {}))
-  ([ds command options]
+  ([conn command] (execute! conn command {}))
+  ([conn command options]
    (try
-     (jdbc/execute! ds command options)
+     (jdbc/execute! conn command options)
      (catch Exception e
        (log/error "Choked on SQL: " command)
        (throw e)))))
@@ -133,6 +133,7 @@
         c->k (reduce (fn [m [k c]] (assoc m c k)) {} k->c)
         k->t (reduce -add-type {} (dissoc schema :kind))]
     {:table       (table-name schema)
+     :id-type     (get-in schema [:id :type])
      :id-strategy (get-in schema [:id :strategy] :db-generated)
      :key->col    k->c
      :col->key    c->k
@@ -140,13 +141,15 @@
      :builder-fn  (partial col->key-builder {:col->key c->k :key->type k->t})
      }))
 
-(defn- key-map [legend mappings kind]
-  (if-let [m (get @mappings kind)]
-    m
-    (let [schema (legend/for-kind @legend kind)
-          m      (compile-mapping schema)]
-      (swap! mappings assoc kind m)
-      m)))
+(defn- key-map
+  ([db kind] (key-map (.-legend db) (.-mappings db) kind))
+  ([legend mappings kind]
+   (if-let [m (get @mappings kind)]
+     m
+     (let [schema (legend/for-kind @legend kind)
+           m      (compile-mapping schema)]
+       (swap! mappings assoc kind m)
+       m))))
 
 (defn ->sql-args [dialect key->col key->type entity k]
   (let [v    (get entity k)
@@ -163,13 +166,16 @@
         value  (->sql-value type id)]
     [(str "SELECT * FROM " table " WHERE " column " = " param) value]))
 
-(defn- fetch-entity [legend dialect ds t-map kind id]
+(defn- fetch-entity [db conn t-map kind id]
   (when-let [id (if (map? id) (:id id) id)]
-    (let [id      (api/coerced-id legend kind id)
-          command (build-fetch-sql dialect t-map id)
-          result  (execute-one! ds command {:builder-fn (:builder-fn t-map)})]
+    (let [{:keys [id-type builder-fn]} t-map
+          id      (api/coerced-id id-type id)
+          command (build-fetch-sql (.-dialect db) t-map id)
+          result  (execute-one! conn command {:builder-fn builder-fn})]
       (when result
         (assoc result :kind kind)))))
+
+(defn entity [db kind id] (fetch-entity db (.-ds db) (key-map db kind) kind id))
 
 (defn build-update-sql [dialect t-map entity]
   (let [{:keys [table key->col key->type]} t-map
@@ -200,55 +206,57 @@
         {:keys [column param value]} (->sql-args dialect key->col key->type entity :id)]
     [(str "DELETE FROM " table " WHERE " column " = " param) value]))
 
-(defn- delete-entity [dialect ds t-map entity]
+(defn- delete-entity [dialect conn t-map entity]
   (let [sql    (build-delete-sql dialect t-map entity)
-        result (execute-one! ds sql)]
+        result (execute-one! conn sql)]
     (when-not (= 1 (:next.jdbc/update-count result)) (throw (ex-info "delete failed" {:entity entity :result result})))
     (api/soft-delete entity)))
 
-(defn- update-entity [legend dialect ds t-map entity]
-  (let [command (build-update-sql dialect t-map entity)]
-    (execute-one! ds command)
-    (fetch-entity legend dialect ds t-map (:kind entity) (:id entity))))
+(defn- update-entity [db conn t-map entity]
+  (let [command (build-update-sql (.-dialect db) t-map entity)]
+    (execute-one! conn command)
+    (fetch-entity db conn t-map (:kind entity) (:id entity))))
 
-(defn- insert-entity [legend dialect ds t-map entity]
-  (let [command (build-insert-sql dialect t-map entity)
-        result  (execute-one! ds command {:return-keys true})
+(defn- insert-entity [db conn t-map entity]
+  (let [command (build-insert-sql (.-dialect db) t-map entity)
+        result  (execute-one! conn command {:return-keys true})
         id      (first (vals result))]
-    (fetch-entity legend dialect ds t-map (:kind entity) id)))
+    (fetch-entity db conn t-map (:kind entity) id)))
 
-(defn- upsert-entity [legend dialect ds t-map entity]
-  (let [command (build-upsert-sql dialect t-map entity)]
-    (execute-one! ds command)
-    (fetch-entity legend dialect ds t-map (:kind entity) (:id entity))))
+(defn- upsert-entity [db conn t-map entity]
+  (let [command (build-upsert-sql (.-dialect db) t-map entity)]
+    (execute-one! conn command)
+    (fetch-entity db conn t-map (:kind entity) (:id entity))))
 
-(defmulti upsert-by-id-strategy (fn [_legend _dialect _ds t-map _entity] (:id-strategy t-map)))
+(defmulti upsert-by-id-strategy (fn [_db _conn t-map _entity] (:id-strategy t-map)))
 
-(defmethod upsert-by-id-strategy :default [_legend _dialect _ds t-map {:keys [kind] :as _entity}]
+(defmethod upsert-by-id-strategy :default [_db _conn t-map {:keys [kind] :as _entity}]
   (throw (ex-info "Unhandled id strategy" {:kind kind :id-strategy (:id-strategy t-map)})))
 
-(defmethod upsert-by-id-strategy :db-generated [legend dialect ds t-map entity]
+(defmethod upsert-by-id-strategy :db-generated [db conn t-map entity]
   (if (:id entity)
-    (update-entity legend dialect ds t-map entity)
-    (insert-entity legend dialect ds t-map entity)))
+    (update-entity db conn t-map entity)
+    (insert-entity db conn t-map entity)))
 
-(defmethod upsert-by-id-strategy :pre-populated [legend dialect ds t-map entity]
-  (upsert-entity legend dialect ds t-map entity))
+(defmethod upsert-by-id-strategy :pre-populated [db conn t-map entity]
+  (upsert-entity db conn t-map entity))
 
-(defn- do-tx [legend dialect ds mappings entity]
-  (let [t-map (key-map legend mappings (:kind entity))]
+(defn- do-tx [db conn entity]
+  (let [t-map (key-map db (:kind entity))]
     (if (api/delete? entity)
-      (delete-entity dialect ds t-map entity)
-      (upsert-by-id-strategy legend dialect ds t-map entity))))
+      (delete-entity (.-dialect db) conn t-map entity)
+      (upsert-by-id-strategy db conn t-map entity))))
 
-(defn- do-tx* [legend dialect ds mappings entities]
-  (jdbc/with-transaction [tx ds]
-    (doall (map #(do-tx legend dialect tx mappings %) entities))))
+(defn tx [db entity] (do-tx db (.-ds db) entity))
 
-(defn- do-find-all [legend _dialect ds mappings kind]
-  (let [t-map (key-map legend mappings kind)
+(defn- tx* [db entities]
+  (jdbc/with-transaction [tx (.-ds db)]
+    (doall (map #(do-tx db tx %) entities))))
+
+(defn- find-all [db kind]
+  (let [t-map (key-map db kind)
         sql   (str "SELECT * FROM " (:table t-map))]
-    (map #(ccc/remove-nils (assoc % :kind kind)) (execute! ds [sql] {:builder-fn (:builder-fn t-map)}))))
+    (map #(ccc/remove-nils (assoc % :kind kind)) (execute! (.-ds db) [sql] {:builder-fn (:builder-fn t-map)}))))
 
 (defn clause-with-operator [dialect {:keys [key->type] :as t-map} k v operator]
   (let [type (get key->type k)]
@@ -321,21 +329,21 @@
     (assert (every? keyword? (map first kv-pairs)) "Attributes must be keywords")
     (cons sql args)))
 
-(defn- do-find-by
-  ([legend dialect ds mappings kind kvs] (do-find-by legend dialect ds mappings {} kind kvs))
-  ([legend dialect ds mappings params kind kvs]
-   (let [t-map (key-map legend mappings kind)
-         query (-build-find-by-query dialect t-map params kvs)]
-     (->> (execute! ds query {:builder-fn (:builder-fn t-map)})
+(defn- find-by
+  ([db kind kvs] (find-by db {} kind kvs))
+  ([db params kind kvs]
+   (let [t-map (key-map db kind)
+         query (-build-find-by-query (.-dialect db) t-map params kvs)]
+     (->> (execute! (.-ds db) query {:builder-fn (:builder-fn t-map)})
           (map #(ccc/remove-nils (assoc % :kind kind)))))))
 
-(defn- do-ffind-by [legend dialect ds mappings kind & kvs]
-  (first (apply do-find-by legend dialect ds mappings {:limit 1} kind kvs)))
+(defn- ffind-by [db kind & kvs]
+  (first (apply find-by db {:limit 1} kind kvs)))
 
-(defn- do-reduce-by [legend _dialect ds mappings kind f val kvs]
-  (let [t-map      (key-map legend mappings kind)
-        query      (-build-find-by-query ds t-map {} kvs)
-        connection (jdbc/get-connection ds)]
+(defn- reduce-by [db kind f val kvs]
+  (let [t-map      (key-map db kind)
+        query      (-build-find-by-query (.-ds db) t-map {} kvs)
+        connection (jdbc/get-connection (.-ds db))]
     (.setHoldability connection ResultSet/CLOSE_CURSORS_AT_COMMIT)
     (reduce
       (fn [a b] (f a (ccc/remove-nils (assoc b :kind kind))))
@@ -346,43 +354,43 @@
                                    :cursors     :close
                                    :result-type :forward-only}))))
 
-(defn- do-count-by [legend dialect ds mappings kind kvs]
+(defn- count-by [db kind kvs]
   (let [kv-pairs (partition 2 kvs)
-        {:keys [table] :as t-map} (key-map legend mappings kind)
-        query    (-build-where dialect (str "SELECT COUNT(*) FROM " table) t-map kv-pairs)]
-    (first (vals (execute-one! ds query)))))
+        {:keys [table] :as t-map} (key-map db kind)
+        query    (-build-where (.-dialect db) (str "SELECT COUNT(*) FROM " table) t-map kv-pairs)]
+    (first (vals (execute-one! (.-ds db) query)))))
 
-(defn- do-count [legend _dialect ds mappings kind]
-  (let [t-map (key-map legend mappings kind)
+(defn- count-all [db kind]
+  (let [t-map (key-map db kind)
         sql   (str "SELECT COUNT(*) FROM " (:table t-map))]
-    (first (vals (execute-one! ds [sql])))))
+    (first (vals (execute-one! (.-ds db) [sql])))))
 
-(defn- do-clear [legend dialect ds]
+(defn- clear [db]
   (assert development? "Refuse to clear non-development database")
-  (doseq [[_ schema] @legend]
-    (drop-table-from-schema ds schema)
-    (create-table-from-schema dialect ds schema)))
+  (doseq [[_ schema] @(.-legend db)]
+    (drop-table-from-schema (.-ds db) schema)
+    (create-table-from-schema (.-dialect db) (.-ds db) schema)))
 
-(defn- do-delete-all [legend _dialect ds kind mappings]
+(defn- delete-all [db kind]
   (assert development? "Refuse to delete-all on non-development database")
-  (let [{:keys [table]} (key-map legend mappings kind)
+  (let [{:keys [table]} (key-map db kind)
         sql (str "DELETE FROM " table " WHERE 1 = 1")]
-    (execute-one! ds [sql])))
+    (execute-one! (.-ds db) [sql])))
 
 (deftype JDBCDB [legend dialect ds mappings]
   api/DB
   (-install-schema [_ schemas] (swap! legend merge (legend/build schemas)))
-  (-clear [_] (do-clear legend dialect ds))
-  (-delete-all [_ kind] (do-delete-all legend dialect ds kind mappings))
-  (-count-all [_ kind] (do-count legend dialect ds mappings kind))
-  (-count-by [_ kind kvs] (do-count-by legend dialect ds mappings kind kvs))
-  (-entity [_ kind id] (fetch-entity legend dialect ds (key-map legend mappings kind) kind id))
-  (-find-all [_ kind] (do-find-all legend dialect ds mappings kind))
-  (-find-by [_ kind kvs] (do-find-by legend dialect ds mappings kind kvs))
-  (-ffind-by [_ kind kvs] (do-ffind-by legend dialect ds mappings kind kvs))
-  (-reduce-by [_ kind f val kvs] (do-reduce-by legend dialect ds mappings kind f val kvs))
-  (-tx [_ entity] (do-tx legend dialect ds mappings entity))
-  (-tx* [_ entities] (do-tx* legend dialect ds mappings entities))
+  (-clear [this] (clear this))
+  (-delete-all [this kind] (delete-all this kind))
+  (-count-all [this kind] (count-all this kind))
+  (-count-by [this kind kvs] (count-by this kind kvs))
+  (-entity [this kind id] (entity this kind id))
+  (-find-all [this kind] (find-all this kind))
+  (-find-by [this kind kvs] (find-by this kind kvs))
+  (-ffind-by [this kind kvs] (ffind-by this kind kvs))
+  (-reduce-by [this kind f val kvs] (reduce-by this kind f val kvs))
+  (-tx [this entity] (tx this entity))
+  (-tx* [this entities] (tx* this entities))
   )
 
 (defn create-db

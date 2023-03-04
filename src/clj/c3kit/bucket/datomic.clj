@@ -79,7 +79,7 @@
                               (concat existing new-db-schemas))))
   (swap! (.-legend db) merge (legend/build new-schemas)))
 
-(defn do-clear [db]
+(defn clear [db]
   (let [uri (:uri (.-config db))]
     (assert @development? "Refuse to clear non-development database")
     (datomic/delete-database uri)
@@ -325,7 +325,7 @@
 (deftype DatomicDB [db-schema legend config conn]
   api/DB
   (-install-schema [this new-schemas] (do-install-schema this new-schemas))
-  (-clear [this] (do-clear this))
+  (-clear [this] (clear this))
   (-delete-all [this kind] (delete-all this kind))
   (-count-all [this kind] (count-all this kind))
   (-count-by [this kind kvs] (count-by this kind kvs))

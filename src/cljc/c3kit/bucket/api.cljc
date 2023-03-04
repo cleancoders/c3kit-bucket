@@ -33,13 +33,14 @@
 #?(:cljs (def set-impl! (partial reset! impl)))
 
 (defn id-type [legend kind] (get-in (legend/for-kind @legend kind) [:id :type]))
-(defn coerced-id [legend kind id]
-  (let [type   (id-type legend kind)
-        coerce (schema/type-coercer! type)]
-    (try (coerce id)
-         (catch #?(:clj Exception :cljs :default) e
-           (log/warn (str "failed to coerce id of kind " kind " - " (ex-message e)))
-           id))))
+(defn coerced-id
+  ([legend kind id] (coerced-id (id-type legend kind) id))
+  ([type id]
+   (let [coerce (schema/type-coercer! type)]
+     (try (coerce id)
+          (catch #?(:clj Exception :cljs :default) e
+            (log/warn (str "failed to coerce id of type " type " - " (ex-message e)))
+            id)))))
 
 (defn- -maybe-generate-id-helper [legend e]
   (case (id-type legend (:kind e))

@@ -421,12 +421,17 @@
 
     (it "sum of none"
       (should= 0 (sut/reduce-by :bibelot #(+ %1 (:size %2)) 0 :name "fake")))
+
     (it "sum of one"
       (should= 2 (sut/reduce-by :bibelot #(+ %1 (:size %2)) 0 :name "hi!")))
+
     (it "sum of all"
       (should= 4 (sut/reduce-by :bibelot #(+ %1 (or (:size %2) 0)) 0)))
+
     (it "reduced map"
-      (should= {"world" [2] "hi!" [2]} (sut/reduce-by :bibelot #(update %1 (:name %2) conj (:size %2)) {} :size ['not= nil])))))
+      (should= {"world" [2] "hi!" [2]} (sut/reduce-by :bibelot #(update %1 (:name %2) conj (:size %2)) {} :size ['not= nil])))
+    )
+  )
 
 (defn count-by [db-impl]
   (context "count-by"
