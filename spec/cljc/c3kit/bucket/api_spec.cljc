@@ -11,11 +11,34 @@
                                                               should-not== should-start-with should-throw should<
                                                               should<= should= should== should> should>= stub tags
                                                               with with-all with-stubs xit]]
-            [c3kit.bucket.api :as sut]
+            [c3kit.bucket.api :as sut #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
             [c3kit.bucket.spec-helperc :as helper]
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time :refer [ago minutes]]))
+
+(describe "API"
+
+  (context "safety"
+
+    (it "is on by default"
+      (should= true sut/*safety*)
+      (should= false (sut/safety-off?)))
+
+    (it "with-safety-off"
+      (with-safety-off
+        (should= false sut/*safety*)
+        (should= true (sut/safety-off?))))
+
+    (it "setters"
+      (sut/set-safety! false)
+      (should= false sut/*safety*)
+      (sut/set-safety! true)
+      (should= true sut/*safety*))
+
+    )
+
+  )
 
 (def bibelot
   {:kind  (s/kind :bibelot)

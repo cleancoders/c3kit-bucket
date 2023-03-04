@@ -11,10 +11,14 @@
                                                               should-not== should-start-with should-throw should<
                                                               should<= should= should== should> should>= stub tags
                                                               with with-all with-stubs xit]]
+            [c3kit.bucket.api :as api #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.memory :as sut]))
 
 (describe "Memory DB"
+
+  (around [it] (with-safety-off (it)))
+
   (spec/crud-specs (sut/create-db))
   (spec/nil-value-specs (sut/create-db))
   (spec/count-all (sut/create-db))
@@ -23,4 +27,10 @@
   (spec/find-all (sut/create-db))
   (spec/reduce-by (sut/create-db))
   (spec/broken-in-datomic (sut/create-db))
+
+  (context "safety"
+    (around [it] (with-redefs [api/*safety* true] (it)))
+
+    (it "clear" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/clear (sut/create-db))))
+    (it "delete-all" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/delete-all (sut/create-db) :foo))))
   )

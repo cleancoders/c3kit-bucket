@@ -1,6 +1,7 @@
 (ns c3kit.bucket.mssql-spec
   (:require [c3kit.apron.schema :as schema]
             [c3kit.apron.schema]
+            [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.mssql :as sut]
             [c3kit.bucket.jdbc :as jdbc]
@@ -30,7 +31,7 @@
 
   (describe "MS SQL Server"
 
-    (before-all (reset! jdbc/development? true))
+    (around [it] (api/with-safety-off (it)))
     (with-stubs)
 
     (context "slow"

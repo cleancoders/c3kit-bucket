@@ -6,6 +6,13 @@
             [c3kit.apron.legend :as legend]
             [c3kit.apron.schema :as schema]))
 
+(def ^:dynamic *safety* true)
+(defn safety-off? [] (not *safety*))
+(defn assert-safety-off! [action] (assert (not *safety*) (str "Safety if on! Refusing to " action)))
+(defn set-safety! [on?] #?(:clj (alter-var-root #'*safety* (fn [_] on?)) :cljs (set! *safety* on?)))
+#?(:clj (defmacro with-safety-off [& body] `(with-redefs [*safety* false] ~@body)))
+
+
 (defn delete? [entity]
   (or (:db/delete? (meta entity))
       (:db/delete? entity)))
@@ -76,9 +83,6 @@
 (defn find-all [kind]
   (when kind (-find-all @impl kind)))
 
-;(defn find-page-by [kind params & kvs]
-;  (-find-page-by @impl kind params kvs))
-
 (defn reduce-by [kind f val & kvs]
   (-reduce-by @impl kind f val kvs))
 
@@ -143,3 +147,9 @@
   (-clear @impl))
 
 
+;; TODO - MDM:
+;;  1) clean up api (general find that takes a options :where :limit :count :sort ...)
+;;  2) middleware for saving and loading. timestamps is a saving middleware
+;;  3) apply to test data.  Bring in entity and for-kind features
+;;  4) seeding entity
+;;  5) document

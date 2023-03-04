@@ -1,5 +1,6 @@
 (ns c3kit.bucket.datomic-spec
   (:require [c3kit.apron.schema :as s]
+            [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.datomic :as sut]
             [speclj.core :refer :all]))
@@ -10,7 +11,7 @@
 (describe "Datomic"
 
   (with-stubs)
-  (before-all (reset! sut/development? true))
+  (around [it] (api/with-safety-off (it)))
 
   (context "api"
 
@@ -18,11 +19,17 @@
     (spec/nil-value-specs (new-db))
     (spec/find-all (new-db))
     (spec/find-by (new-db))
-    ;(spec/reduce-by (new-db))
+    (spec/reduce-by (new-db))
     (spec/count-all (new-db))
     (spec/count-by (new-db))
 
     )
+
+  (context "safety"
+    (around [it] (with-redefs [api/*safety* true] (it)))
+
+    (it "clear" (should-throw AssertionError (sut/clear (new-db))))
+    (it "delete-all" (should-throw AssertionError (sut/delete-all (new-db) :foo))))
 
   (context "schema"
 

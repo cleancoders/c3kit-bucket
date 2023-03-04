@@ -8,8 +8,6 @@
             [clojure.string :as str]
             [datomic.api :as datomic]))
 
-(def development? (atom false))
-
 ;; ---- schema -----
 
 (defn partition-schema
@@ -80,8 +78,8 @@
   (swap! (.-legend db) merge (legend/build new-schemas)))
 
 (defn clear [db]
+  (api/assert-safety-off! "clear")
   (let [uri (:uri (.-config db))]
-    (assert @development? "Refuse to clear non-development database")
     (datomic/delete-database uri)
     (reset! (.-conn db) (connect uri))
     @(transact! @(.-conn db) @(.-db-schema db))))
@@ -313,6 +311,7 @@
     (q->entities db (datomic/q query (datomic-db db)))))
 
 (defn delete-all [db kind]
+  (api/assert-safety-off! "delete-all")
   (->> (find-all db kind)
        (partition-all 100)
        (map (fn [batch] (tx* db (map api/soft-delete batch))))
@@ -322,6 +321,11 @@
   (let [query (query-all db kind '(count ?e))]
     (or (ffirst (datomic/q query (datomic-db db))) 0)))
 
+(defn reduce-by [db kind f val kvs]
+  (if (seq kvs)
+    (reduce f val (find-by db kind kvs))
+    (reduce f val (find-all db kind))))
+
 (deftype DatomicDB [db-schema legend config conn]
   api/DB
   (-install-schema [this new-schemas] (do-install-schema this new-schemas))
@@ -329,11 +333,11 @@
   (-delete-all [this kind] (delete-all this kind))
   (-count-all [this kind] (count-all this kind))
   (-count-by [this kind kvs] (count-by this kind kvs))
-  (-entity [this kind id] (entity this id))
+  (-entity [this _kind id] (entity this id))
   (-find-all [this kind] (find-all this kind))
   (-find-by [this kind kvs] (find-by this kind kvs))
   (-ffind-by [this kind kvs] (ffind-by this kind kvs))
-  ;(-reduce-by [_ kind f val kvs] (do-reduce-by dialect ds mappings kind f val kvs))
+  (-reduce-by [this kind f val kvs] (reduce-by this kind f val kvs))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   )

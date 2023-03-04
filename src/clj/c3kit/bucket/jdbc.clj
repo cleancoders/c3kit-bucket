@@ -11,8 +11,6 @@
             [next.jdbc.result-set :as rs])
   (:import (java.sql ResultSet)))
 
-(def development? (atom false))
-
 (defn execute-one!
   ([conn command] (execute-one! conn command {}))
   ([conn command options]
@@ -249,11 +247,11 @@
 
 (defn tx [db entity] (do-tx db (.-ds db) entity))
 
-(defn- tx* [db entities]
+(defn tx* [db entities]
   (jdbc/with-transaction [tx (.-ds db)]
     (doall (map #(do-tx db tx %) entities))))
 
-(defn- find-all [db kind]
+(defn find-all [db kind]
   (let [t-map (key-map db kind)
         sql   (str "SELECT * FROM " (:table t-map))]
     (map #(ccc/remove-nils (assoc % :kind kind)) (execute! (.-ds db) [sql] {:builder-fn (:builder-fn t-map)}))))
@@ -329,7 +327,7 @@
     (assert (every? keyword? (map first kv-pairs)) "Attributes must be keywords")
     (cons sql args)))
 
-(defn- find-by
+(defn find-by
   ([db kind kvs] (find-by db {} kind kvs))
   ([db params kind kvs]
    (let [t-map (key-map db kind)
@@ -337,10 +335,10 @@
      (->> (execute! (.-ds db) query {:builder-fn (:builder-fn t-map)})
           (map #(ccc/remove-nils (assoc % :kind kind)))))))
 
-(defn- ffind-by [db kind & kvs]
+(defn ffind-by [db kind & kvs]
   (first (apply find-by db {:limit 1} kind kvs)))
 
-(defn- reduce-by [db kind f val kvs]
+(defn reduce-by [db kind f val kvs]
   (let [t-map      (key-map db kind)
         query      (-build-find-by-query (.-ds db) t-map {} kvs)
         connection (jdbc/get-connection (.-ds db))]
@@ -354,25 +352,25 @@
                                    :cursors     :close
                                    :result-type :forward-only}))))
 
-(defn- count-by [db kind kvs]
+(defn count-by [db kind kvs]
   (let [kv-pairs (partition 2 kvs)
         {:keys [table] :as t-map} (key-map db kind)
         query    (-build-where (.-dialect db) (str "SELECT COUNT(*) FROM " table) t-map kv-pairs)]
     (first (vals (execute-one! (.-ds db) query)))))
 
-(defn- count-all [db kind]
+(defn count-all [db kind]
   (let [t-map (key-map db kind)
         sql   (str "SELECT COUNT(*) FROM " (:table t-map))]
     (first (vals (execute-one! (.-ds db) [sql])))))
 
-(defn- clear [db]
-  (assert development? "Refuse to clear non-development database")
+(defn clear [db]
+  (api/assert-safety-off! "clear")
   (doseq [[_ schema] @(.-legend db)]
     (drop-table-from-schema (.-ds db) schema)
     (create-table-from-schema (.-dialect db) (.-ds db) schema)))
 
-(defn- delete-all [db kind]
-  (assert development? "Refuse to delete-all on non-development database")
+(defn delete-all [db kind]
+  (api/assert-safety-off! "delete")
   (let [{:keys [table]} (key-map db kind)
         sql (str "DELETE FROM " table " WHERE 1 = 1")]
     (execute-one! (.-ds db) [sql])))

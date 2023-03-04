@@ -24,7 +24,7 @@
 
   (describe "PostgresSQL"
 
-    (before-all (reset! jdbc/development? true))
+    (around [it] (api/with-safety-off (it)))
     (with-stubs)
 
     (context "slow"

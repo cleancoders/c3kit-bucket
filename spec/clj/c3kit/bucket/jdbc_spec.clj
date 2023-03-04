@@ -38,7 +38,7 @@
               spec/thingy  thingy]
   (describe "JDBC DB"
 
-    (before-all (reset! sut/development? true))
+    (around [it] (api/with-safety-off (it)))
     (with-stubs)
 
     (context "sql"
@@ -87,7 +87,7 @@
           (should= {"id" :id "stuff" :stuff} (:col->key compiled))))
       )
 
-    (context "slow"
+    (context "api"
 
       (spec/crud-specs (new-db))
       (spec/nil-value-specs (new-db))
@@ -98,26 +98,34 @@
       (spec/count-by (new-db))
       (spec/broken-in-datomic (new-db))
 
-      (context "SQL Injection"
-
-        (helper/with-schemas (new-db) [spec/bibelot str-id-entity])
-
-        (it "finds by always true"
-          (api/tx {:kind :bibelot :name "John" :size 5 :color "Red"})
-          (should= [] (api/find-by :bibelot :name "' OR 1 = 1;--")))
-
-        (it "creates an entity with a malicious name"
-          (api/tx {:kind :bibelot :name "'" :size 5 :color "Red"}))
-
-        (it "sneaky delete doesn't work"
-          (api/tx {:kind :str-id-entity :id "123" :value 1})
-          (should-throw (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"}))
-          (should= 1 (api/count-all :str-id-entity)))
-
-        (it "sneaky deletes with actual id works"
-          (api/tx {:kind :str-id-entity :id "' OR 1 = 1;--" :value 1})
-          (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"})
-          (should= 0 (api/count-all :str-id-entity)))
-        )
       )
-    ))
+
+    (context "safety"
+      (around [it] (with-redefs [api/*safety* true] (it)))
+
+      (it "clear" (should-throw AssertionError (sut/clear (new-db))))
+      (it "delete-all" (should-throw AssertionError (sut/delete-all (new-db) :foo))))
+
+    (context "SQL Injection"
+
+      (helper/with-schemas (new-db) [spec/bibelot str-id-entity])
+
+      (it "finds by always true"
+        (api/tx {:kind :bibelot :name "John" :size 5 :color "Red"})
+        (should= [] (api/find-by :bibelot :name "' OR 1 = 1;--")))
+
+      (it "creates an entity with a malicious name"
+        (api/tx {:kind :bibelot :name "'" :size 5 :color "Red"}))
+
+      (it "sneaky delete doesn't work"
+        (api/tx {:kind :str-id-entity :id "123" :value 1})
+        (should-throw (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"}))
+        (should= 1 (api/count-all :str-id-entity)))
+
+      (it "sneaky deletes with actual id works"
+        (api/tx {:kind :str-id-entity :id "' OR 1 = 1;--" :value 1})
+        (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"})
+        (should= 0 (api/count-all :str-id-entity)))
+      )
+    )
+  )
