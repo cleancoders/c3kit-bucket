@@ -1,4 +1,5 @@
 (ns c3kit.bucket.memory
+  (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
   (:require
     [c3kit.apron.corec :as ccc]
     [c3kit.apron.legend :as legend]
@@ -116,7 +117,8 @@
 (defn- do-find [db kind options]
   (ensure-schema! (.-legend db) kind)
   (->> (or (vals (get @(.-store db) kind)) [])
-       (filter-where options)))
+       (filter-where options)
+       (api/-apply-take options)))
 
 ;; db api -----------------------------------
 
@@ -154,29 +156,36 @@
 
 (defn tx* [db entities]
   (let [entities (map ensure-id entities)]
-    (swap! (.-store db) (fn [store] (reduce #(tx-entity (.-legend db) %1 %2) store entities)))
+    (swap! (.-store db) (fn [store] (core-reduce #(tx-entity (.-legend db) %1 %2) store entities)))
     (map #(tx-result db %) entities)))
-
-(defn find-all [db kind]
-  (ensure-schema! (.-legend db) kind)
-  (or (vals (get-in @(.-store db) [kind])) []))
 
 (defn every-keyword? [ks]
   (every? (fn [k] (or (keyword? k) (every? keyword? k))) ks))
 
-(defn find-by [db kind kvs]
-  (ensure-schema! (.-legend db) kind)
-  (let [entities-of-kind (vals (get @(.-store db) kind))
-        kv-pairs         (api/-kvs->kv-pairs kvs)
-        tester           (spec->tester kv-pairs)]
-    (filter tester entities-of-kind)))
+(defn find-by
+  "Shorthand for (find db kind :where {k1 v1 ...})"
+  [db kind & kvs]
+  (do-find db kind {:where (api/-kvs->kv-pairs kvs)}))
 
-(defn ffind-by [db kind & kvs]
-  (first (apply find-by db kind kvs)))
+(defn ffind-by
+  "Shorthand for (ffind db kind :where {k1 v1 ...})"
+  [db kind & kvs]
+  (first (do-find db kind {:where (api/-kvs->kv-pairs kvs)})))
 
-(defn find [db kind & opt-args]
-  (let [options (ccc/->options opt-args)]
-    (do-find db kind options)))
+(defn find
+  "Convenient memory specific version of api/find"
+  [db kind & opt-args]
+  (do-find db kind (ccc/->options opt-args)))
+
+(defn count
+  "Convenient memory specific version of api/count"
+  [db kind & opt-args]
+  (core-count (apply find db kind opt-args)))
+
+(defn reduce
+  "Convenient memory specific version of api/reduce"
+  [db kind f init & opt-args]
+  (core-reduce f init (do-find db kind (ccc/->options opt-args))))
 
 (defn delete-all [db kind]
   (api/-assert-safety-off! "delete-all")
@@ -185,22 +194,15 @@
                           (-> (update db [:all] #(apply dissoc % all-ids))
                               (dissoc kind))))))
 
-(defn count-all [db kind] (count (find-all db kind)))
-(defn count-by [db kind kvs] (count (find-by db kind kvs)))
-
 (deftype MemoryDB [legend store]
   api/DB
   (-install-schema [_ schemas] (swap! legend merge (legend/build schemas)))
   (-clear [this] (clear this))
-  (-count-all [this kind] (count-all this kind))
-  (-count-by [this kind kvs] (count-by this kind kvs))
+  (-count [this kind options] (core-count (do-find this kind options)))
   (-delete-all [this kind] (delete-all this kind))
   (-entity [this kind id] (entity this kind id))
   (-find [this kind options] (do-find this kind options))
-  (-find-all [this kind] (find-all this kind))
-  (-find-by [this kind kvs] (find-by this kind kvs))
-  (-ffind-by [this kind kvs] (ffind-by this kind kvs))
-  (-reduce-by [this kind f val kvs] (reduce f val (find-by this kind kvs)))
+  (-reduce [this kind f init options] (core-reduce f init (do-find this kind options)))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   )

@@ -1,4 +1,5 @@
 (ns c3kit.bucket.jdbc
+  (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
@@ -101,7 +102,7 @@
 (defrecord MapResultSetOptionalBuilder [^ResultSet rs rs-meta cols key->type]
   rs/RowBuilder
   (->row [_] (transient {}))
-  (column-count [_] (count cols))
+  (column-count [_] (core-count cols))
   (with-column [_ row i]
     (let [v (.getObject rs ^Integer i)]
       (if (nil? v)
@@ -127,9 +128,9 @@
     (->MapResultSetOptionalBuilder rs rs-meta cols key->type)))
 
 (defn compile-mapping [schema]
-  (let [k->c (reduce (fn [m [k s]] (assoc m k (or (-> s :db :column) (get-full-key-name k)))) {} (dissoc schema :kind))
-        c->k (reduce (fn [m [k c]] (assoc m c k)) {} k->c)
-        k->t (reduce -add-type {} (dissoc schema :kind))]
+  (let [k->c (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column) (get-full-key-name k)))) {} (dissoc schema :kind))
+        c->k (core-reduce (fn [m [k c]] (assoc m c k)) {} k->c)
+        k->t (core-reduce -add-type {} (dissoc schema :kind))]
     {:table       (table-name schema)
      :id-type     (get-in schema [:id :type])
      :id-strategy (get-in schema [:id :strategy] :db-generated)
@@ -254,11 +255,6 @@
   (jdbc/with-transaction [tx (.-ds db)]
     (doall (map #(do-tx db tx %) entities))))
 
-(defn find-all [db kind]
-  (let [t-map (key-map db kind)
-        sql   (str "SELECT * FROM " (:table t-map))]
-    (map #(ccc/remove-nils (assoc % :kind kind)) (execute! (.-ds db) [sql] {:builder-fn (:builder-fn t-map)}))))
-
 (defn clause-with-operator [dialect {:keys [key->type] :as t-map} k v operator]
   (let [type (get key->type k)]
     [(str (->field-name t-map k) " " operator " " (->sql-param dialect type))
@@ -275,7 +271,7 @@
         v          (->> v set (remove nil?))
         in?        (not (empty? v))
         field-name (->field-name t-map k)
-        num-vals   (count v)]
+        num-vals   (core-count v)]
     (cons (str "("
                (when in? (str field-name (when not? " NOT") " IN (" (str/join "," (repeat num-vals (->sql-param dialect type))) ")"))
                (when (and in? is-null?) (if not? " AND " " OR "))
@@ -316,14 +312,14 @@
 
 (defn -build-where [dialect t-map kv-pairs]
   (if-let [sql-conditions (seq (->sql-clauses dialect t-map kv-pairs))]
-    (cons (apply str " WHERE " (interpose " AND " (map first sql-conditions)))
+    (cons (str/join " " (cons "WHERE" (interpose "AND" (map first sql-conditions))))
           (mapcat rest sql-conditions))
     [""]))
 
 (defmulti -build-find-query (fn [dialect _t-map _options] dialect))
 (defmethod -build-find-query :default [dialect t-map {:keys [where take]}]
   (let [[where-sql & args] (-build-where dialect t-map where)
-        sql (str "SELECT * FROM " (:table t-map) where-sql (when take (str " LIMIT " take)))]
+        sql (str/join " " ["SELECT * FROM" (:table t-map) where-sql (when take (str "LIMIT " take))])]
     (cons sql args)))
 
 (defn- do-find [db kind options]
@@ -336,36 +332,34 @@
   (let [options (ccc/->options opt-args)]
     (do-find db kind options)))
 
-(defn find-by [db kind kvs]
+(defn- do-count [db kind {:keys [where] :as _options}]
+  (let [{:keys [table] :as t-map} (key-map db kind)
+        [where-sql & args] (-build-where (.-dialect db) t-map where)
+        sql (str/join " " ["SELECT COUNT(*) FROM" table where-sql])]
+    (first (vals (execute-one! (.-ds db) (cons sql args))))))
+
+(defn count [db kind & opt-args]
+  (let [options (ccc/->options opt-args)]
+    (do-count db kind options)))
+
+(defn find-by
+  "Shorthand for (find db kind :where {k1 v1 ...})"
+  [db kind & kvs]
   (do-find db kind {:where (api/-kvs->kv-pairs kvs)}))
 
-(defn ffind-by [db kind & kvs]
-  (first (do-find db kind {:where (api/-kvs->kv-pairs kvs) :take 1})))
-
-(defn reduce-by [db kind f val kvs]
+(defn reduce [db kind f init options]
   (let [t-map      (key-map db kind)
-        query      (-build-find-query (.-ds db) t-map {:where (api/-kvs->kv-pairs kvs)})
+        query      (-build-find-query (.-ds db) t-map options)
         connection (jdbc/get-connection (.-ds db))]
     (.setHoldability connection ResultSet/CLOSE_CURSORS_AT_COMMIT)
-    (reduce
+    (core-reduce
       (fn [a b] (f a (ccc/remove-nils (assoc b :kind kind))))
-      val
+      init
       (jdbc/plan connection query {:builder-fn  (:builder-fn t-map)
                                    :fetch-size  1000
                                    :concurrency :read-only
                                    :cursors     :close
                                    :result-type :forward-only}))))
-
-(defn count-by [db kind kvs]
-  (let [{:keys [table] :as t-map} (key-map db kind)
-        [where-sql & args] (-build-where (.-dialect db) t-map (api/-kvs->kv-pairs kvs))
-        sql (str "SELECT COUNT(*) FROM " table where-sql)]
-    (first (vals (execute-one! (.-ds db) (cons sql args))))))
-
-(defn count-all [db kind]
-  (let [t-map (key-map db kind)
-        sql   (str "SELECT COUNT(*) FROM " (:table t-map))]
-    (first (vals (execute-one! (.-ds db) [sql])))))
 
 (defn clear [db]
   (api/-assert-safety-off! "clear")
@@ -384,14 +378,10 @@
   (-install-schema [_ schemas] (swap! legend merge (legend/build schemas)))
   (-clear [this] (clear this))
   (-delete-all [this kind] (delete-all this kind))
-  (-count-all [this kind] (count-all this kind))
-  (-count-by [this kind kvs] (count-by this kind kvs))
+  (-count [this kind options] (do-count this kind options))
   (-entity [this kind id] (entity this kind id))
   (-find [this kind options] (do-find this kind options))
-  (-find-all [this kind] (find-all this kind))
-  (-find-by [this kind kvs] (find-by this kind kvs))
-  (-ffind-by [this kind kvs] (apply ffind-by this kind kvs))
-  (-reduce-by [this kind f val kvs] (reduce-by this kind f val kvs))
+  (-reduce [this kind f init options] (reduce this kind f init options))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   )

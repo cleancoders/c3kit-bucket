@@ -194,7 +194,7 @@
       (let [b1 (sut/tx {:kind :bibelot :name "thing 1"})
             b2 (sut/tx {:kind :bibelot :name "thing 2"})]
         (sut/delete-all :bibelot)
-        (should= [] (sut/find-all :bibelot))
+        (should= [] (sut/find :bibelot))
         (should= nil (sut/reload b1))
         (should= nil (sut/reload b2))))
 
@@ -202,7 +202,7 @@
       (it "it clears the db"
         (sut/tx {:kind :bibelot :name "hello"})
         (sut/clear)
-        (should= [] (sut/find-all :bibelot)))
+        (should= [] (sut/find :bibelot)))
       )
 
     ;(context "timestamps"
@@ -313,6 +313,12 @@
         (should= 4 (count (sut/find :bibelot)))
         (should= 1 (count (sut/find :thingy))))
 
+      (it ":take"
+        (should= 1 (count (sut/find :bibelot {:take 1})))
+        (should= 2 (count (sut/find :bibelot {:take 2})))
+        (should= 3 (count (sut/find :bibelot {:take 3})))
+        (should= 4 (count (sut/find :bibelot {:take 4})))
+        (should= 4 (count (sut/find :bibelot {:take 99}))))
 
       (it ":name"
         (let [[entity :as entities] (sut/find-by :bibelot :name "hello")]
@@ -472,8 +478,8 @@
     )
   )
 
-(defn reduce-by [db-impl]
-  (context "reduce-by"
+(defn reduce-specs [db-impl]
+  (context "reduce"
     (helper/with-schemas db-impl [bibelot thingy])
     (before (sut/clear)
             (sut/tx {:kind :bibelot :name "hello"})
@@ -482,24 +488,26 @@
             (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
     (it "sum of none"
-      (should= 0 (sut/reduce-by :bibelot #(+ %1 (:size %2)) 0 :name "fake")))
+      (should= 0 (sut/reduce :bibelot #(+ %1 (:size %2)) 0 :where {:name "fake"})))
 
     (it "sum of one"
-      (should= 2 (sut/reduce-by :bibelot #(+ %1 (:size %2)) 0 :name "hi!")))
+      (should= 2 (sut/reduce :bibelot #(+ %1 (:size %2)) 0 :where {:name "hi!"})))
 
     (it "sum of all"
-      (should= 4 (sut/reduce-by :bibelot #(+ %1 (or (:size %2) 0)) 0)))
+      (should= 4 (sut/reduce :bibelot #(+ %1 (or (:size %2) 0)) 0)))
 
     (it "reduced map"
-      (should= {"world" [2] "hi!" [2]} (sut/reduce-by :bibelot #(update %1 (:name %2) conj (:size %2)) {} :size ['not= nil])))
+      (should= {"world" [2] "hi!" [2]} (sut/reduce :bibelot #(update %1 (:name %2) conj (:size %2)) {}
+                                                   :where {:size ['not= nil]})))
     )
   )
 
 (defn count-by [db-impl]
-  (context "count-by"
+  (context "count"
     (helper/with-schemas db-impl [bibelot thingy])
 
     (it "empty db"
+      (should= 0 (sut/count :bibelot))
       (should= 0 (sut/count-by :bibelot :name "nothing")))
 
     (context "populated db"
@@ -509,6 +517,11 @@
               (sut/tx {:kind :bibelot :name "world" :size 2})
               (sut/tx {:kind :bibelot :name "hi!" :size 2})
               )
+
+      (it "all"
+        (sut/tx {:kind :thingy :id 123 :name "world"})
+        (should= 4 (sut/count :bibelot))
+        (should= 1 (sut/count :thingy)))
 
       (it "count-by: :name"
         (should= 1 (sut/count-by :bibelot :name "hello")))
@@ -619,20 +632,6 @@
       (let [result (sut/tx (assoc @original :bang nil))]
         (should= nil (:bang result))
         (should= nil (:bang (sut/reload @original)))))
-    )
-  )
-
-(defn count-all [db-impl]
-  (context "counts rows"
-    (helper/with-schemas db-impl [bibelot thingy])
-    (before (sut/clear))
-
-    (it "0 of a kind"
-      (should= 0 (sut/count-all :bibelot)))
-
-    (it "3 of a kind"
-      (sut/tx* [{:kind :bibelot :name "hello"} {:kind :bibelot :name "hola"} {:kind :bibelot :name "shalom"}])
-      (should= 3 (sut/count-all :bibelot)))
     )
   )
 

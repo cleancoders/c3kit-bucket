@@ -41,8 +41,7 @@
       (spec/crud-specs (new-db))
       (spec/nil-value-specs (new-db))
       (spec/find-by (new-db))
-      (spec/reduce-by (new-db))
-      (spec/count-all (new-db))
+      (spec/reduce-specs (new-db))
       (spec/count-by (new-db))
       (spec/broken-in-datomic (new-db))
 

@@ -1,4 +1,5 @@
 (ns c3kit.bucket.datomic
+  (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
@@ -118,25 +119,35 @@
      {:id id :kind (keyword kind)}
      attributes)))
 
+(defn- id->entity [ddb id]
+  (when-let [attributes (seq (datomic/entity ddb id))]
+    (attributes->entity attributes id)))
+
 (defn- entity
   "ids are always longs in datomic.
   kind (optional) will ensure the kind matches or return nil."
   ([db id]
    (cond
-     (number? id) (when-let [attributes (seq (datomic/entity (datomic/db @(.-conn db)) id))]
-                    (attributes->entity attributes id))
+     (number? id) (id->entity (datomic-db db) id)
      (nil? id) nil
      (string? id) (when-not (str/blank? id) (entity db (Long/parseLong id)))
-     :else (attributes->entity (seq id) (:db/id id))))
+     (map? id) (entity db (:id id))
+     :else (throw (UnsupportedOperationException. (str "Unhandled datomic id: " (pr-str id))))))
   ([db kind id]
    (when-let [e (entity db id)]
      (when (or (nil? kind) (= kind (:kind e)))
        e))))
 
-(defn reload [db e] (when-let [id (:id e)] (entity db id)))
+(defn reload
+  "Returns a freshly loaded entity"
+  [db e]
+  (when-let [id (:id e)] (entity db id)))
 
-(defn q->entities [db result] (map #(entity db (first %)) result))
-(defn q->ids [result] (map first result))
+(defn- q->entities [db result]
+  (let [ddb (datomic-db db)]
+    (map #(id->entity ddb (first %)) result)))
+
+(defn- q->ids [result] (map first result))
 
 (defn- id-or-val [thing] (or (:db/id thing) thing))
 
@@ -144,22 +155,22 @@
   (list (-> entity ccc/remove-nils (assoc :db/id id))))
 
 (defn- retract-field-forms [id original retracted-keys]
-  (reduce (fn [form key]
-            (let [o-val (get original key)]
-              (if (set? o-val)
-                (reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form o-val)
-                (conj form [:db/retract id key (id-or-val o-val)]))))
-          [] retracted-keys))
+  (core-reduce (fn [form key]
+                 (let [o-val (get original key)]
+                   (if (set? o-val)
+                     (core-reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form o-val)
+                     (conj form [:db/retract id key (id-or-val o-val)]))))
+               [] retracted-keys))
 
 (defn- cardinality-many-retract-forms [updated original]
-  (reduce (fn [form [key val]]
-            (if (or (set? val) (sequential? val))
-              (let [id      (:db/id updated)
-                    o-val   (ccc/map-set id-or-val (get original key))
-                    missing (set/difference o-val (set val))]
-                (reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form missing))
-              form))
-          [] updated))
+  (core-reduce (fn [form [key val]]
+                 (if (or (set? val) (sequential? val))
+                   (let [id      (:db/id updated)
+                         o-val   (ccc/map-set id-or-val (get original key))
+                         missing (set/difference o-val (set val))]
+                     (core-reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form missing))
+                   form))
+               [] updated))
 
 (defn update-form [db id updated]
   (let [original          (into {} (datomic/entity (datomic/db @(.-conn db)) id))
@@ -248,9 +259,8 @@
 
 (defn- or-where-clause [attr values]
   (let [values (set values)]
-    (if (seq values)
-      (list (cons 'or (mapcat #(where-clause attr %) values)))
-      [nil])))
+    (when (seq values)
+      (list (cons 'or (mapcat #(where-clause attr %) values))))))
 
 (defmethod seq-where-clause '= [attr [_ & values]] (or-where-clause attr values))
 
@@ -263,94 +273,75 @@
         (sequential? value) (seq-where-clause attr value)
         :else (list ['?e attr value])))
 
-(defn find-where
-  "Search for all entities that match the datalog 'where' clause passed in."
-  [db where]
-  (if (some nil? where)
-    []
-    (let [query  (concat '[:find ?e :in $ :where] where)
-          result (datomic/q query (datomic-db db))]
-      (q->entities db result))))
-
-(defn find-ids-where
-  "Search for ids of entities that match the datalog 'where' clause passed in."
-  [db where]
-  (if (some nil? where)
-    []
-    (let [query (concat '[:find ?e :in $ :where] where)]
-      (q->ids (datomic/q query (datomic-db db))))))
-
-(defn count-where
-  "Count all entities that match the datalog 'where' clause passed in."
-  [db where]
-  (if (some nil? where)
-    0
-    (let [query (concat '[:find (count ?e) :in $ :where] where)]
-      (or (ffirst (datomic/q query (datomic-db db))) 0))))
-
-(defn- do-search [db q-fn default kind kv-pairs]
-  (if (= 1 (count kv-pairs))
-    (let [[attr value] (first kv-pairs)]
-      (if (nil? value)
-        (do (log/warn (str "search for nil value (" kind " " attr "), returning no results.")) default)
-        (q-fn db (where-clause (->attr-kw kind attr) value))))
-    (let [attrs (map #(->attr-kw kind %) (map first kv-pairs))
-          vals  (map second kv-pairs)]
-      (q-fn db (mapcat where-clause attrs vals)))))
-
-(defn- query-all [db kind thing]
+(defn- where-all-of-kind [db kind]
   (let [schema       (legend/for-kind @(.-legend db) kind)
         attrs        (keys (dissoc schema :id :kind))
-        scoped-attrs (map #(scope-attribute kind %) attrs)
-        where        (cons 'or (map (fn [a] ['?e a]) scoped-attrs))]
-    (conj [:find thing :in '$ :where] where)))
+        scoped-attrs (map #(scope-attribute kind %) attrs)]
+    [(cons 'or (map (fn [a] ['?e a]) scoped-attrs))]))
+
+(defn- where-single-clause [kind [attr value]]
+  (if (nil? value)
+    (do (log/warn (str "search for nil value (" kind " " attr "), returning no results.")) nil)
+    (where-clause (->attr-kw kind attr) value)))
+
+(defn- where-multi-clause [kind kv-pairs]
+  (let [attrs (map #(->attr-kw kind %) (map first kv-pairs))
+        vals  (map second kv-pairs)]
+    (mapcat where-clause attrs vals)))
+
+(defn- build-where-datalog [db kind kv-pairs]
+  (cond (nil? (seq kv-pairs)) (where-all-of-kind db kind)
+        (= 1 (core-count kv-pairs)) (where-single-clause kind (first kv-pairs))
+        :else (where-multi-clause kind kv-pairs)))
 
 (defn- do-find [db kind options]
-  (if-let [where (seq (:where options))]
-    (do-search db find-where [] kind where)
-    (q->entities db (datomic/q (query-all db kind '?e) (datomic-db db)))))
+  (if-let [where (seq (build-where-datalog db kind (:where options)))]
+    (let [query (concat '[:find ?e :in $ :where] where)]
+      (->> (datomic/q query (datomic-db db))
+           (api/-apply-take options)
+           (q->entities db)))
+    []))
 
-(defn find-by [db kind kvs] (do-search db find-where [] kind (api/-kvs->kv-pairs kvs)))
-(defn ffind-by [db kind kvs] (first (find-by db kind kvs)))
-(defn count-by [db kind kvs] (do-search db count-where 0 kind (api/-kvs->kv-pairs kvs)))
+(defn- do-count [db kind options]
+  (if-let [where (build-where-datalog db kind (:where options))]
+    (let [query   (concat '[:find (count ?e) :in $ :where] where)
+          results (datomic/q query (datomic-db db))]
+      (or (ffirst results) 0))
+    0))
 
-(defn find [db kind & opt-args]
-  (let [options (ccc/->options opt-args)]
-    (do-find db kind options)))
+(defn count [db kind & opt-args]
+  (do-count db kind (ccc/->options opt-args)))
 
-(defn find-all [db kind]
-  (let [query (query-all db kind '?e)]
-    (q->entities db (datomic/q query (datomic-db db)))))
+(defn find-by
+  "Shorthand for (find db kind :where {k1 v1 ...})"
+  [db kind & kvs]
+  (do-find db kind {:where (api/-kvs->kv-pairs kvs)}))
+
+(defn ffind-by
+  "Shorthand for (ffind db kind :where {k1 v1 ...})"
+  [db kind & kvs]
+  (first (do-find db kind {:where (api/-kvs->kv-pairs kvs)})))
+
+(defn find
+  [db kind & opt-args]
+  (do-find db kind (ccc/->options opt-args)))
 
 (defn delete-all [db kind]
   (api/-assert-safety-off! "delete-all")
-  (->> (find-all db kind)
+  (->> (do-find db kind {})
        (partition-all 100)
        (map (fn [batch] (tx* db (map api/soft-delete batch))))
        doall))
-
-(defn count-all [db kind]
-  (let [query (query-all db kind '(count ?e))]
-    (or (ffirst (datomic/q query (datomic-db db))) 0)))
-
-(defn reduce-by [db kind f val kvs]
-  (if (seq kvs)
-    (reduce f val (find-by db kind kvs))
-    (reduce f val (find-all db kind))))
 
 (deftype DatomicDB [db-schema legend config conn]
   api/DB
   (-install-schema [this new-schemas] (do-install-schema this new-schemas))
   (-clear [this] (clear this))
   (-delete-all [this kind] (delete-all this kind))
-  (-count-all [this kind] (count-all this kind))
-  (-count-by [this kind kvs] (count-by this kind kvs))
+  (-count [this kind options] (do-count this kind options))
   (-entity [this kind id] (entity this kind id))
   (-find [this kind options] (do-find this kind options))
-  (-find-all [this kind] (find-all this kind))
-  (-find-by [this kind kvs] (find-by this kind kvs))
-  (-ffind-by [this kind kvs] (ffind-by this kind kvs))
-  (-reduce-by [this kind f val kvs] (reduce-by this kind f val kvs))
+  (-reduce [this kind f init options] (core-reduce f init (do-find this kind options)))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   )

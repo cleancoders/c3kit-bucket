@@ -1,5 +1,6 @@
 (ns c3kit.bucket.datomic-spec
-  (:require [c3kit.apron.schema :as s]
+  (:require [c3kit.apron.log :as log]
+            [c3kit.apron.schema :as s]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.datomic :as sut]
@@ -8,6 +9,7 @@
 
 (def config {:uri "datomic:mem://test"})
 (defn new-db [] (sut/create-db config))
+(declare db)
 
 (describe "Datomic"
 
@@ -18,8 +20,7 @@
     (spec/crud-specs (new-db))
     (spec/nil-value-specs (new-db))
     (spec/find-by (new-db))
-    (spec/reduce-by (new-db))
-    (spec/count-all (new-db))
+    (spec/reduce-specs (new-db))
     (spec/count-by (new-db))
     (spec/kind-is-optional (new-db))
     )
@@ -30,19 +31,16 @@
     (it "clear" (should-throw AssertionError (sut/clear (new-db))))
     (it "delete-all" (should-throw AssertionError (sut/delete-all (new-db) :foo))))
 
-  (context "kind is optional"
+  (context "unique behavior"
 
-    (helper/with-schemas (new-db) [spec/bibelot spec/thingy])
+    (with db (new-db))
+    (before (api/install-schema @db [spec/bibelot]))
 
-    (it "entity"
-      (let [foo (api/tx {:kind :bibelot :name "foo"})]
-        (should= foo (api/entity (:id foo)))
-        (should= nil (api/entity :thingy (:id foo)))))
+    (it "one kv with nil value"
+      (log/capture-logs
+        (should= [] (sut/find @db :bibelot :where {:name nil})))
+      (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str)))
 
-    (it "entity!"
-      (let [foo (api/tx {:kind :bibelot :name "foo"})]
-        (should= foo (api/entity! (:id foo)))
-        (should-throw (api/entity! :thingy (:id foo)))))
     )
 
   (context "schema"

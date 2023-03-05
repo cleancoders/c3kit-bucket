@@ -92,8 +92,7 @@
       (spec/crud-specs (new-db))
       (spec/nil-value-specs (new-db))
       (spec/find-by (new-db))
-      (spec/reduce-by (new-db))
-      (spec/count-all (new-db))
+      (spec/reduce-specs (new-db))
       (spec/count-by (new-db))
       (spec/broken-in-datomic (new-db))
       (spec/kind-is-required (new-db))
@@ -120,12 +119,12 @@
       (it "sneaky delete doesn't work"
         (api/tx {:kind :str-id-entity :id "123" :value 1})
         (should-throw (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"}))
-        (should= 1 (api/count-all :str-id-entity)))
+        (should= 1 (api/count :str-id-entity)))
 
       (it "sneaky deletes with actual id works"
         (api/tx {:kind :str-id-entity :id "' OR 1 = 1;--" :value 1})
         (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"})
-        (should= 0 (api/count-all :str-id-entity)))
+        (should= 0 (api/count :str-id-entity)))
       )
     )
   )

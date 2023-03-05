@@ -21,10 +21,9 @@
 
   (spec/crud-specs (sut/create-db))
   (spec/nil-value-specs (sut/create-db))
-  (spec/count-all (sut/create-db))
   (spec/count-by (sut/create-db))
   (spec/find-by (sut/create-db))
-  (spec/reduce-by (sut/create-db))
+  (spec/reduce-specs (sut/create-db))
   (spec/kind-is-optional (sut/create-db))
   (spec/broken-in-datomic (sut/create-db))
 

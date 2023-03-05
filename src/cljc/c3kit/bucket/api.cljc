@@ -19,16 +19,11 @@
   "API for database operations"
   (-install-schema [this schemas])
   (-clear [this])
-  (-count-all [this kind])
-  (-count-by [this kind key-vals])
+  (-count [this kind options])
   (-delete-all [this kind])
   (-entity [this kind id])
   (-find [this kind options])
-  (-find-all [this kind])
-  (-find-by [this kind key-vals])
-  (-ffind-by [this kind key-vals])
-  (-maybe-add-int-id [this e])
-  (-reduce-by [this kind f val key-vals])
+  (-reduce [this kind f init options])
   (-tx [this entity])
   (-tx* [this entity])
   )
@@ -47,22 +42,16 @@
             (log/warn (str "failed to coerce id of type " type " - " (ex-message e)))
             id)))))
 
-(defn- -maybe-generate-id-helper [legend e]
-  (case (-id-type legend (:kind e))
-    :uuid (assoc e :id (ccc/new-uuid))
-    :int (-maybe-add-int-id @impl e)
-    (throw (ex-info (str "don't know how to generate id of type" -id-type) {}))))
-
-(defn -maybe-add-id [legend e]
-  (cond (delete? e) e
-        (:id e) e
-        :else (-maybe-generate-id-helper legend e)))
-
 (defn -kvs->kv-pairs [kvs]
   (assert (even? (count kvs)) "filter params must come in pairs")
   (let [kv-pairs (partition 2 kvs)]
     (assert (every? #(keyword? %) (map first kv-pairs)) "filter attributes must be keywords")
     kv-pairs))
+
+(defn -apply-take [options entities]
+  (if-let [n (:take options)]
+    (take n entities)
+    entities))
 
 (defn legend
   "Returns the legend (map of :kind -> schema) of the database implementation."
@@ -83,28 +72,43 @@
   ([id] (entity! nil id))
   ([kind id] (or (entity kind id) (throw (ex-info "Entity missing!" {:kind kind :id id})))))
 
-;; TODO - MDM: consider wrapping the args in a map, maybe validate then, for the impls.
-(defn find-by [kind & kvs]
-  (-find-by @impl kind kvs))
+(defn find
+  "Searches for entities.
+Options:
+  :where  - key-value pairs to filter matching entities, without which *ALL* entities of kind will be returned.
+    value         - (= % value)
+    nil           - (nil? %)
+    [values]      - (some #(= % value) values)
+    ['not value]  - (not (= % value))
+    ['> value]    - (> % value)
+    ['< value]    - (< % value)"
+  [kind & opt-args]
+  (-find @impl kind (ccc/->options opt-args)))
 
-(defn ffind-by [kind & kvs]
-  (-ffind-by @impl kind kvs))
+(defn ffind
+  "Shorthand for (ffind kind :where {k1 v1 ...})"
+  [kind & opt-args]
+  (first (-find @impl kind (assoc (ccc/->options opt-args) :take 1))))
 
-(defn find-all [kind]
-  (when kind (-find-all @impl kind)))
+(defn find-by
+  "Shorthand for (ffind kind :where {k1 v1 ...})"
+  [kind & kvs]
+  (-find @impl kind {:where (-kvs->kv-pairs kvs)}))
 
-(defn find [kind & opt-args]
-  (let [options (ccc/->options opt-args)]
-    (-find @impl kind options)))
+(defn ffind-by
+  "Shorthand for (ffind kind :where {k1 v1 ...})"
+  [kind & kvs]
+  (first (-find @impl kind {:where (-kvs->kv-pairs kvs) :take 1})))
 
-(defn reduce-by [kind f val & kvs]
-  (-reduce-by @impl kind f val kvs))
-
-(defn count-all [kind]
-  (-count-all @impl kind))
+(defn reduce
+  [kind f init & opt-args]
+  (-reduce @impl kind f init (ccc/->options opt-args)))
 
 (defn count-by [kind & kvs]
-  (-count-by @impl kind kvs))
+  (-count @impl kind {:where (-kvs->kv-pairs kvs)}))
+
+(defn count [kind & opt-args]
+  (-count @impl kind (ccc/->options opt-args)))
 
 (defn -apply-created-at [schema e]
   (if (and (:created-at schema) (nil? (:created-at e)))
