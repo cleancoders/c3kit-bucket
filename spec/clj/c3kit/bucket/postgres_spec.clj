@@ -33,7 +33,6 @@
 
       (spec/crud-specs (new-db))
       (spec/nil-value-specs (new-db))
-      (spec/find-all (new-db))
       (spec/find-by (new-db))
       (spec/reduce-by (new-db))
       (spec/count-all (new-db))

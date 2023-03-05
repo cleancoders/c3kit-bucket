@@ -78,7 +78,7 @@
   (swap! (.-legend db) merge (legend/build new-schemas)))
 
 (defn clear [db]
-  (api/assert-safety-off! "clear")
+  (api/-assert-safety-off! "clear")
   (let [uri (:uri (.-config db))]
     (datomic/delete-database uri)
     (reset! (.-conn db) (connect uri))
@@ -118,17 +118,21 @@
      {:id id :kind (keyword kind)}
      attributes)))
 
-(defn entity [db id]
-  (cond
-    (number? id) (when-let [attributes (seq (datomic/entity (datomic/db @(.-conn db)) id))]
-                   (attributes->entity attributes id))
-    (nil? id) nil
-    (string? id) (when-not (str/blank? id) (entity db (Long/parseLong id)))
-    :else (attributes->entity (seq id) (:db/id id))))
+(defn- entity
+  "ids are always longs in datomic.
+  kind (optional) will ensure the kind matches or return nil."
+  ([db id]
+   (cond
+     (number? id) (when-let [attributes (seq (datomic/entity (datomic/db @(.-conn db)) id))]
+                    (attributes->entity attributes id))
+     (nil? id) nil
+     (string? id) (when-not (str/blank? id) (entity db (Long/parseLong id)))
+     :else (attributes->entity (seq id) (:db/id id))))
+  ([db kind id]
+   (when-let [e (entity db id)]
+     (when (or (nil? kind) (= kind (:kind e)))
+       e))))
 
-;(defn entity! [id] (dbc/entity! (entity id) id))
-;(defn entity-of-kind! [kind id] (dbc/entity-of-kind! (entity id) kind id))
-;(defn entity-of-kind [kind id] (dbc/entity-of-kind (entity id) kind))
 (defn reload [db e] (when-let [id (:id e)] (entity db id)))
 
 (defn q->entities [db result] (map #(entity db (first %)) result))
@@ -284,20 +288,15 @@
     (let [query (concat '[:find (count ?e) :in $ :where] where)]
       (or (ffirst (datomic/q query (datomic-db db))) 0))))
 
-(defn- do-search [db q-fn default kind kvs]
-  (if (= 2 (count kvs))
-    (let [[attr value] kvs]
+(defn- do-search [db q-fn default kind kv-pairs]
+  (if (= 1 (count kv-pairs))
+    (let [[attr value] (first kv-pairs)]
       (if (nil? value)
         (do (log/warn (str "search for nil value (" kind " " attr "), returning no results.")) default)
         (q-fn db (where-clause (->attr-kw kind attr) value))))
-    (let [pairs (partition 2 kvs)
-          attrs (map #(->attr-kw kind %) (map first pairs))
-          vals  (map second pairs)]
+    (let [attrs (map #(->attr-kw kind %) (map first kv-pairs))
+          vals  (map second kv-pairs)]
       (q-fn db (mapcat where-clause attrs vals)))))
-
-(defn find-by [db kind kvs] (do-search db find-where [] kind kvs))
-(defn ffind-by [db kind kvs] (first (find-by db kind kvs)))
-(defn count-by [db kind kvs] (do-search db count-where 0 kind kvs))
 
 (defn- query-all [db kind thing]
   (let [schema       (legend/for-kind @(.-legend db) kind)
@@ -306,12 +305,25 @@
         where        (cons 'or (map (fn [a] ['?e a]) scoped-attrs))]
     (conj [:find thing :in '$ :where] where)))
 
+(defn- do-find [db kind options]
+  (if-let [where (seq (:where options))]
+    (do-search db find-where [] kind where)
+    (q->entities db (datomic/q (query-all db kind '?e) (datomic-db db)))))
+
+(defn find-by [db kind kvs] (do-search db find-where [] kind (api/-kvs->kv-pairs kvs)))
+(defn ffind-by [db kind kvs] (first (find-by db kind kvs)))
+(defn count-by [db kind kvs] (do-search db count-where 0 kind (api/-kvs->kv-pairs kvs)))
+
+(defn find [db kind & opt-args]
+  (let [options (ccc/->options opt-args)]
+    (do-find db kind options)))
+
 (defn find-all [db kind]
   (let [query (query-all db kind '?e)]
     (q->entities db (datomic/q query (datomic-db db)))))
 
 (defn delete-all [db kind]
-  (api/assert-safety-off! "delete-all")
+  (api/-assert-safety-off! "delete-all")
   (->> (find-all db kind)
        (partition-all 100)
        (map (fn [batch] (tx* db (map api/soft-delete batch))))
@@ -333,7 +345,8 @@
   (-delete-all [this kind] (delete-all this kind))
   (-count-all [this kind] (count-all this kind))
   (-count-by [this kind kvs] (count-by this kind kvs))
-  (-entity [this _kind id] (entity this id))
+  (-entity [this kind id] (entity this kind id))
+  (-find [this kind options] (do-find this kind options))
   (-find-all [this kind] (find-all this kind))
   (-find-by [this kind kvs] (find-by this kind kvs))
   (-ffind-by [this kind kvs] (ffind-by this kind kvs))

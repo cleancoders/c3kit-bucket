@@ -22,13 +22,11 @@
   (context "safety"
 
     (it "is on by default"
-      (should= true sut/*safety*)
-      (should= false (sut/safety-off?)))
+      (should= true sut/*safety*))
 
     (it "with-safety-off"
       (with-safety-off
-        (should= false sut/*safety*)
-        (should= true (sut/safety-off?))))
+        (should= false sut/*safety*)))
 
     (it "setters"
       (sut/set-safety! false)
@@ -260,11 +258,47 @@
     )
   )
 
+(defn kind-is-optional [db]
+  (context "kind is optional"
+
+    (helper/with-schemas db [bibelot thingy])
+
+    (it "entity"
+      (let [foo (sut/tx {:kind :bibelot :name "foo"})]
+        (should= foo (sut/entity (:id foo)))
+        (should= nil (sut/entity :thingy (:id foo)))))
+
+    (it "entity!"
+      (let [foo (sut/tx {:kind :bibelot :name "foo"})]
+        (should= foo (sut/entity! (:id foo)))
+        (should-throw (sut/entity! :thingy (:id foo)))))
+    )
+  )
+
+(defn kind-is-required [db]
+  (context "kind is required"
+
+    (helper/with-schemas db [bibelot thingy])
+
+    (it "entity"
+      (let [foo (sut/tx {:kind :bibelot :name "foo"})]
+        (should-throw #?(:clj UnsupportedOperationException) (sut/entity (:id foo)))
+        (should= nil (sut/entity :thingy (:id foo)))))
+
+    (it "entity!"
+      (let [foo (sut/tx {:kind :bibelot :name "foo"})]
+        (should-throw #?(:clj UnsupportedOperationException) (sut/entity! (:id foo)))
+        (should-throw (sut/entity! :thingy (:id foo)))))
+    )
+  )
+
 (defn find-by [db-impl]
-  (context "find-by"
+  (context "find"
     (helper/with-schemas db-impl [bibelot thingy])
 
     (it "empty db"
+      (should= [] (sut/find :bibelot))
+      (should= [] (sut/find :thingy))
       (should= [] (sut/find-by :bibelot :name "nothing")))
 
     (context "(populated db)"
@@ -272,8 +306,13 @@
               (sut/tx {:kind :bibelot :name "hello"})
               (sut/tx {:kind :bibelot :name "world"})
               (sut/tx {:kind :bibelot :name "world" :size 2})
-              (sut/tx {:kind :bibelot :name "hi!" :size 2})
-              )
+              (sut/tx {:kind :bibelot :name "hi!" :size 2}))
+
+      (it "all"
+        (sut/tx {:kind :thingy :id 123 :name "world"})
+        (should= 4 (count (sut/find :bibelot)))
+        (should= 1 (count (sut/find :thingy))))
+
 
       (it ":name"
         (let [[entity :as entities] (sut/find-by :bibelot :name "hello")]
@@ -543,24 +582,6 @@
         (should= 1 (sut/count-by :bibelot :size ['>= 0])))
 
       )
-    )
-  )
-
-(defn find-all [db-impl]
-  (context "find-all"
-    (helper/with-schemas db-impl [bibelot thingy])
-    (before (sut/clear))
-
-    (it "has none"
-      (should= [] (sut/find-all :thingy)))
-
-    (it "finds all entities of a kind"
-      (sut/tx* [{:kind :bibelot :name "hello"}
-                {:kind :bibelot :name "world"}
-                {:kind :bibelot :name "hola"}
-                {:kind :thingy :id 123 :foo "mundo"}])
-      (should= 3 (count (sut/find-all :bibelot)))
-      (should= 1 (count (sut/find-all :thingy))))
     )
   )
 

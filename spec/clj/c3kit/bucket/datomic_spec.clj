@@ -3,6 +3,7 @@
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.datomic :as sut]
+            [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all]))
 
 (def config {:uri "datomic:mem://test"})
@@ -14,15 +15,13 @@
   (around [it] (api/with-safety-off (it)))
 
   (context "api"
-
     (spec/crud-specs (new-db))
     (spec/nil-value-specs (new-db))
-    (spec/find-all (new-db))
     (spec/find-by (new-db))
     (spec/reduce-by (new-db))
     (spec/count-all (new-db))
     (spec/count-by (new-db))
-
+    (spec/kind-is-optional (new-db))
     )
 
   (context "safety"
@@ -30,6 +29,21 @@
 
     (it "clear" (should-throw AssertionError (sut/clear (new-db))))
     (it "delete-all" (should-throw AssertionError (sut/delete-all (new-db) :foo))))
+
+  (context "kind is optional"
+
+    (helper/with-schemas (new-db) [spec/bibelot spec/thingy])
+
+    (it "entity"
+      (let [foo (api/tx {:kind :bibelot :name "foo"})]
+        (should= foo (api/entity (:id foo)))
+        (should= nil (api/entity :thingy (:id foo)))))
+
+    (it "entity!"
+      (let [foo (api/tx {:kind :bibelot :name "foo"})]
+        (should= foo (api/entity! (:id foo)))
+        (should-throw (api/entity! :thingy (:id foo)))))
+    )
 
   (context "schema"
 

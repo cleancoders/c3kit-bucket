@@ -9,11 +9,9 @@
    :timestamp "datetime2"
    :boolean   "bit"})
 
-(defmethod jdbc/-build-find-by-query :mssql [dialect t-map {[limit] :keys :as params} kvs]
-  (let [kv-pairs (partition 2 kvs)
-        select   (str "SELECT " (when limit (str "TOP " limit)) " * FROM " (:table t-map) " ")
-        [sql & args] (jdbc/-build-where dialect select t-map kv-pairs)]
-    (assert (every? keyword? (map first kv-pairs)) "Attributes must be keywords")
+(defmethod jdbc/-build-find-query :mssql [dialect t-map {:keys [where take]}]
+  (let [[where-sql & args] (jdbc/-build-where dialect t-map where)
+        sql      (str "SELECT " (when take (str "TOP " take)) " * FROM " (:table t-map) where-sql)]
     (cons sql args)))
 
 (defmethod jdbc/build-upsert-sql :mssql [dialect t-map {:keys [id] :as entity}]

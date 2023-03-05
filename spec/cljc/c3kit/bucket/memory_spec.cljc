@@ -24,8 +24,8 @@
   (spec/count-all (sut/create-db))
   (spec/count-by (sut/create-db))
   (spec/find-by (sut/create-db))
-  (spec/find-all (sut/create-db))
   (spec/reduce-by (sut/create-db))
+  (spec/kind-is-optional (sut/create-db))
   (spec/broken-in-datomic (sut/create-db))
 
   (context "safety"

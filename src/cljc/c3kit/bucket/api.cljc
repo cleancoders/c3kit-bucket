@@ -7,11 +7,9 @@
             [c3kit.apron.schema :as schema]))
 
 (def ^:dynamic *safety* true)
-(defn safety-off? [] (not *safety*))
-(defn assert-safety-off! [action] (assert (not *safety*) (str "Safety if on! Refusing to " action)))
+(defn -assert-safety-off! [action] (assert (not *safety*) (str "Safety if on! Refusing to " action)))
 (defn set-safety! [on?] #?(:clj (alter-var-root #'*safety* (fn [_] on?)) :cljs (set! *safety* on?)))
 #?(:clj (defmacro with-safety-off [& body] `(with-redefs [*safety* false] ~@body)))
-
 
 (defn delete? [entity]
   (or (:db/delete? (meta entity))
@@ -25,10 +23,10 @@
   (-count-by [this kind key-vals])
   (-delete-all [this kind])
   (-entity [this kind id])
+  (-find [this kind options])
   (-find-all [this kind])
   (-find-by [this kind key-vals])
   (-ffind-by [this kind key-vals])
-  ;(-find-page-by [this kind params key-vals])
   (-maybe-add-int-id [this e])
   (-reduce-by [this kind f val key-vals])
   (-tx [this entity])
@@ -39,9 +37,9 @@
    :cljs (def impl (atom nil)))
 #?(:cljs (def set-impl! (partial reset! impl)))
 
-(defn id-type [legend kind] (get-in (legend/for-kind @legend kind) [:id :type]))
-(defn coerced-id
-  ([legend kind id] (coerced-id (id-type legend kind) id))
+(defn -id-type [legend kind] (get-in (legend/for-kind @legend kind) [:id :type]))
+(defn -coerced-id
+  ([legend kind id] (-coerced-id (-id-type legend kind) id))
   ([type id]
    (let [coerce (schema/type-coercer! type)]
      (try (coerce id)
@@ -50,28 +48,40 @@
             id)))))
 
 (defn- -maybe-generate-id-helper [legend e]
-  (case (id-type legend (:kind e))
+  (case (-id-type legend (:kind e))
     :uuid (assoc e :id (ccc/new-uuid))
     :int (-maybe-add-int-id @impl e)
-    (throw (ex-info (str "don't know how to generate id of type" id-type) {}))))
+    (throw (ex-info (str "don't know how to generate id of type" -id-type) {}))))
 
 (defn -maybe-add-id [legend e]
   (cond (delete? e) e
         (:id e) e
         :else (-maybe-generate-id-helper legend e)))
 
-(defn legend [db] (deref (.-legend db)))
+(defn -kvs->kv-pairs [kvs]
+  (assert (even? (count kvs)) "filter params must come in pairs")
+  (let [kv-pairs (partition 2 kvs)]
+    (assert (every? #(keyword? %) (map first kv-pairs)) "filter attributes must be keywords")
+    kv-pairs))
+
+(defn legend
+  "Returns the legend (map of :kind -> schema) of the database implementation."
+  [db] (deref (.-legend db)))
 
 (defn install-schema
   ([schemas] (install-schema @impl schemas))
   ([db schemas] (-install-schema db schemas)))
 
-(defn entity [kind id]
-  (when id
-    (-entity @impl kind id)))
+(defn entity
+  "Retrieve an entity by its id.
+  kind is required by some implementations, otherwise nil is returned when the kind does not match."
+  ([id] (when id (-entity @impl nil id)))
+  ([kind id] (when id (-entity @impl kind id))))
 
-(defn entity! [kind id]
-  (or (entity kind id) (throw (ex-info "Entity missing!" {:kind kind :id id}))))
+(defn entity!
+  "Like entity but throws an Exception when the entity doesn't exist."
+  ([id] (entity! nil id))
+  ([kind id] (or (entity kind id) (throw (ex-info "Entity missing!" {:kind kind :id id})))))
 
 ;; TODO - MDM: consider wrapping the args in a map, maybe validate then, for the impls.
 (defn find-by [kind & kvs]
@@ -82,6 +92,10 @@
 
 (defn find-all [kind]
   (when kind (-find-all @impl kind)))
+
+(defn find [kind & opt-args]
+  (let [options (ccc/->options opt-args)]
+    (-find @impl kind options)))
 
 (defn reduce-by [kind f val & kvs]
   (-reduce-by @impl kind f val kvs))
@@ -153,3 +167,4 @@
 ;;  3) apply to test data.  Bring in entity and for-kind features
 ;;  4) seeding entity
 ;;  5) document
+;;  6) Ability to use multiple dbs at the same time through api

@@ -1,5 +1,6 @@
 (ns c3kit.bucket.memory
   (:require
+    [c3kit.apron.corec :as ccc]
     [c3kit.apron.legend :as legend]
     [c3kit.apron.schema :as schema]
     [c3kit.apron.utilc :as utilc]
@@ -9,7 +10,7 @@
 (def ^:private id-source (atom 1000))
 (defn- gen-id [] (swap! id-source inc))
 
-(defn ensure-id [e]
+(defn- ensure-id [e]
   (if (:id e)
     e
     (assoc e :id (gen-id))))
@@ -46,42 +47,40 @@
     (retract-entity store e)
     (install-entity legend store e)))
 
-;(defn- multi? [ev] (or (sequential? ev) (set? ev)))
-
-(defn pattern-comparator [v case-sensitive?]
+(defn- pattern-comparator [v case-sensitive?]
   (let [pattern (-> (str/replace v "%" ".*") (str/replace "_" ".") re-pattern)]
     (fn [ev]
       (when ev
         (let [ev (if case-sensitive? ev (str/upper-case ev))]
           (boolean (re-matches pattern ev)))))))
 
-(defn normal-tester [f v]
+(defn- -normal-tester [f v]
   (fn [ev]
     (and (some? ev)
          (f ev v))))
-
-(defmulti -tester first)
-(defmethod -tester '> [[_ v]] (if (number? v) (normal-tester > v) (normal-tester #(pos? (compare %1 %2)) v)))
-(defmethod -tester '< [[_ v]] (if (number? v) (normal-tester < v) (normal-tester #(neg? (compare %1 %2)) v)))
-(defmethod -tester '>= [[_ v]] (if (number? v) (normal-tester >= v) (normal-tester #(>= (compare %1 %2) 0) v)))
-(defmethod -tester '<= [[_ v]] (if (number? v) (normal-tester <= v) (normal-tester #(<= (compare %1 %2) 0) v)))
-(defmethod -tester 'like [[_ v]] (pattern-comparator v true))
-(defmethod -tester 'ilike [[_ v]] (pattern-comparator (str/upper-case v) false))
 
 (defn- -vec-tester [par values]
   (let [v-set (set values)]
     (fn [ev]
       (par #(= % ev) v-set))))
-(def -or-tester (partial -vec-tester some))
-(def -nor-tester (partial -vec-tester not-any?))
+(def ^:private -or-tester (partial -vec-tester some))
+(def ^:private -nor-tester (partial -vec-tester not-any?))
 
-(defmethod -tester 'not= [[_ & values]] (-nor-tester values))
-(defmethod -tester '= [[_ & values]] (-or-tester values))
-(defmethod -tester :default [values] (-or-tester values))
+(defn -tester [form]
+  (condp = (first form)
+    '> (let [v (second form)] (if (number? v) (-normal-tester > v) (-normal-tester #(pos? (compare %1 %2)) v)))
+    '< (let [v (second form)] (if (number? v) (-normal-tester < v) (-normal-tester #(neg? (compare %1 %2)) v)))
+    '>= (let [v (second form)] (if (number? v) (-normal-tester >= v) (-normal-tester #(>= (compare %1 %2) 0) v)))
+    '<= (let [v (second form)] (if (number? v) (-normal-tester <= v) (-normal-tester #(<= (compare %1 %2) 0) v)))
+    'like (pattern-comparator (second form) true)
+    'ilike (pattern-comparator (str/upper-case (second form)) false)
+    'not= (-nor-tester (rest form))
+    '= (-or-tester (rest form))
+    (-or-tester form)))
 
-(def eq-tester (partial normal-tester =))
+(def ^:private eq-tester (partial -normal-tester =))
 
-(defn ensure-key [k]
+(defn- ensure-key [k]
   (if (set? k)
     (map ensure-key k)
     (->> [(namespace k) (name k)]
@@ -89,26 +88,18 @@
          (map keyword)
          vec)))
 
-(defn get-tester-by-type [v]
+(defn- get-tester-by-type [v]
   (cond (set? v) (-or-tester v)
         (sequential? v) (-tester v)
         (nil? v) nil?
         :else (eq-tester v)))
 
-(defn single-column-tester [k v]
+(defn- kv->tester [[k v]]
   (let [tester (get-tester-by-type v)]
     (fn [e]
       (let [attr (ensure-key k)
             ev   (get-in e attr)]
         (tester ev)))))
-
-(defn multi-column-tester [k v]
-  (fn [e] (some #(% e) (map #(single-column-tester % v) k))))
-
-(defn kv->tester [[k v]]
-  (if (set? k)
-    (multi-column-tester k v)
-    (single-column-tester k v)))
 
 (defn- spec->tester [spec]
   (let [testers (map kv->tester spec)]
@@ -116,16 +107,37 @@
 
 (defn- ensure-schema! [legend kind] (legend/for-kind @legend kind))
 
+(defn- filter-where [{:keys [where]} entities]
+  (if (seq where)
+    (let [tester (spec->tester where)]
+      (filter tester entities))
+    entities))
+
+(defn- do-find [db kind options]
+  (ensure-schema! (.-legend db) kind)
+  (->> (or (vals (get @(.-store db) kind)) [])
+       (filter-where options)))
+
 ;; db api -----------------------------------
 
-(defn entity [db kind id]
-  (cond
-    (nil? id) nil
-    (map? id) (get-in @(.-store db) [kind (api/coerced-id (.-legend db) kind (:id id))])
-    :else (get-in @(.-store db) [kind (api/coerced-id (.-legend db) kind id)])))
+(defn entity
+  "kind (optional) in addition to returning nil when kinds don't match,
+  will allow coersion of the id to the right id type for the kind."
+  ([db id]
+   (cond
+     (nil? id) nil
+     (map? id) (get-in @(.-store db) [:all (:id id)])
+     :else (get-in @(.-store db) [:all id])))
+  ([db kind id]
+   (if (nil? kind)
+     (entity db id)
+     (cond
+       (nil? id) nil
+       (map? id) (get-in @(.-store db) [kind (api/-coerced-id (.-legend db) kind (:id id))])
+       :else (get-in @(.-store db) [kind (api/-coerced-id (.-legend db) kind id)])))))
 
 (defn clear [db]
-  (api/assert-safety-off! "clear")
+  (api/-assert-safety-off! "clear")
   (reset! (.-store db) {:all {}}))
 
 (defn reload [db e] (when-let [id (:id e)] (entity db (:kind e) id)))
@@ -152,21 +164,22 @@
 (defn every-keyword? [ks]
   (every? (fn [k] (or (keyword? k) (every? keyword? k))) ks))
 
-(defn- filter-by-kvs [kvs kinds]
-  (let [kv-pairs (partition 2 kvs)]
-    (assert (every-keyword? (map first kv-pairs)) "Attributes must be keywords")
-    (filter (spec->tester kv-pairs) kinds)))
-
 (defn find-by [db kind kvs]
   (ensure-schema! (.-legend db) kind)
-  (let [kinds (vals (get @(.-store db) kind))]
-    (filter-by-kvs kvs kinds)))
+  (let [entities-of-kind (vals (get @(.-store db) kind))
+        kv-pairs         (api/-kvs->kv-pairs kvs)
+        tester           (spec->tester kv-pairs)]
+    (filter tester entities-of-kind)))
 
 (defn ffind-by [db kind & kvs]
   (first (apply find-by db kind kvs)))
 
+(defn find [db kind & opt-args]
+  (let [options (ccc/->options opt-args)]
+    (do-find db kind options)))
+
 (defn delete-all [db kind]
-  (api/assert-safety-off! "delete-all")
+  (api/-assert-safety-off! "delete-all")
   (let [all-ids (keys (get @(.-store db) kind))]
     (swap! (.-store db) (fn [db]
                           (-> (update db [:all] #(apply dissoc % all-ids))
@@ -183,6 +196,7 @@
   (-count-by [this kind kvs] (count-by this kind kvs))
   (-delete-all [this kind] (delete-all this kind))
   (-entity [this kind id] (entity this kind id))
+  (-find [this kind options] (do-find this kind options))
   (-find-all [this kind] (find-all this kind))
   (-find-by [this kind kvs] (find-by this kind kvs))
   (-ffind-by [this kind kvs] (ffind-by this kind kvs))

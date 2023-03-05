@@ -167,13 +167,16 @@
 (defn- fetch-entity [db conn t-map kind id]
   (when-let [id (if (map? id) (:id id) id)]
     (let [{:keys [id-type builder-fn]} t-map
-          id      (api/coerced-id id-type id)
+          id      (api/-coerced-id id-type id)
           command (build-fetch-sql (.-dialect db) t-map id)
           result  (execute-one! conn command {:builder-fn builder-fn})]
       (when result
         (assoc result :kind kind)))))
 
-(defn entity [db kind id] (fetch-entity db (.-ds db) (key-map db kind) kind id))
+(defn entity [db kind id]
+  (if (nil? kind)
+    (throw (UnsupportedOperationException. "JDBC/entity requires a kind"))
+    (fetch-entity db (.-ds db) (key-map db kind) kind id)))
 
 (defn build-update-sql [dialect t-map entity]
   (let [{:keys [table key->col key->type]} t-map
@@ -311,36 +314,37 @@
 (defn ->sql-clauses [dialect t-map kv-pairs]
   (map (partial ->sql-clause dialect t-map) kv-pairs))
 
-(defn -build-where [dialect sql t-map kv-pairs]
+(defn -build-where [dialect t-map kv-pairs]
   (if-let [sql-conditions (seq (->sql-clauses dialect t-map kv-pairs))]
-    (cons (apply str sql " WHERE " (interpose " AND " (map first sql-conditions)))
+    (cons (apply str " WHERE " (interpose " AND " (map first sql-conditions)))
           (mapcat rest sql-conditions))
-    [sql]))
+    [""]))
 
-(defmulti -build-find-by-query (fn [dialect _t-map _params _entity] dialect))
-
-(defmethod -build-find-by-query :default [dialect t-map {[limit] :keys :as _params} kvs]
-  (let [kv-pairs (partition 2 kvs)
-        select   (str "SELECT * FROM " (:table t-map))
-        [sql & args] (-build-where dialect select t-map kv-pairs)
-        sql      (if limit (str sql " LIMIT " limit) sql)]
-    (assert (every? keyword? (map first kv-pairs)) "Attributes must be keywords")
+(defmulti -build-find-query (fn [dialect _t-map _options] dialect))
+(defmethod -build-find-query :default [dialect t-map {:keys [where take]}]
+  (let [[where-sql & args] (-build-where dialect t-map where)
+        sql (str "SELECT * FROM " (:table t-map) where-sql (when take (str " LIMIT " take)))]
     (cons sql args)))
 
-(defn find-by
-  ([db kind kvs] (find-by db {} kind kvs))
-  ([db params kind kvs]
-   (let [t-map (key-map db kind)
-         query (-build-find-by-query (.-dialect db) t-map params kvs)]
-     (->> (execute! (.-ds db) query {:builder-fn (:builder-fn t-map)})
-          (map #(ccc/remove-nils (assoc % :kind kind)))))))
+(defn- do-find [db kind options]
+  (let [t-map (key-map db kind)
+        query (-build-find-query (.-dialect db) t-map options)]
+    (->> (execute! (.-ds db) query {:builder-fn (:builder-fn t-map)})
+         (map #(ccc/remove-nils (assoc % :kind kind))))))
+
+(defn find [db kind & opt-args]
+  (let [options (ccc/->options opt-args)]
+    (do-find db kind options)))
+
+(defn find-by [db kind kvs]
+  (do-find db kind {:where (api/-kvs->kv-pairs kvs)}))
 
 (defn ffind-by [db kind & kvs]
-  (first (apply find-by db {:limit 1} kind kvs)))
+  (first (do-find db kind {:where (api/-kvs->kv-pairs kvs) :take 1})))
 
 (defn reduce-by [db kind f val kvs]
   (let [t-map      (key-map db kind)
-        query      (-build-find-by-query (.-ds db) t-map {} kvs)
+        query      (-build-find-query (.-ds db) t-map {:where (api/-kvs->kv-pairs kvs)})
         connection (jdbc/get-connection (.-ds db))]
     (.setHoldability connection ResultSet/CLOSE_CURSORS_AT_COMMIT)
     (reduce
@@ -353,10 +357,10 @@
                                    :result-type :forward-only}))))
 
 (defn count-by [db kind kvs]
-  (let [kv-pairs (partition 2 kvs)
-        {:keys [table] :as t-map} (key-map db kind)
-        query    (-build-where (.-dialect db) (str "SELECT COUNT(*) FROM " table) t-map kv-pairs)]
-    (first (vals (execute-one! (.-ds db) query)))))
+  (let [{:keys [table] :as t-map} (key-map db kind)
+        [where-sql & args] (-build-where (.-dialect db) t-map (api/-kvs->kv-pairs kvs))
+        sql (str "SELECT COUNT(*) FROM " table where-sql)]
+    (first (vals (execute-one! (.-ds db) (cons sql args))))))
 
 (defn count-all [db kind]
   (let [t-map (key-map db kind)
@@ -364,13 +368,13 @@
     (first (vals (execute-one! (.-ds db) [sql])))))
 
 (defn clear [db]
-  (api/assert-safety-off! "clear")
+  (api/-assert-safety-off! "clear")
   (doseq [[_ schema] @(.-legend db)]
     (drop-table-from-schema (.-ds db) schema)
     (create-table-from-schema (.-dialect db) (.-ds db) schema)))
 
 (defn delete-all [db kind]
-  (api/assert-safety-off! "delete")
+  (api/-assert-safety-off! "delete")
   (let [{:keys [table]} (key-map db kind)
         sql (str "DELETE FROM " table " WHERE 1 = 1")]
     (execute-one! (.-ds db) [sql])))
@@ -383,9 +387,10 @@
   (-count-all [this kind] (count-all this kind))
   (-count-by [this kind kvs] (count-by this kind kvs))
   (-entity [this kind id] (entity this kind id))
+  (-find [this kind options] (do-find this kind options))
   (-find-all [this kind] (find-all this kind))
   (-find-by [this kind kvs] (find-by this kind kvs))
-  (-ffind-by [this kind kvs] (ffind-by this kind kvs))
+  (-ffind-by [this kind kvs] (apply ffind-by this kind kvs))
   (-reduce-by [this kind f val kvs] (reduce-by this kind f val kvs))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
