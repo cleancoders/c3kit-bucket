@@ -18,6 +18,7 @@
    (try
      (jdbc/execute-one! conn command options)
      (catch Exception e
+       (prn "Choked on SQL: " command)
        (log/error "Choked on SQL: " command)
        (throw e)))))
 
@@ -27,6 +28,7 @@
    (try
      (jdbc/execute! conn command options)
      (catch Exception e
+       (prn "Choked on SQL: " command)
        (log/error "Choked on SQL: " command)
        (throw e)))))
 
@@ -310,6 +312,11 @@
 (defn ->sql-clauses [dialect t-map kv-pairs]
   (map (partial ->sql-clause dialect t-map) kv-pairs))
 
+(defn -seq->sql [& sql-bits]
+  (->> (flatten sql-bits)
+       (remove nil?)
+       (str/join " ")))
+
 (defn -build-where [dialect t-map kv-pairs]
   (if-let [sql-conditions (seq (->sql-clauses dialect t-map kv-pairs))]
     (cons (str/join " " (cons "WHERE" (interpose "AND" (map first sql-conditions))))
@@ -317,9 +324,12 @@
     [""]))
 
 (defmulti -build-find-query (fn [dialect _t-map _options] dialect))
-(defmethod -build-find-query :default [dialect t-map {:keys [where take]}]
+(defmethod -build-find-query :default [dialect t-map {:keys [where take drop]}]
   (let [[where-sql & args] (-build-where dialect t-map where)
-        sql (str/join " " ["SELECT * FROM" (:table t-map) where-sql (when take (str "LIMIT " take))])]
+        sql (-seq->sql "SELECT * FROM" (:table t-map)
+                       where-sql
+                       (when take (str "LIMIT " take))
+                       (when drop (str "OFFSET " drop)))]
     (cons sql args)))
 
 (defn- do-find [db kind options]
@@ -328,24 +338,11 @@
     (->> (execute! (.-ds db) query {:builder-fn (:builder-fn t-map)})
          (map #(ccc/remove-nils (assoc % :kind kind))))))
 
-(defn find [db kind & opt-args]
-  (let [options (ccc/->options opt-args)]
-    (do-find db kind options)))
-
 (defn- do-count [db kind {:keys [where] :as _options}]
   (let [{:keys [table] :as t-map} (key-map db kind)
         [where-sql & args] (-build-where (.-dialect db) t-map where)
         sql (str/join " " ["SELECT COUNT(*) FROM" table where-sql])]
     (first (vals (execute-one! (.-ds db) (cons sql args))))))
-
-(defn count [db kind & opt-args]
-  (let [options (ccc/->options opt-args)]
-    (do-count db kind options)))
-
-(defn find-by
-  "Shorthand for (find db kind :where {k1 v1 ...})"
-  [db kind & kvs]
-  (do-find db kind {:where (api/-kvs->kv-pairs kvs)}))
 
 (defn reduce [db kind f init options]
   (let [t-map      (key-map db kind)

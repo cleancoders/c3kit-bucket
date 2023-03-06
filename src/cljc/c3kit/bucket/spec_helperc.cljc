@@ -11,8 +11,8 @@
   ([schemas] (with-schemas (memory/create-db) schemas))
   ([impl schemas]
    (around [it]
-     (db/install-schema impl schemas)
      (with-redefs [db/impl (delay impl)]
+       (db/install-schema schemas)
        (db/clear)
        (it)))))
 

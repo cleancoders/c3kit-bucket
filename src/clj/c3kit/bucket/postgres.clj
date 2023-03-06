@@ -12,7 +12,6 @@
 (defmethod jdbc/build-upsert-sql :postgres [dialect t-map {:keys [id] :as entity}]
   (let [{:keys [table key->col key->type]} t-map
         id-col   (:id key->col)
-        entity   (api/-update-timestamps key->col entity)
         key->col (select-keys key->col (keys entity))
         sql-args (->> (if id key->col (dissoc key->col :id))
                       keys

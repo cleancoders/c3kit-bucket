@@ -33,9 +33,10 @@
 
       (spec/crud-specs (new-db))
       (spec/nil-value-specs (new-db))
-      (spec/find-by (new-db))
+      (spec/find-specs (new-db))
+      (spec/filter-specs (new-db))
       (spec/reduce-specs (new-db))
-      (spec/count-by (new-db))
+      (spec/count-specs (new-db))
       (spec/broken-in-datomic (new-db))
 
       (context "column with reserved word as name"

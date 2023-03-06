@@ -298,7 +298,7 @@
   (if-let [where (seq (build-where-datalog db kind (:where options)))]
     (let [query (concat '[:find ?e :in $ :where] where)]
       (->> (datomic/q query (datomic-db db))
-           (api/-apply-take options)
+           (api/-apply-drop-take options)
            (q->entities db)))
     []))
 
@@ -308,23 +308,6 @@
           results (datomic/q query (datomic-db db))]
       (or (ffirst results) 0))
     0))
-
-(defn count [db kind & opt-args]
-  (do-count db kind (ccc/->options opt-args)))
-
-(defn find-by
-  "Shorthand for (find db kind :where {k1 v1 ...})"
-  [db kind & kvs]
-  (do-find db kind {:where (api/-kvs->kv-pairs kvs)}))
-
-(defn ffind-by
-  "Shorthand for (ffind db kind :where {k1 v1 ...})"
-  [db kind & kvs]
-  (first (do-find db kind {:where (api/-kvs->kv-pairs kvs)})))
-
-(defn find
-  [db kind & opt-args]
-  (do-find db kind (ccc/->options opt-args)))
 
 (defn delete-all [db kind]
   (api/-assert-safety-off! "delete-all")

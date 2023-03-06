@@ -1,5 +1,6 @@
 (ns c3kit.bucket.mssql
-  (:require [c3kit.bucket.jdbc :as jdbc]))
+  (:require [c3kit.bucket.jdbc :as jdbc]
+            [clojure.string :as str]))
 
 (defmethod jdbc/schema->db-type-map :mssql [_]
   {:long      "bigint"
@@ -9,9 +10,17 @@
    :timestamp "datetime2"
    :boolean   "bit"})
 
-(defmethod jdbc/-build-find-query :mssql [dialect t-map {:keys [where take]}]
-  (let [[where-sql & args] (jdbc/-build-where dialect t-map where)
-        sql      (str "SELECT " (when take (str "TOP " take)) " * FROM " (:table t-map) where-sql)]
+(defmethod jdbc/-build-find-query :mssql [dialect t-map {:keys [where take drop]}]
+  (let [id-col (get-in t-map [:key->col :id])
+        [where-sql & args] (jdbc/-build-where dialect t-map where)
+        sql    (jdbc/-seq->sql "SELECT"
+                               (when (and take (not drop)) (str "TOP " take))
+                               "* FROM" (:table t-map)
+                               where-sql
+                               (when drop ["ORDER BY" id-col
+                                           "OFFSET" drop "ROWS"
+                                           (when take ["FETCH NEXT" take " ROWS ONLY"])]))]
+    ;(prn "sql: " sql)
     (cons sql args)))
 
 (defmethod jdbc/build-upsert-sql :mssql [dialect t-map {:keys [id] :as entity}]

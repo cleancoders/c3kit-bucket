@@ -19,9 +19,10 @@
   (context "api"
     (spec/crud-specs (new-db))
     (spec/nil-value-specs (new-db))
-    (spec/find-by (new-db))
+    (spec/find-specs (new-db))
+    (spec/filter-specs (new-db))
     (spec/reduce-specs (new-db))
-    (spec/count-by (new-db))
+    (spec/count-specs (new-db))
     (spec/kind-is-optional (new-db))
     )
 
@@ -38,7 +39,7 @@
 
     (it "one kv with nil value"
       (log/capture-logs
-        (should= [] (sut/find @db :bibelot :where {:name nil})))
+        (should= [] (api/find- @db :bibelot :where {:name nil})))
       (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str)))
 
     )

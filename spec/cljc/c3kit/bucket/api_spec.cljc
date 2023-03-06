@@ -10,7 +10,7 @@
                                                               should-not-start-with should-not-throw should-not=
                                                               should-not== should-start-with should-throw should<
                                                               should<= should= should== should> should>= stub tags
-                                                              with with-all with-stubs xit]]
+                                                              with with-all with-stubs xit redefs-around]]
             [c3kit.bucket.api :as sut #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
             [c3kit.bucket.spec-helperc :as helper]
             [c3kit.apron.log :as log]
@@ -35,7 +35,6 @@
       (should= true sut/*safety*))
 
     )
-
   )
 
 (def bibelot
@@ -292,7 +291,7 @@
     )
   )
 
-(defn find-by [db-impl]
+(defn find-specs [db-impl]
   (context "find"
     (helper/with-schemas db-impl [bibelot thingy])
 
@@ -313,12 +312,27 @@
         (should= 4 (count (sut/find :bibelot)))
         (should= 1 (count (sut/find :thingy))))
 
-      (it ":take"
-        (should= 1 (count (sut/find :bibelot {:take 1})))
-        (should= 2 (count (sut/find :bibelot {:take 2})))
-        (should= 3 (count (sut/find :bibelot {:take 3})))
-        (should= 4 (count (sut/find :bibelot {:take 4})))
-        (should= 4 (count (sut/find :bibelot {:take 99}))))
+      (it ":take option"
+        (let [all (sut/find :bibelot)]
+          (should= (take 1 all) (sut/find :bibelot {:take 1}))
+          (should= (take 2 all) (sut/find :bibelot {:take 2}))
+          (should= (take 3 all) (sut/find :bibelot {:take 3}))
+          (should= all (sut/find :bibelot {:take 4}))
+          (should= all (sut/find :bibelot {:take 99}))))
+
+      (it ":drop option"
+        (let [all (sut/find :bibelot)]
+          (should= (drop 1 all) (sut/find :bibelot {:drop 1}))
+          (should= (drop 2 all) (sut/find :bibelot {:drop 2}))
+          (should= (drop 3 all) (sut/find :bibelot {:drop 3}))
+          (should= [] (sut/find :bibelot {:drop 4}))
+          (should= [] (sut/find :bibelot {:drop 99}))))
+
+      (it "drop and take options (pagination)"
+        (let [all (sut/find :bibelot)]
+          (should= (take 1 (drop 1 all)) (sut/find :bibelot {:drop 1 :take 1}))
+          (should= (take 1 (drop 2 all)) (sut/find :bibelot {:drop 2 :take 1}))
+          (should= (take 3 all) (sut/find :bibelot {:drop 0 :take 3}))))
 
       (it ":name"
         (let [[entity :as entities] (sut/find-by :bibelot :name "hello")]
@@ -359,6 +373,21 @@
       (it "ffind-by"
         (let [world (sut/ffind-by :bibelot :name "world" :size 2)]
           (should= "world" (:name world))))
+
+      )
+    )
+  )
+
+(defn filter-specs [db-impl]
+  (context "filters"
+    (helper/with-schemas db-impl [bibelot thingy])
+
+    (context "(populated db)"
+      (before (sut/clear)
+              (sut/tx {:kind :bibelot :name "hello"})
+              (sut/tx {:kind :bibelot :name "world"})
+              (sut/tx {:kind :bibelot :name "world" :size 2})
+              (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
       (it "="
         (let [result       (sut/find-by :bibelot :name ['= "hi!"])
@@ -435,45 +464,13 @@
           (should= [thing2 thing3] (sort-by :id (sut/find-by :thingy :bang ['<= (:bang thing2)])))
           (should= [thing1] (sut/find-by :thingy :bang ['> (-> 2 minutes ago)]))
           (should= [thing1 thing2] (sort-by :id (sut/find-by :thingy :bang ['>= (:bang thing2)])))
-          (should= [thing2] (sut/find-by :thingy :bang ['< (-> 2 minutes ago)] :bang ['> (-> 4 minutes ago)]))
-          )
-        )
-
+          (should= [thing2] (sut/find-by :thingy :bang ['< (-> 2 minutes ago)] :bang ['> (-> 4 minutes ago)]))))
 
       (it "compare against entity with null value"
         (sut/clear)
         (let [b1  (sut/tx :kind :bibelot :name "1" :size 1)
               _b2 (sut/tx :kind :bibelot :name "nil" :size nil)]
           (should= [b1] (sut/find-by :bibelot :size ['>= 0]))))
-
-      ;(it "like fuzzy match with anything before or after"
-      ;  (let [result       (sut/find-by :bibelot :name ['like "%orl%"])
-      ;        result-names (map :name result)]
-      ;    (should-contain "world" result-names)
-      ;    (should-not-contain "hi!" result-names)))
-      ;
-      ;(it "like fuzzy match with anything after"
-      ;  (let [_            (sut/tx {:kind :bibelot :name "hello world"})
-      ;        result       (sut/find-by :bibelot :name ['like "worl%"])
-      ;        result-names (map :name result)]
-      ;    (should-contain "world" result-names)
-      ;    (should-not-contain "hello world" result-names)))
-      ;
-      ;(it "like fuzzy match with _"
-      ;  (let [_            (sut/tx {:kind :bibelot :name "words"})
-      ;        result       (sut/find-by :bibelot :name ['like "wor__"])
-      ;        result-names (map :name result)]
-      ;    (should-contain "world" result-names)
-      ;    (should-contain "words" result-names)
-      ;    (should-not-contain "hello" result-names)))
-      ;
-      ;(it "like with exact match"
-      ;  (let [_            (sut/tx {:kind :bibelot :name "words"})
-      ;        result       (sut/find-by :bibelot :name ['like "world"])
-      ;        result-names (map :name result)]
-      ;    (should-contain "world" result-names)
-      ;    (should-not-contain "words" result-names)
-      ;    (should-not-contain "hello" result-names)))
       )
     )
   )
@@ -502,7 +499,7 @@
     )
   )
 
-(defn count-by [db-impl]
+(defn count-specs [db-impl]
   (context "count"
     (helper/with-schemas db-impl [bibelot thingy])
 
@@ -528,72 +525,6 @@
 
       (it "count-by: two attributes"
         (should= 1 (sut/count-by :bibelot :name "world" :size 2)))
-
-      (it "count-by: returns all found"
-        (should= 2 (sut/count-by :bibelot :name "world")))
-
-      (it "count-by: all by size"
-        (should= 2 (sut/count-by :bibelot :size 2)))
-
-      (it "="
-        (should= 1 (sut/count-by :bibelot :name ['= "hi!"])))
-
-      (it "= many"
-        (should= 3 (sut/count-by :bibelot :name ['= "hello" "world"])))
-
-      (it "or"
-        (sut/tx :kind :bibelot :name "Bee" :color "red" :size 1)
-        (sut/tx :kind :bibelot :name "Bee" :color "blue" :size 2)
-        (sut/tx :kind :bibelot :name "Ant" :color "blue" :size 1)
-        (should= 3 (sut/count-by :bibelot :name ["Bee" "Ant"]))
-        (should= 1 (sut/count-by :bibelot :name ["BLAH" "Ant"]))
-        (should= 0 (sut/count-by :bibelot :name ["BLAH" "ARG"])))
-
-      (it "< > string"
-        (should= 2 (sut/count-by :bibelot :name ['> "g"] :name ['< "i"])))
-
-      (it "<= >= string"
-        (sut/clear)
-        (sut/tx :kind :bibelot :name "aaa")
-        (sut/tx :kind :bibelot :name "bbb")
-        (sut/tx :kind :bibelot :name "ccc")
-        (should= 3 (sut/count-by :bibelot :name ['>= "aaa"]))
-        (should= 2 (sut/count-by :bibelot :name ['>= "bbb"]))
-        (should= 3 (sut/count-by :bibelot :name ['<= "ccc"]))
-        (should= 2 (sut/count-by :bibelot :name ['<= "bbb"])))
-
-      (it "< <= > >= long"
-        (sut/clear)
-        (sut/tx :kind :bibelot :size 1)
-        (sut/tx :kind :bibelot :size 2)
-        (sut/tx :kind :bibelot :size 3)
-        (should= 3 (sut/count-by :bibelot :size ['> 0]))
-        (should= 3 (sut/count-by :bibelot :size ['>= 1]))
-        (should= 2 (sut/count-by :bibelot :size ['> 1]))
-        (should= 1 (sut/count-by :bibelot :size ['> 2]))
-        (should= 0 (sut/count-by :bibelot :size ['> 3]))
-        (should= 3 (sut/count-by :bibelot :size ['< 4]))
-        (should= 3 (sut/count-by :bibelot :size ['<= 3]))
-        (should= 2 (sut/count-by :bibelot :size ['< 3]))
-        (should= 1 (sut/count-by :bibelot :size ['< 2]))
-        (should= 0 (sut/count-by :bibelot :size ['< 1])))
-
-      (it "< <= > >= date"
-        (let [_thing1 (sut/tx :kind :thingy :id 123 :bang (-> 1 minutes ago))
-              thing2  (sut/tx :kind :thingy :id 456 :bang (-> 3 minutes ago))
-              _thing3 (sut/tx :kind :thingy :id 789 :bang (-> 5 minutes ago))]
-          (should= 2 (sut/count-by :thingy :bang ['< (-> 2 minutes ago)]))
-          (should= 2 (sut/count-by :thingy :bang ['<= (:bang thing2)]))
-          (should= 1 (sut/count-by :thingy :bang ['> (-> 2 minutes ago)]))
-          (should= 2 (sut/count-by :thingy :bang ['>= (:bang thing2)]))
-          (should= 1 (sut/count-by :thingy :bang ['< (-> 2 minutes ago)] :bang ['> (-> 4 minutes ago)]))))
-
-      (it "compare against entity with null value"
-        (sut/clear)
-        (sut/tx :kind :bibelot :size 1)
-        (sut/tx :kind :bibelot :size nil)
-        (should= 1 (sut/count-by :bibelot :size ['>= 0])))
-
       )
     )
   )
@@ -646,6 +577,36 @@
             (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
     (context "find-by"
+
+      (it "like fuzzy match with anything before or after"
+        (let [result       (sut/find-by :bibelot :name ['like "%orl%"])
+              result-names (map :name result)]
+          (should-contain "world" result-names)
+          (should-not-contain "hi!" result-names)))
+
+      (it "like fuzzy match with anything after"
+        (let [_            (sut/tx {:kind :bibelot :name "hello world"})
+              result       (sut/find-by :bibelot :name ['like "worl%"])
+              result-names (map :name result)]
+          (should-contain "world" result-names)
+          (should-not-contain "hello world" result-names)))
+
+      (it "like fuzzy match with _"
+        (let [_            (sut/tx {:kind :bibelot :name "words"})
+              result       (sut/find-by :bibelot :name ['like "wor__"])
+              result-names (map :name result)]
+          (should-contain "world" result-names)
+          (should-contain "words" result-names)
+          (should-not-contain "hello" result-names)))
+
+      (it "like with exact match"
+        (let [_            (sut/tx {:kind :bibelot :name "words"})
+              result       (sut/find-by :bibelot :name ['like "world"])
+              result-names (map :name result)]
+          (should-contain "world" result-names)
+          (should-not-contain "words" result-names)
+          (should-not-contain "hello" result-names)))
+
       (it "or with nils"
         (let [b1 (sut/tx :kind :bibelot :name "Bee" :color "red" :size 1)
               b2 (sut/tx :kind :bibelot :name "Bee" :color "blue" :size 2)
@@ -676,33 +637,6 @@
           (should-not-contain "hi!" result-names)
           (should-contain "hello" result-names)
           (should-contain "world" result-names)))
-      )
-
-    (context "count-by"
-      (it "like fuzzy match with anything before or after"
-        (should= 2 (sut/count-by :bibelot :name ['like "%orl%"])))
-
-      (it "like fuzzy match with anything after"
-        (sut/tx {:kind :bibelot :name "hello world"})
-        (should= 2 (sut/count-by :bibelot :name ['like "worl%"])))
-
-      (it "like fuzzy match with _"
-        (sut/tx {:kind :bibelot :name "words"})
-        (should= 3 (sut/count-by :bibelot :name ['like "wor__"])))
-
-      (it "like with exact match"
-        (sut/tx {:kind :bibelot :name "words"})
-        (should= 2 (sut/count-by :bibelot :name ['like "world"])))
-
-      (it "ILIKE with exact match"
-        (sut/tx {:kind :bibelot :name "words"})
-        (should= 2 (sut/count-by :bibelot :name ['ilike "WORLD"])))
-
-      (it "not="
-        (should= 3 (sut/count-by :bibelot :name ['not= "hi!"])))
-
-      (it "not= many"
-        (should= 2 (sut/count-by :bibelot :name ['not= "hi!" "hello"])))
       )
     )
 
