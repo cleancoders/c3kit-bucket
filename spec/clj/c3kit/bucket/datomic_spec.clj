@@ -4,11 +4,10 @@
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.datomic :as sut]
-            [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all]))
 
 (def config {:uri "datomic:mem://test"})
-(defn new-db [] (sut/create-db config))
+(def new-db (partial sut/create-db config))
 (declare db)
 
 (describe "Datomic"
@@ -17,25 +16,24 @@
   (around [it] (api/with-safety-off (it)))
 
   (context "api"
-    (spec/crud-specs (new-db))
-    (spec/nil-value-specs (new-db))
-    (spec/find-specs (new-db))
-    (spec/filter-specs (new-db))
-    (spec/reduce-specs (new-db))
-    (spec/count-specs (new-db))
-    (spec/kind-is-optional (new-db))
+    (spec/crud-specs new-db)
+    (spec/nil-value-specs new-db)
+    (spec/find-specs new-db)
+    (spec/filter-specs new-db)
+    (spec/reduce-specs new-db)
+    (spec/count-specs new-db)
+    (spec/kind-is-optional new-db)
     )
 
   (context "safety"
     (around [it] (with-redefs [api/*safety* true] (it)))
 
-    (it "clear" (should-throw AssertionError (sut/clear (new-db))))
-    (it "delete-all" (should-throw AssertionError (sut/delete-all (new-db) :foo))))
+    (it "clear" (should-throw AssertionError (sut/clear new-db)))
+    (it "delete-all" (should-throw AssertionError (sut/delete-all new-db :foo))))
 
   (context "unique behavior"
 
-    (with db (new-db))
-    (before (api/install-schema @db [spec/bibelot]))
+    (with db (new-db [spec/bibelot]))
 
     (it "one kv with nil value"
       (log/capture-logs
@@ -123,11 +121,11 @@
   (context "partition"
 
     (it "default"
-      (let [db (sut/create-db (dissoc config :partition))]
+      (let [db (sut/create-db (dissoc config :partition) nil)]
         (should= :db.part/user (sut/partition-name db))))
 
     (it "in config"
-      (let [db (sut/create-db (assoc config :partition :test))]
+      (let [db (sut/create-db (assoc config :partition :test) nil)]
         (should= :test (sut/partition-name db))))
 
     (it "schema"

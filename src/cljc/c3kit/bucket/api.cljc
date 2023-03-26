@@ -13,7 +13,6 @@
 
 (defprotocol DB
   "API for database operations"
-  (-install-schema [this schemas])
   (-clear [this])
   (-count [this kind options])
   (-delete-all [this kind])
@@ -28,7 +27,7 @@
    :cljs (def impl (atom nil)))
 #?(:cljs (def set-impl! (partial reset! impl)))
 
-(defn -id-type [legend kind] (get-in (legend/for-kind @legend kind) [:id :type]))
+(defn -id-type [legend kind] (get-in (legend/for-kind legend kind) [:id :type]))
 (defn -coerced-id
   ([legend kind id] (-coerced-id (-id-type legend kind) id))
   ([type id]
@@ -66,10 +65,6 @@
 (defn legend
   "Returns the legend (map of :kind -> schema) of the database implementation."
   [db] (deref (.-legend db)))
-
-(defn install-schema
-  ([schemas] (-install-schema @impl schemas))
-  ([db schemas] (-install-schema db schemas)))
 
 (defn entity
   "Retrieve an entity by its id.

@@ -19,18 +19,19 @@
 
   (around [it] (with-safety-off (it)))
 
-  (spec/crud-specs (sut/create-db))
-  (spec/nil-value-specs (sut/create-db))
-  (spec/count-specs (sut/create-db))
-  (spec/find-specs (sut/create-db))
-  (spec/filter-specs (sut/create-db))
-  (spec/reduce-specs (sut/create-db))
-  (spec/kind-is-optional (sut/create-db))
-  (spec/broken-in-datomic (sut/create-db))
+  (spec/crud-specs sut/create-db)
+  (spec/nil-value-specs sut/create-db)
+  (spec/count-specs sut/create-db)
+  (spec/find-specs sut/create-db)
+  (spec/filter-specs sut/create-db)
+  (spec/reduce-specs sut/create-db)
+  (spec/kind-is-optional sut/create-db)
+  (spec/broken-in-datomic sut/create-db)
 
   (context "safety"
     (around [it] (with-redefs [api/*safety* true] (it)))
 
-    (it "clear" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/clear (sut/create-db))))
-    (it "delete-all" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/delete-all (sut/create-db) :foo))))
+    (it "clear" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/clear (sut/create-db nil))))
+    (it "delete-all" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/delete-all (sut/create-db nil) :foo))))
   )
+

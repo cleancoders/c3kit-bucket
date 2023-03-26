@@ -1,6 +1,5 @@
 (ns c3kit.bucket.postgres
-  (:require [c3kit.bucket.api :as api]
-            [c3kit.bucket.jdbc :as jdbc]
+  (:require [c3kit.bucket.jdbc :as jdbc]
             [clojure.string :as str]))
 
 (defmethod jdbc/schema->db-type-map :default [_]
@@ -25,5 +24,5 @@
                "RETURNING " id-col)
           (map :value sql-args))))
 
-(defn create-db [config]
-  (jdbc/create-db (assoc config :dialect :postgres)))
+(defn create-db [config schemas]
+  (jdbc/create-db (assoc config :dialect :postgres) schemas))

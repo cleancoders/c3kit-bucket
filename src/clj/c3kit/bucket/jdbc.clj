@@ -147,7 +147,7 @@
   ([legend mappings kind]
    (if-let [m (get @mappings kind)]
      m
-     (let [schema (legend/for-kind @legend kind)
+     (let [schema (legend/for-kind legend kind)
            m      (compile-mapping schema)]
        (swap! mappings assoc kind m)
        m))))
@@ -360,7 +360,7 @@
 
 (defn clear [db]
   (api/-assert-safety-off! "clear")
-  (doseq [[_ schema] @(.-legend db)]
+  (doseq [[_ schema] (.-legend db)]
     (drop-table-from-schema (.-ds db) schema)
     (create-table-from-schema (.-dialect db) (.-ds db) schema)))
 
@@ -372,7 +372,6 @@
 
 (deftype JDBCDB [legend dialect ds mappings]
   api/DB
-  (-install-schema [_ schemas] (swap! legend merge (legend/build schemas)))
   (-clear [this] (clear this))
   (-delete-all [this kind] (delete-all this kind))
   (-count [this kind options] (do-count this kind options))
@@ -383,10 +382,9 @@
   (-tx* [this entities] (tx* this entities))
   )
 
-(defn create-db
-  ([config] (create-db config {}))
-  ([config legend]
-   (let [dialect (:dialect config)
-         ds      (jdbc/get-datasource config)]
-     (JDBCDB. (atom legend) dialect ds (atom {})))))
+(defn create-db [config schemas]
+  (let [dialect (:dialect config)
+        ds      (jdbc/get-datasource config)
+        legend  (legend/build schemas)]
+    (JDBCDB. legend dialect ds (atom {}))))
 

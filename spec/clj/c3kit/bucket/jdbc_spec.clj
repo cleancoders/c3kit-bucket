@@ -18,7 +18,7 @@
    :id    {:type :string :db {:type "varchar(255) PRIMARY KEY"} :strategy :pre-populated}
    :value {:type :int}})
 
-(defn new-db [] (h2/create-db {:jdbcUrl "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;"}))
+(def new-db (partial h2/create-db {:jdbcUrl "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;"}))
 
 (def bibelot
   (schema/merge-schemas
@@ -89,26 +89,25 @@
 
     (context "api"
 
-      (spec/crud-specs (new-db))
-      (spec/nil-value-specs (new-db))
-      (spec/find-specs (new-db))
-      (spec/filter-specs (new-db))
-      (spec/reduce-specs (new-db))
-      (spec/count-specs (new-db))
-      (spec/broken-in-datomic (new-db))
-      (spec/kind-is-required (new-db))
-
+      (spec/crud-specs new-db)
+      (spec/nil-value-specs new-db)
+      (spec/find-specs new-db)
+      (spec/filter-specs new-db)
+      (spec/reduce-specs new-db)
+      (spec/count-specs new-db)
+      (spec/broken-in-datomic new-db)
+      (spec/kind-is-required new-db)
       )
 
     (context "safety"
       (around [it] (with-redefs [api/*safety* true] (it)))
 
-      (it "clear" (should-throw AssertionError (sut/clear (new-db))))
-      (it "delete-all" (should-throw AssertionError (sut/delete-all (new-db) :foo))))
+      (it "clear" (should-throw AssertionError (sut/clear (new-db nil))))
+      (it "delete-all" (should-throw AssertionError (sut/delete-all (new-db nil) :foo))))
 
     (context "SQL Injection"
 
-      (helper/with-schemas (new-db) [spec/bibelot str-id-entity])
+      (helper/with-schemas new-db [spec/bibelot str-id-entity])
 
       (it "finds by always true"
         (api/tx {:kind :bibelot :name "John" :size 5 :color "Red"})

@@ -32,7 +32,7 @@
 (defn- install-entity [legend store e]
   (assert (:id e) (str "entity missing id!: " e))
   (let [original (get-in store [:all (:id e)])
-        schema   (legend/for-kind @legend (:kind e))
+        schema   (legend/for-kind legend (:kind e))
         e        (->> (utilc/keywordize-kind e)
                       ensure-id
                       (merge-with-original original)
@@ -104,7 +104,7 @@
   (let [testers (map kv->tester spec)]
     (fn [e] (every? #(% e) testers))))
 
-(defn- ensure-schema! [legend kind] (legend/for-kind @legend kind))
+(defn- ensure-schema! [legend kind] (legend/for-kind legend kind))
 
 (defn- filter-where [{:keys [where]} entities]
   (if (seq where)
@@ -166,7 +166,6 @@
 
 (deftype MemoryDB [legend store]
   api/DB
-  (-install-schema [_ schemas] (swap! legend merge (legend/build schemas)))
   (-clear [this] (clear this))
   (-count [this kind options] (core-count (do-find this kind options)))
   (-delete-all [this kind] (delete-all this kind))
@@ -177,6 +176,5 @@
   (-tx* [this entities] (tx* this entities))
   )
 
-(defn create-db
-  ([] (create-db nil))
-  ([legend] (MemoryDB. (atom legend) (atom {}))))
+(defn create-db [schemas]
+  (MemoryDB. (legend/build schemas) (atom {})))

@@ -71,19 +71,12 @@
 (defn transact! [connection transaction]
   (datomic/transact connection transaction))
 
-(defn do-install-schema [db new-schemas]
-  (swap! (.-db-schema db) (fn [existing]
-                            (let [db-schemas     (->> (flatten new-schemas) (mapcat ->db-schema))
-                                  new-db-schemas (remove #(ccc/index-of % existing) db-schemas)]
-                              (concat existing new-db-schemas))))
-  (swap! (.-legend db) merge (legend/build new-schemas)))
-
 (defn clear [db]
   (api/-assert-safety-off! "clear")
   (let [uri (:uri (.-config db))]
     (datomic/delete-database uri)
     (reset! (.-conn db) (connect uri))
-    @(transact! @(.-conn db) @(.-db-schema db))))
+    @(transact! @(.-conn db) (.-db-schema db))))
 
 (defn scope-attribute [kind attr] (keyword (name kind) (name attr)))
 
@@ -274,7 +267,7 @@
         :else (list ['?e attr value])))
 
 (defn- where-all-of-kind [db kind]
-  (let [schema       (legend/for-kind @(.-legend db) kind)
+  (let [schema       (legend/for-kind (.-legend db) kind)
         attrs        (keys (dissoc schema :id :kind))
         scoped-attrs (map #(scope-attribute kind %) attrs)]
     [(cons 'or (map (fn [a] ['?e a]) scoped-attrs))]))
@@ -318,7 +311,6 @@
 
 (deftype DatomicDB [db-schema legend config conn]
   api/DB
-  (-install-schema [this new-schemas] (do-install-schema this new-schemas))
   (-clear [this] (clear this))
   (-delete-all [this kind] (delete-all this kind))
   (-count [this kind options] (do-count this kind options))
@@ -329,9 +321,8 @@
   (-tx* [this entities] (tx* this entities))
   )
 
-(defn create-db
-  ([config] (create-db config []))
-  ([config schemas]
-   (let [legend     (legend/build schemas)
-         connection (connect (:uri config))]
-     (DatomicDB. (atom schemas) (atom legend) config (atom connection)))))
+(defn create-db [config schemas]
+  (let [legend     (legend/build schemas)
+        db-schemas (->> (flatten schemas) (mapcat ->db-schema))
+        connection (connect (:uri config))]
+    (DatomicDB. db-schemas legend config (atom connection))))
