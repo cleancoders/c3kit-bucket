@@ -225,9 +225,7 @@ Requires the *safety* be turned off."
 
 
 ;; TODO - MDM:
-;;  1) clean up api (general find that takes a options :where :limit :count :sort ...)
 ;;  2) middleware for saving and loading. timestamps is a saving middleware
 ;;  3) apply to test data.  Bring in entity and for-kind features
 ;;  4) seeding entity
-;;  5) document
-;;  6) Ability to use multiple dbs at the same time through api
+;;  7) datomic specific features
