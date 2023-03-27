@@ -176,5 +176,5 @@
   (-tx* [this entities] (tx* this entities))
   )
 
-(defn create-db [schemas]
+(defmethod api/-create-impl :memory [config schemas]
   (MemoryDB. (legend/build schemas) (atom {})))

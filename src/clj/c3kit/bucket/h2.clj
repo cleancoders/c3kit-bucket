@@ -11,6 +11,3 @@
     (cons (str "MERGE INTO " table " (" (str/join ", " cols) ") "
                "VALUES (" (str/join ", " (map :param sql-args)) ")")
           (map :value sql-args))))
-
-(defn create-db [config schemas]
-  (jdbc/create-db (assoc config :dialect :h2) schemas))

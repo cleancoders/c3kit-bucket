@@ -321,7 +321,7 @@
   (-tx* [this entities] (tx* this entities))
   )
 
-(defn create-db [config schemas]
+(defmethod api/-create-impl :datomic [config schemas]
   (let [legend     (legend/build schemas)
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect (:uri config))]

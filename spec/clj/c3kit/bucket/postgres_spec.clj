@@ -3,7 +3,6 @@
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.jdbc-spec :as jdbc-spec]
-            [c3kit.bucket.postgres :as sut]
             [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all]))
 
@@ -12,10 +11,12 @@
    :id    {:type :int :db {:type "SERIAL PRIMARY KEY"}}
    :limit {:type :int}})                                    ;; limit is a reserved word in psql
 
-(def new-db (partial sut/create-db {:host   "localhost"
-                                    :port   5432
-                                    :dbtype "postgresql"
-                                    :dbname "test"}))
+(def config {:impl    :jdbc
+             :dialect :postgres
+             :host    "localhost"
+             :port    5432
+             :dbtype  "postgresql"
+             :dbname  "test"})
 
 (with-redefs [spec/bibelot jdbc-spec/bibelot
               spec/thingy  jdbc-spec/thingy]
@@ -29,17 +30,17 @@
 
       (tags :slow)
 
-      (spec/crud-specs new-db)
-      (spec/nil-value-specs new-db)
-      (spec/find-specs new-db)
-      (spec/filter-specs new-db)
-      (spec/reduce-specs new-db)
-      (spec/count-specs new-db)
-      (spec/broken-in-datomic new-db)
+      (spec/crud-specs config)
+      (spec/nil-value-specs config)
+      (spec/find-specs config)
+      (spec/filter-specs config)
+      (spec/reduce-specs config)
+      (spec/count-specs config)
+      (spec/broken-in-datomic config)
 
       (context "column with reserved word as name"
 
-        (helper/with-schemas new-db [reserved-word-entity])
+        (helper/with-schemas config [reserved-word-entity])
 
         (it "crud"
           (let [e (api/tx {:kind :reserved-word-entity :limit 123})]

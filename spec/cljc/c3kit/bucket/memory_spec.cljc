@@ -15,23 +15,25 @@
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.memory :as sut]))
 
+(def config {:impl :memory})
+
 (describe "Memory DB"
 
   (around [it] (with-safety-off (it)))
 
-  (spec/crud-specs sut/create-db)
-  (spec/nil-value-specs sut/create-db)
-  (spec/count-specs sut/create-db)
-  (spec/find-specs sut/create-db)
-  (spec/filter-specs sut/create-db)
-  (spec/reduce-specs sut/create-db)
-  (spec/kind-is-optional sut/create-db)
-  (spec/broken-in-datomic sut/create-db)
+  (spec/crud-specs config)
+  (spec/nil-value-specs config)
+  (spec/count-specs config)
+  (spec/find-specs config)
+  (spec/filter-specs config)
+  (spec/reduce-specs config)
+  (spec/kind-is-optional config)
+  (spec/broken-in-datomic config)
 
   (context "safety"
     (around [it] (with-redefs [api/*safety* true] (it)))
 
-    (it "clear" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/clear (sut/create-db nil))))
-    (it "delete-all" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/delete-all (sut/create-db nil) :foo))))
+    (it "clear" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/clear (api/create-db config nil))))
+    (it "delete-all" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/delete-all (api/create-db config nil) :foo))))
   )
 

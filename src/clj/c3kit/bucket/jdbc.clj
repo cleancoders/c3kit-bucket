@@ -382,7 +382,7 @@
   (-tx* [this entities] (tx* this entities))
   )
 
-(defn create-db [config schemas]
+(defmethod api/-create-impl :jdbc [config schemas]
   (let [dialect (:dialect config)
         ds      (jdbc/get-datasource config)
         legend  (legend/build schemas)]

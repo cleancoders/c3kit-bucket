@@ -218,6 +218,20 @@ Requires the *safety* be turned off."
   ([] (-clear @impl))
   ([db] (-clear db)))
 
+(defmulti -create-impl (fn [config _schema] (:impl config)))
+(defn create-db
+  "Create an instance of DB based off the configuration.
+  config - a map that may contain the following keys
+    :impl - :memory | :datomic | :jdbc
+    :on-save - a fn called on each entity before it is saved in the database (fn [entity] ...)
+    :on-load - a fn called on each entity after it is loaded from the database (fn [entity] ...)
+    DATOMIC
+    :uri - datomic connection uri
+    JDBC (included keys for jdbc/next library https://github.com/seancorfield/next-jdbc/blob/develop/src/next/jdbc.clj#L76)
+    :dialect :h2 | :postgres | :mssql
+    "
+  [config schemas]
+  (-create-impl config schemas))
 
 ;; TODO - MDM:
 ;;  2) middleware for saving and loading. timestamps is a saving middleware

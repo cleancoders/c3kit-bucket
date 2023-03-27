@@ -23,6 +23,3 @@
                (str/join ", " (map #(str % " = excluded." %) cols)) " "
                "RETURNING " id-col)
           (map :value sql-args))))
-
-(defn create-db [config schemas]
-  (jdbc/create-db (assoc config :dialect :postgres) schemas))

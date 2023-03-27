@@ -3,7 +3,7 @@
             [c3kit.apron.schema :as s]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
-            [c3kit.bucket.h2 :as h2]
+            [c3kit.bucket.h2]
             [c3kit.bucket.jdbc :as sut]
             [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all]))
@@ -18,7 +18,9 @@
    :id    {:type :string :db {:type "varchar(255) PRIMARY KEY"} :strategy :pre-populated}
    :value {:type :int}})
 
-(def new-db (partial h2/create-db {:jdbcUrl "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;"}))
+(def config {:impl    :jdbc
+             :dialect :h2
+             :jdbcUrl "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;"})
 
 (def bibelot
   (schema/merge-schemas
@@ -89,25 +91,25 @@
 
     (context "api"
 
-      (spec/crud-specs new-db)
-      (spec/nil-value-specs new-db)
-      (spec/find-specs new-db)
-      (spec/filter-specs new-db)
-      (spec/reduce-specs new-db)
-      (spec/count-specs new-db)
-      (spec/broken-in-datomic new-db)
-      (spec/kind-is-required new-db)
+      (spec/crud-specs config)
+      (spec/nil-value-specs config)
+      (spec/find-specs config)
+      (spec/filter-specs config)
+      (spec/reduce-specs config)
+      (spec/count-specs config)
+      (spec/broken-in-datomic config)
+      (spec/kind-is-required config)
       )
 
     (context "safety"
       (around [it] (with-redefs [api/*safety* true] (it)))
 
-      (it "clear" (should-throw AssertionError (sut/clear (new-db nil))))
-      (it "delete-all" (should-throw AssertionError (sut/delete-all (new-db nil) :foo))))
+      (it "clear" (should-throw AssertionError (sut/clear (config nil))))
+      (it "delete-all" (should-throw AssertionError (sut/delete-all (config nil) :foo))))
 
     (context "SQL Injection"
 
-      (helper/with-schemas new-db [spec/bibelot str-id-entity])
+      (helper/with-schemas config [spec/bibelot str-id-entity])
 
       (it "finds by always true"
         (api/tx {:kind :bibelot :name "John" :size 5 :color "Red"})

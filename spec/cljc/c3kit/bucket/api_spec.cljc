@@ -66,11 +66,11 @@
 (def original :undefined)
 (def now :undefined)
 
-(defn crud-specs [db-ctor]
+(defn crud-specs [config]
 
   (context "CRUD"
 
-    (helper/with-schemas db-ctor [bibelot thingy])
+    (helper/with-schemas config [bibelot thingy])
 
     (it "returns nil on missing id"
       (log/capture-logs
@@ -257,10 +257,10 @@
     )
   )
 
-(defn kind-is-optional [db-ctor]
+(defn kind-is-optional [config]
   (context "kind is optional"
 
-    (helper/with-schemas db-ctor [bibelot thingy])
+    (helper/with-schemas config [bibelot thingy])
 
     (it "entity"
       (let [foo (sut/tx {:kind :bibelot :name "foo"})]
@@ -291,9 +291,9 @@
     )
   )
 
-(defn find-specs [db-ctor]
+(defn find-specs [config]
   (context "find"
-    (helper/with-schemas db-ctor [bibelot thingy])
+    (helper/with-schemas config [bibelot thingy])
 
     (it "empty db"
       (should= [] (sut/find :bibelot))
@@ -378,9 +378,9 @@
     )
   )
 
-(defn filter-specs [db-ctor]
+(defn filter-specs [config]
   (context "filters"
-    (helper/with-schemas db-ctor [bibelot thingy])
+    (helper/with-schemas config [bibelot thingy])
 
     (context "(populated db)"
       (before (sut/clear)
@@ -475,9 +475,9 @@
     )
   )
 
-(defn reduce-specs [db-ctor]
+(defn reduce-specs [config]
   (context "reduce"
-    (helper/with-schemas db-ctor [bibelot thingy])
+    (helper/with-schemas config [bibelot thingy])
     (before (sut/clear)
             (sut/tx {:kind :bibelot :name "hello"})
             (sut/tx {:kind :bibelot :name "world"})
@@ -499,9 +499,9 @@
     )
   )
 
-(defn count-specs [db-impl]
+(defn count-specs [config]
   (context "count"
-    (helper/with-schemas db-impl [bibelot thingy])
+    (helper/with-schemas config [bibelot thingy])
 
     (it "empty db"
       (should= 0 (sut/count :bibelot))
@@ -529,11 +529,11 @@
     )
   )
 
-(defn nil-value-specs [db-ctor]
+(defn nil-value-specs [config]
 
   (context "retracting null values"
 
-    (helper/with-schemas db-ctor [bibelot thingy])
+    (helper/with-schemas config [bibelot thingy])
 
     (with child (sut/tx {:kind :bibelot :name "child" :color "golden"}))
     (with original (sut/tx {:kind :thingy
@@ -566,10 +566,10 @@
     )
   )
 
-(defn broken-in-datomic [db-ctor]
+(defn broken-in-datomic [config]
 
   (context "broken in datomic"
-    (helper/with-schemas db-ctor [bibelot thingy])
+    (helper/with-schemas config [bibelot thingy])
     (before (sut/tx {:kind :bibelot :name "hello"})
             (sut/tx {:kind :bibelot :name "world"})
             (sut/tx {:kind :bibelot :name "world" :size 2})

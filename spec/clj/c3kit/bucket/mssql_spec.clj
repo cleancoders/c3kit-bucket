@@ -4,15 +4,17 @@
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.jdbc-spec :as jdbc-spec]
-            [c3kit.bucket.mssql :as sut]
+            [c3kit.bucket.mssql]
             [speclj.core :refer :all]))
 
-(def new-db (partial sut/create-db {:host     "localhost"
-                                    :port     1433
-                                    :dbtype   "sqlserver"
-                                    :dbname   "bucketTest"
-                                    :user     "sa"
-                                    :password "Pala2023"}))
+(def config {:impl     :jdbc
+             :dialect  :mssql
+             :host     "localhost"
+             :port     1433
+             :dbtype   "sqlserver"
+             :dbname   "bucketTest"
+             :user     "sa"
+             :password "Pala2023"})
 
 (def bibelot
   (schema/merge-schemas
@@ -36,13 +38,13 @@
 
       (tags :slow)
 
-      (spec/crud-specs new-db)
-      (spec/nil-value-specs new-db)
-      (spec/find-specs new-db)
-      (spec/filter-specs new-db)
-      (spec/reduce-specs new-db)
-      (spec/count-specs new-db)
-      (spec/broken-in-datomic new-db)
+      (spec/crud-specs config)
+      (spec/nil-value-specs config)
+      (spec/find-specs config)
+      (spec/filter-specs config)
+      (spec/reduce-specs config)
+      (spec/count-specs config)
+      (spec/broken-in-datomic config)
 
       )
     )
