@@ -7,10 +7,11 @@
 (log/warn!)
 
 (defn with-schemas
-  ([schemas] (with-schemas (db/create-db {:impl :memory} schemas)))
+  ([schemas] (with-schemas {:impl :memory} schemas))
   ([config schemas]
    (list
      (around-all [it]
+       (db/set-safety! false)
        (with-redefs [db/impl (delay (db/create-db config schemas))]
          (it)))
      (before (db/clear)))))

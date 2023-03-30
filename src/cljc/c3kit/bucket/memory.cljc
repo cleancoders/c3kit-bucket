@@ -177,4 +177,5 @@
   )
 
 (defmethod api/-create-impl :memory [config schemas]
-  (MemoryDB. (legend/build schemas) (atom {})))
+  (let [store (or (:store config) (atom {}))]
+    (MemoryDB. (legend/build schemas) store)))
