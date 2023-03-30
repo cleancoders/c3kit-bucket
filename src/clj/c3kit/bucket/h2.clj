@@ -2,6 +2,7 @@
   (:require [c3kit.bucket.jdbc :as jdbc]
             [clojure.string :as str]))
 
+
 (defmethod jdbc/build-upsert-sql :h2 [dialect t-map {:keys [id] :as entity}]
   (let [{:keys [table key->col key->type]} t-map
         used-key->col (select-keys key->col (keys entity))

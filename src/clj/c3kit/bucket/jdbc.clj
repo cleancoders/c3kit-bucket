@@ -39,6 +39,12 @@
 
 (defmulti schema->db-type-map identity)
 
+(defmethod schema->db-type-map :default [_]
+  {:int     "int4"
+   :long    "int4"
+   :boolean "bool"
+   :instant "timestamp without time zone"})
+
 (defn schema-type->db-type [dialect type]
   (get (schema->db-type-map dialect) type))
 

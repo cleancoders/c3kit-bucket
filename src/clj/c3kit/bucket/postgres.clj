@@ -2,7 +2,7 @@
   (:require [c3kit.bucket.jdbc :as jdbc]
             [clojure.string :as str]))
 
-(defmethod jdbc/schema->db-type-map :default [_]
+(defmethod jdbc/schema->db-type-map :postgres [_]
   {:int     "int4"
    :long    "int4"
    :boolean "bool"
