@@ -18,7 +18,6 @@
    (try
      (jdbc/execute-one! conn command options)
      (catch Exception e
-       (prn "Choked on SQL: " command)
        (log/error "Choked on SQL: " command)
        (throw e)))))
 
@@ -34,8 +33,11 @@
 
 (defn table-name [schema] (or (-> schema :kind :db :table) (-> schema :kind :value name)))
 
-(defn- drop-table-from-schema [ds schema]
-  (execute! ds [(str "DROP TABLE IF EXISTS " (table-name schema))]))
+(defn drop-table [db table-name]
+  (execute! (.-ds db) [(str "DROP TABLE IF EXISTS " table-name)]))
+
+(defn- drop-table-from-schema [db schema]
+  (drop-table db (table-name schema)))
 
 (defmulti schema->db-type-map identity)
 
@@ -44,6 +46,8 @@
    :long    "int4"
    :boolean "bool"
    :instant "timestamp without time zone"})
+
+(defn dialect [db] (.-dialect db))
 
 (defn schema-type->db-type [dialect type]
   (get (schema->db-type-map dialect) type))
@@ -66,10 +70,13 @@
        (str/join "," (map (fn [[key spec]] (sql-table-col dialect key spec)) (dissoc schema :kind)))
        ")"))
 
-(defn add-column [dialect ds schema attr] (execute! ds [(sql-add-column dialect schema attr)]))
+(defn add-column [db schema attr]
+  (execute! (.-ds db) [(sql-add-column (.-dialect db) schema attr)]))
 
-(defn create-table-from-schema [dialect ds schema]
-  (let [sql (sql-create-table dialect schema)]
+(defn create-table-from-schema [db schema]
+  (let [dialect (.-dialect db)
+        ds (.-ds db)
+        sql (sql-create-table dialect schema)]
     (execute! ds [sql])))
 
 (defn- ->field-name [{:keys [table key->col]} k]
@@ -367,8 +374,8 @@
 (defn clear [db]
   (api/-assert-safety-off! "clear")
   (doseq [[_ schema] (.-legend db)]
-    (drop-table-from-schema (.-ds db) schema)
-    (create-table-from-schema (.-dialect db) (.-ds db) schema)))
+    (drop-table-from-schema db schema)
+    (create-table-from-schema db schema)))
 
 (defn delete-all [db kind]
   (api/-assert-safety-off! "delete")
