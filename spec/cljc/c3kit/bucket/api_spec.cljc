@@ -53,6 +53,12 @@
    :bang {:type :instant}
    :name {:type :string}})
 
+(def doodad
+  {:kind    (s/kind :doodad)
+   :id      s/id
+   :names   {:type [:string]}
+   :numbers {:type [:long]}})
+
 ;(def timepiece
 ;  {:kind       (s/kind :timepiece)
 ;   :id         {:type :long :db {:type "bigint IDENTITY PRIMARY KEY"}}
@@ -257,8 +263,61 @@
     )
   )
 
-(defn kind-is-optional [config]
-  (context "kind is optional"
+(defn multi-value-fields [config]
+  (context "multi-value fields"
+
+    (helper/with-schemas config [doodad])
+
+    (it "loading"
+      (let [saved  (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+            loaded (sut/entity (:id saved))]
+        (should= (:id loaded) (:id saved))
+        (should= #{"foo" "bar"} (set (:names loaded)))
+        (should= #{8 42} (set (:numbers loaded)))))
+
+    (it "find by attribute"
+      (let [saved  (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+            loaded (sut/find-by :doodad :names "bar")]
+        (should= 1 (count loaded))
+        (should= (:id saved) (:id (first loaded)))))
+
+    (it "retracting [string] value"
+      (let [saved   (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+            updated (sut/tx saved :names nil)]
+        (should-be-nil (seq (:names updated)))))
+
+    (it "retracting one value from [string]"
+      (let [saved   (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+            updated (sut/tx saved :names ["foo"])]
+        (should= #{"foo"} (set (:names updated)))))
+
+    (it "adding one value to [string]"
+      (let [saved   (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+            updated (sut/tx saved :names ["foo" "bar" "fizz"])]
+        (should= #{"foo" "bar" "fizz"} (set (:names updated)))))
+
+    (it "find 'not="
+      (let [d1 (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+            d2 (sut/tx {:kind :doodad :names ["foo" "bang"] :numbers [8 43]})]
+        (should= [d1] (sut/find-by :doodad :names "foo" :numbers ['not= 43]))
+        (should= [d2] (sut/find-by :doodad :names "foo" :numbers ['not= 42]))
+        (should= [] (sut/find-by :doodad :names "foo" :numbers ['not= 42 43]))
+        (should= [d2] (sut/find-by :doodad :names ['not= "bar"] :numbers 8))
+        (should= [d1] (sut/find-by :doodad :names ['not= "bang"] :numbers 8))
+        (should= [] (sut/find-by :doodad :names ['not= "bar" "bang"] :numbers 8))))
+
+    (it "find or"
+      (let [d1 (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+            d2 (sut/tx {:kind :doodad :names ["foo" "bang"] :numbers [8 43]})]
+        (should= [d1 d2] (sut/find-by :doodad :names ["foo" "BLAH"]))
+        (should= [d1 d2] (sut/find-by :doodad :names ["bar" "bang"]))
+        (should= [d1] (sut/find-by :doodad :names ["bar" "BLAH"]))
+        (should= [] (sut/find-by :doodad :names ["ARG" "BLAH"]))))
+    )
+  )
+
+(defn kind-in-entity-is-optional [config]
+  (context "kind in (entity) is optional"
 
     (helper/with-schemas config [bibelot thingy])
 
@@ -466,7 +525,7 @@
           (should= [thing1 thing2] (sort-by :id (sut/find-by :thingy :bang ['>= (:bang thing2)])))
           (should= [thing2] (sut/find-by :thingy :bang ['< (-> 2 minutes ago)] :bang ['> (-> 4 minutes ago)]))))
 
-      (it "compare against entity with null value"
+      (it "compare against entity with nil value"
         (sut/clear)
         (let [b1  (sut/tx :kind :bibelot :name "1" :size 1)
               _b2 (sut/tx :kind :bibelot :name "nil" :size nil)]
@@ -621,7 +680,8 @@
           (should= ["world"] (map :name result))))
 
       (it "not= many with nil"
-        (should= [] (sut/find-by :bibelot :size ['not= nil 2])))
+        (let [result (sut/find-by :bibelot :size ['not= nil 2])]
+          (should= [] (map :name result))))
 
       (it "not= many"
         (let [result       (sut/find-by :bibelot :name ['not= "hello" "world"])

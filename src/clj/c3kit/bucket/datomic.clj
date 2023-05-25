@@ -229,36 +229,36 @@
 (defn- ->attr-kw [kind attr] (keyword (name kind) (name attr)))
 
 (declare where-clause)
-(defmulti ^:private seq-where-clause (fn [_attr value] (first value)))
-(defmethod seq-where-clause 'not [attr [_ value]]
-  (if (nil? value)
-    (list ['?e attr])
-    (list (list 'not ['?e attr value]))))
-
-(defmethod seq-where-clause 'not= [attr [_ value]]
-  (if (nil? value)
-    (list ['?e attr])
-    (list (list 'not ['?e attr value]))))
 
 (defn- simple-where-fn [attr value f-sym]
   (let [attr-sym (gensym (str "?" (name attr)))]
     (list ['?e attr attr-sym]
           [(list f-sym attr-sym value)])))
 
-(defmethod seq-where-clause '> [attr [_ value]] (simple-where-fn attr value '>))
-(defmethod seq-where-clause '< [attr [_ value]] (simple-where-fn attr value '<))
-(defmethod seq-where-clause '>= [attr [_ value]] (simple-where-fn attr value '>=))
-(defmethod seq-where-clause '<= [attr [_ value]] (simple-where-fn attr value '<=))
-
 (defn- or-where-clause [attr values]
   (let [values (set values)]
     (when (seq values)
       (list (cons 'or (mapcat #(where-clause attr %) values))))))
 
-(defmethod seq-where-clause '= [attr [_ & values]] (or-where-clause attr values))
+(defn- not=-where-clause [attr values]
+  (map #(if (nil? %) ['?e attr] (list 'not ['?e attr %])) values))
 
-(defmethod seq-where-clause 'or [attr values] (or-where-clause attr (rest values)))
-(defmethod seq-where-clause :default [attr values] (or-where-clause attr values))
+;(defn not-where-clause [attr [value]]
+;  (if (nil? value)
+;    (list ['?e attr])
+;    (list (list 'not ['?e attr value]))))
+
+(defn- seq-where-clause [attr values]
+  (condp = (first values)
+    ;'not (not-where-clause attr (rest values))
+    'not= (not=-where-clause attr (rest values))
+    '> (simple-where-fn attr (second values) '>)
+    '< (simple-where-fn attr (second values) '<)
+    '>= (simple-where-fn attr (second values) '>=)
+    '<= (simple-where-fn attr (second values) '<=)
+    '= (or-where-clause attr (rest values))
+    'or (or-where-clause attr (rest values))
+    (or-where-clause attr values)))
 
 (defn where-clause [attr value]
   (cond (nil? value) (list [(list 'missing? '$ '?e attr)])

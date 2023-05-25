@@ -53,17 +53,27 @@
         (let [ev (if case-sensitive? ev (str/upper-case ev))]
           (boolean (re-matches pattern ev)))))))
 
+(def ^:private multi? (some-fn sequential? set?))
+
 (defn- -normal-tester [f v]
   (fn [ev]
-    (and (some? ev)
-         (f ev v))))
+    (if (multi? ev)
+      (some #(f % v) ev)
+      (and (some? ev) (f ev v)))))
 
-(defn- -vec-tester [par values]
+(defn- -or-tester [values]
   (let [v-set (set values)]
     (fn [ev]
-      (par #(= % ev) v-set))))
-(def ^:private -or-tester (partial -vec-tester some))
-(def ^:private -nor-tester (partial -vec-tester not-any?))
+      (if (multi? ev)
+        (some #(contains? v-set %) ev)
+        (contains? v-set ev)))))
+
+(defn- -nor-tester [values]
+  (let [v-set (set values)]
+    (fn [ev]
+      (if (multi? ev)
+        (not-any? #(contains? v-set %) ev)
+        (not (contains? v-set ev))))))
 
 (defn -tester [form]
   (condp = (first form)

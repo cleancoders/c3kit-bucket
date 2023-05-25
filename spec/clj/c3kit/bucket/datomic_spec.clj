@@ -21,7 +21,8 @@
     (spec/filter-specs config)
     (spec/reduce-specs config)
     (spec/count-specs config)
-    (spec/kind-is-optional config)
+    (spec/kind-in-entity-is-optional config)
+    (spec/multi-value-fields config)
     )
 
   (context "safety"

@@ -11,8 +11,8 @@
   ([config schemas]
    (list
      (around-all [it]
-       (api/set-safety! false)
-       (with-redefs [api/impl (delay (api/create-db config schemas))]
-         (it)))
+       (api/with-safety-off
+         (with-redefs [api/impl (delay (api/create-db config schemas))]
+           (it))))
      (before (api/clear)))))
 
