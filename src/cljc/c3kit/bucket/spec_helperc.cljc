@@ -1,7 +1,7 @@
 (ns c3kit.bucket.spec-helperc
   (:require [speclj.core #?(:clj :refer :cljs :refer-macros) [around around-all before]]
             [c3kit.apron.log :as log]
-            [c3kit.bucket.api :as db]
+            [c3kit.bucket.api :as api]
             [c3kit.bucket.memory]))
 
 (log/warn!)
@@ -11,8 +11,8 @@
   ([config schemas]
    (list
      (around-all [it]
-       (db/set-safety! false)
-       (with-redefs [db/impl (delay (db/create-db config schemas))]
+       (api/set-safety! false)
+       (with-redefs [api/impl (delay (api/create-db config schemas))]
          (it)))
-     (before (db/clear)))))
+     (before (api/clear)))))
 

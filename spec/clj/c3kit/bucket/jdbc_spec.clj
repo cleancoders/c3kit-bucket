@@ -43,7 +43,7 @@
     (around [it] (api/with-safety-off (it)))
     (with-stubs)
 
-    (context "sql"
+    (context "sql generation"
 
       (context "create table"
 
@@ -127,6 +127,25 @@
         (api/tx {:kind :str-id-entity :id "' OR 1 = 1;--" :value 1})
         (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"})
         (should= 0 (api/count :str-id-entity)))
+      )
+
+    (context "local api"
+
+      (helper/with-schemas config [bibelot thingy])
+
+      (it "execute!"
+        (should= {:1 1} (sut/execute-one! @api/impl "SELECT 1"))
+        (should= {:?1 1} (sut/execute-one! @api/impl ["SELECT ?" 1]))
+        (should= [{:1 1}] (sut/execute! @api/impl "SELECT 1"))
+        (should= [{:?1 1}] (sut/execute! @api/impl ["SELECT ?" 1])))
+
+      (it "find-sql"
+        (let [red (api/tx- @api/impl {:kind :bibelot :name "one" :color "red"})
+              green (api/tx- @api/impl {:kind :bibelot :name "two" :color "green"})]
+          (should= red (first (sut/find-sql- @api/impl :bibelot "SELECT * from bibelot WHERE color='red'")))
+          (should= red (first (sut/find-sql- @api/impl :bibelot ["SELECT * from bibelot WHERE color=?" "red"])))
+          (should= green (first (sut/find-sql :bibelot "SELECT * from bibelot WHERE color='green'")))))
+
       )
     )
   )

@@ -12,8 +12,8 @@
             [next.jdbc.result-set :as rs])
   (:import (java.sql ResultSet)))
 
-(defn execute-one!
-  ([conn command] (execute-one! conn command {}))
+(defn execute-one-conn!
+  ([conn command] (execute-one-conn! conn command {}))
   ([conn command options]
    (try
      (jdbc/execute-one! conn command options)
@@ -21,20 +21,33 @@
        (log/error "Choked on SQL: " command)
        (throw e)))))
 
-(defn execute!
-  ([conn command] (execute! conn command {}))
+(defn- execute-conn!
+  ([conn command] (execute-conn! conn command {}))
   ([conn command options]
    (try
+     (log/debug "executing query:" command)
      (jdbc/execute! conn command options)
      (catch Exception e
        (prn "Choked on SQL: " command)
        (log/error "Choked on SQL: " command)
        (throw e)))))
 
+(defn- maybe-str->command [command] (if (string? command) [command] command))
+
+(defn execute-one!
+  "Execute SQL returning 1 raw result"
+  ([db command] (execute-one-conn! (.-ds db) (maybe-str->command command) {}))
+  ([db command options] (execute-one-conn! (.-ds db) (maybe-str->command command) options)))
+
+(defn execute!
+  "Execute SQL returning all results."
+  ([db command] (execute-conn! (.-ds db) (maybe-str->command command) {}))
+  ([db command options] (execute-conn! (.-ds db) (maybe-str->command command) options)))
+
 (defn table-name [schema] (or (-> schema :kind :db :table) (-> schema :kind :value name)))
 
 (defn drop-table [db table-name]
-  (execute! (.-ds db) [(str "DROP TABLE IF EXISTS " table-name)]))
+  (execute-conn! (.-ds db) [(str "DROP TABLE IF EXISTS " table-name)]))
 
 (defn- drop-table-from-schema [db schema]
   (drop-table db (table-name schema)))
@@ -71,13 +84,13 @@
        ")"))
 
 (defn add-column [db schema attr]
-  (execute! (.-ds db) [(sql-add-column (.-dialect db) schema attr)]))
+  (execute-conn! (.-ds db) [(sql-add-column (.-dialect db) schema attr)]))
 
 (defn create-table-from-schema [db schema]
   (let [dialect (.-dialect db)
         ds (.-ds db)
         sql (sql-create-table dialect schema)]
-    (execute! ds [sql])))
+    (execute-conn! ds [sql])))
 
 (defn- ->field-name [{:keys [table key->col]} k]
   (if (namespace k)
@@ -85,7 +98,7 @@
     (str table "." (get key->col k))))
 
 (defn spec->db-type [spec]
-  (let [type    (:type spec)
+  (let [type (:type spec)
         db-type (get-in spec [:db :type])]
     (if (and (= :string type) db-type (str/starts-with? db-type "json"))
       :json
@@ -135,11 +148,11 @@
   (rs! [_ mrs] (persistent! mrs)))
 
 (defn col->key-builder [{:keys [col->key key->type]} rs _opts]
-  (let [rs-meta   (.getMetaData rs)
+  (let [rs-meta (.getMetaData rs)
         col-range (range 1 (inc (if rs-meta (.getColumnCount rs-meta) 0)))
-        cols      (mapv (fn [^Integer i]
-                          (let [col-name (.getColumnLabel rs-meta i)]
-                            (get col->key col-name))) col-range)]
+        cols (mapv (fn [^Integer i]
+                     (let [col-name (.getColumnLabel rs-meta i)]
+                       (get col->key col-name))) col-range)]
     (->MapResultSetOptionalBuilder rs rs-meta cols key->type)))
 
 (defn compile-mapping [schema]
@@ -161,12 +174,12 @@
    (if-let [m (get @mappings kind)]
      m
      (let [schema (legend/for-kind legend kind)
-           m      (compile-mapping schema)]
+           m (compile-mapping schema)]
        (swap! mappings assoc kind m)
        m))))
 
 (defn ->sql-args [dialect key->col key->type entity k]
-  (let [v    (get entity k)
+  (let [v (get entity k)
         type (get key->type k)]
     {:column (get key->col k)
      :param  (->sql-param dialect type)
@@ -175,17 +188,17 @@
 (defn build-fetch-sql [dialect t-map id]
   (let [{:keys [table key->col key->type]} t-map
         column (:id key->col)
-        type   (:id key->type)
-        param  (->sql-param dialect type)
-        value  (->sql-value type id)]
+        type (:id key->type)
+        param (->sql-param dialect type)
+        value (->sql-value type id)]
     [(str "SELECT * FROM " table " WHERE " column " = " param) value]))
 
 (defn- fetch-entity [db conn t-map kind id]
   (when-let [id (if (map? id) (:id id) id)]
     (let [{:keys [id-type builder-fn]} t-map
-          id      (api/-coerced-id id-type id)
+          id (api/-coerced-id id-type id)
           command (build-fetch-sql (.-dialect db) t-map id)
-          result  (execute-one! conn command {:builder-fn builder-fn})]
+          result (execute-one-conn! conn command {:builder-fn builder-fn})]
       (when result
         (assoc result :kind kind)))))
 
@@ -197,10 +210,10 @@
 (defn build-update-sql [dialect t-map entity]
   (let [{:keys [table key->col key->type]} t-map
         ->sql-args (partial ->sql-args dialect key->col key->type entity)
-        id-arg     (->sql-args :id)
-        used-keys  (disj (set/intersection (set (keys entity)) (set (keys key->col))) :id)
-        sql-args   (map ->sql-args used-keys)
-        cols       (->> (map :column sql-args) (map #(str "\"" % "\"")))]
+        id-arg (->sql-args :id)
+        used-keys (disj (set/intersection (set (keys entity)) (set (keys key->col))) :id)
+        sql-args (map ->sql-args used-keys)
+        cols (->> (map :column sql-args) (map #(str "\"" % "\"")))]
     (cons (str "UPDATE " table " "
                "SET " (str/join ", " (map #(str %1 " = " %2) cols (map :param sql-args))) " "
                "WHERE " (:column id-arg) " = " (:param id-arg))
@@ -209,9 +222,9 @@
 (defn build-insert-sql [dialect t-map entity]
   (let [{:keys [table key->col key->type]} t-map
         used-key->col (select-keys key->col (keys entity))
-        ->sql-args    (partial ->sql-args dialect used-key->col key->type entity)
-        sql-args      (->> used-key->col keys (map ->sql-args))
-        cols          (->> (map :column sql-args) (map #(str "\"" % "\"")))]
+        ->sql-args (partial ->sql-args dialect used-key->col key->type entity)
+        sql-args (->> used-key->col keys (map ->sql-args))
+        cols (->> (map :column sql-args) (map #(str "\"" % "\"")))]
     (cons (str "INSERT INTO " table " (" (str/join ", " cols) ") "
                "VALUES (" (str/join ", " (map :param sql-args)) ")")
           (map :value sql-args))))
@@ -224,25 +237,25 @@
     [(str "DELETE FROM " table " WHERE " column " = " param) value]))
 
 (defn- delete-entity [dialect conn t-map entity]
-  (let [sql    (build-delete-sql dialect t-map entity)
-        result (execute-one! conn sql)]
+  (let [sql (build-delete-sql dialect t-map entity)
+        result (execute-one-conn! conn sql)]
     (when-not (= 1 (:next.jdbc/update-count result)) (throw (ex-info "delete failed" {:entity entity :result result})))
     (api/soft-delete entity)))
 
 (defn- update-entity [db conn t-map entity]
   (let [command (build-update-sql (.-dialect db) t-map entity)]
-    (execute-one! conn command)
+    (execute-one-conn! conn command)
     (fetch-entity db conn t-map (:kind entity) (:id entity))))
 
 (defn- insert-entity [db conn t-map entity]
   (let [command (build-insert-sql (.-dialect db) t-map entity)
-        result  (execute-one! conn command {:return-keys true})
-        id      (first (vals result))]
+        result (execute-one-conn! conn command {:return-keys true})
+        id (first (vals result))]
     (fetch-entity db conn t-map (:kind entity) id)))
 
 (defn- upsert-entity [db conn t-map entity]
   (let [command (build-upsert-sql (.-dialect db) t-map entity)]
-    (execute-one! conn command)
+    (execute-one-conn! conn command)
     (fetch-entity db conn t-map (:kind entity) (:id entity))))
 
 (defmulti upsert-by-id-strategy (fn [_db _conn t-map _entity] (:id-strategy t-map)))
@@ -268,7 +281,7 @@
 
 (defn tx* [db entities]
   (jdbc/with-transaction [tx (.-ds db)]
-    (doall (map #(do-tx db tx %) entities))))
+                         (doall (map #(do-tx db tx %) entities))))
 
 (defn clause-with-operator [dialect {:keys [key->type] :as t-map} k v operator]
   (let [type (get key->type k)]
@@ -281,12 +294,12 @@
     (clause-with-operator dialect t-map k v "=")))
 
 (defn- -build-parity-or-clause [not? dialect {:keys [key->type] :as t-map} k v]
-  (let [type       (get key->type k)
-        is-null?   (some nil? v)
-        v          (->> v set (remove nil?))
-        in?        (not (empty? v))
+  (let [type (get key->type k)
+        is-null? (some nil? v)
+        v (->> v set (remove nil?))
+        in? (not (empty? v))
         field-name (->field-name t-map k)
-        num-vals   (core-count v)]
+        num-vals (core-count v)]
     (cons (str "("
                (when in? (str field-name (when not? " NOT") " IN (" (str/join "," (repeat num-vals (->sql-param dialect type))) ")"))
                (when (and in? is-null?) (if not? " AND " " OR "))
@@ -310,8 +323,8 @@
     (-build-or-clause dialect t-map k v)))
 
 (defn -build-or-clause-by-column [->sql ks v]
-  (let [clause-pairs       (map #(->sql [% v]) ks)
-        clauses            (map first clause-pairs)
+  (let [clause-pairs (map #(->sql [% v]) ks)
+        clauses (map first clause-pairs)
         interposed-clauses (str/join (interpose " OR " clauses))]
     (cons (str "(" interposed-clauses ")") (mapcat rest clause-pairs))))
 
@@ -348,18 +361,18 @@
 (defn- do-find [db kind options]
   (let [t-map (key-map db kind)
         query (-build-find-query (.-dialect db) t-map options)]
-    (->> (execute! (.-ds db) query {:builder-fn (:builder-fn t-map)})
+    (->> (execute-conn! (.-ds db) query {:builder-fn (:builder-fn t-map)})
          (map #(ccc/remove-nils (assoc % :kind kind))))))
 
 (defn- do-count [db kind {:keys [where] :as _options}]
   (let [{:keys [table] :as t-map} (key-map db kind)
         [where-sql & args] (-build-where (.-dialect db) t-map where)
         sql (str/join " " ["SELECT COUNT(*) FROM" table where-sql])]
-    (first (vals (execute-one! (.-ds db) (cons sql args))))))
+    (first (vals (execute-one-conn! (.-ds db) (cons sql args))))))
 
 (defn reduce [db kind f init options]
-  (let [t-map      (key-map db kind)
-        query      (-build-find-query (.-ds db) t-map options)
+  (let [t-map (key-map db kind)
+        query (-build-find-query (.-ds db) t-map options)
         connection (jdbc/get-connection (.-ds db))]
     (.setHoldability connection ResultSet/CLOSE_CURSORS_AT_COMMIT)
     (core-reduce
@@ -381,7 +394,7 @@
   (api/-assert-safety-off! "delete")
   (let [{:keys [table]} (key-map db kind)
         sql (str "DELETE FROM " table " WHERE 1 = 1")]
-    (execute-one! (.-ds db) [sql])))
+    (execute-one-conn! (.-ds db) [sql])))
 
 (deftype JDBCDB [legend dialect ds mappings]
   api/DB
@@ -397,7 +410,19 @@
 
 (defmethod api/-create-impl :jdbc [config schemas]
   (let [dialect (:dialect config)
-        ds      (jdbc/get-datasource config)
-        legend  (legend/build schemas)]
+        ds (jdbc/get-datasource config)
+        legend (legend/build schemas)]
     (JDBCDB. legend dialect ds (atom {}))))
 
+(defn find-sql-
+  "Perform a custom SQL query for a specific kind on db instance."
+  [db kind sql]
+  (let [t-map (key-map db kind)
+        command (maybe-str->command sql)]
+    (->> (execute-conn! (.-ds db) command {:builder-fn (:builder-fn t-map)})
+         (map #(ccc/remove-nils (assoc % :kind kind))))))
+
+(defn find-sql
+  "Perform a custom SQL query for a specific kind on the default db instance (api/impl)."
+  [kind sql]
+  (find-sql- @api/impl kind sql))
