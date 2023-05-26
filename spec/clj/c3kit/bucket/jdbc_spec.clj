@@ -140,7 +140,7 @@
         (should= [{:?1 1}] (sut/execute! @api/impl ["SELECT ?" 1])))
 
       (it "find-sql"
-        (let [red (api/tx- @api/impl {:kind :bibelot :name "one" :color "red"})
+        (let [red   (api/tx- @api/impl {:kind :bibelot :name "one" :color "red"})
               green (api/tx- @api/impl {:kind :bibelot :name "two" :color "green"})]
           (should= red (first (sut/find-sql- @api/impl :bibelot "SELECT * from bibelot WHERE color='red'")))
           (should= red (first (sut/find-sql- @api/impl :bibelot ["SELECT * from bibelot WHERE color=?" "red"])))

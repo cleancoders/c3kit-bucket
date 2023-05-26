@@ -53,7 +53,7 @@
         (let [ev (if case-sensitive? ev (str/upper-case ev))]
           (boolean (re-matches pattern ev)))))))
 
-(def ^:private multi? (some-fn sequential? set?))
+(defn- multi? [v] (or (sequential? v) (set? v)))
 
 (defn- -normal-tester [f v]
   (fn [ev]
