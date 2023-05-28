@@ -54,5 +54,6 @@
             (should= e (api/ffind-by :reserved-word-entity :limit 123))))
         )
       )
+
     )
   )

@@ -16,6 +16,7 @@
   ([conn command] (execute-one-conn! conn command {}))
   ([conn command options]
    (try
+     (log/debug "executing SQL:" command)
      (jdbc/execute-one! conn command options)
      (catch Exception e
        (log/error "Choked on SQL: " command)
@@ -25,7 +26,7 @@
   ([conn command] (execute-conn! conn command {}))
   ([conn command options]
    (try
-     (log/debug "executing query:" command)
+     (log/debug "executing SQL:" command)
      (jdbc/execute! conn command options)
      (catch Exception e
        (prn "Choked on SQL: " command)
@@ -168,7 +169,7 @@
      :builder-fn  (partial col->key-builder {:col->key c->k :key->type k->t})
      }))
 
-(defn- key-map
+(defn key-map
   ([db kind] (key-map (.-legend db) (.-mappings db) kind))
   ([legend mappings kind]
    (if-let [m (get @mappings kind)]
