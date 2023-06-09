@@ -71,12 +71,15 @@
 (defn transact! [connection transaction]
   (datomic/transact connection transaction))
 
+(defn install-schema! [db]
+  @(transact! @(.-conn db) (.-db-schema db)))
+
 (defn clear [db]
   (api/-assert-safety-off! "clear")
   (let [uri (:uri (.-config db))]
     (datomic/delete-database uri)
     (reset! (.-conn db) (connect uri))
-    @(transact! @(.-conn db) (.-db-schema db))))
+    (install-schema! db)))
 
 (defn scope-attribute [kind attr] (keyword (name kind) (name attr)))
 
@@ -322,7 +325,9 @@
   )
 
 (defmethod api/-create-impl :datomic [config schemas]
-  (let [legend     (legend/build schemas)
+  (let [legend (legend/build schemas)
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
-        connection (connect (:uri config))]
-    (DatomicDB. db-schemas legend config (atom connection))))
+        connection (connect (:uri config))
+        db (DatomicDB. db-schemas legend config (atom connection))]
+    (install-schema! db)
+    db))
