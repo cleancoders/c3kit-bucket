@@ -1,5 +1,6 @@
 (ns c3kit.bucket.hashid-spec
   (:require
+    [c3kit.apron.log :as log]
     [c3kit.bucket.hashid :as sut]
     [speclj.core #?(:clj :refer :cljs :refer-macros) [context describe it should= should-contain should-throw before]]))
 
@@ -25,9 +26,10 @@
     (should= 999999999999999 (hash->id "kV41EmPmEJe")))
 
   (it "crashing case"
-    (let [hash-fns (sut/hashid-fns "abcdefg" 30) ;; magic combo
-          ->id (:hash->id hash-fns)]
-      (should= nil (->id "blah"))))
+    (log/capture-logs
+      (let [hash-fns (sut/hashid-fns "abcdefg" 30)          ;; magic combo
+            ->id     (:hash->id hash-fns)]
+        (should= nil (->id "blah")))))
 
   )
 
