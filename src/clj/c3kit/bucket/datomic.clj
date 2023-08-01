@@ -1,13 +1,14 @@
 (ns c3kit.bucket.datomic
-  (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
             [c3kit.bucket.api]
             [c3kit.bucket.api :as api]
+            [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [clojure.string :as str]
-            [datomic.api :as datomic]))
+            [datomic.api :as datomic])
+  (:import (datomic Connection)))
 
 ;; ---- schema -----
 
@@ -17,37 +18,28 @@
   [{:db/id (name partition-name) :db/ident (keyword partition-name)}
    [:db/add :db.part/db :db.install/partition (name partition-name)]])
 
-(defn- apply-uniqueness [schema options]
-  (if (:unique-value options)
-    (assoc schema :db/unique :db.unique/value)
-    (if (:unique-identity options)
-      (assoc schema :db/unique :db.unique/identity)
-      schema)))
-
-(defn build-attribute [kind [attr-name type & spec]]
-  (let [options (set spec)
-        type    (if (= :kw-ref type) :ref type)]
-    (->
-      {
-       :db/ident       (keyword (name kind) (name attr-name))
-       :db/valueType   (keyword "db.type" (name type))
-       :db/cardinality (if (contains? options :many) :db.cardinality/many :db.cardinality/one)
-       :db/index       (if (:index options) true false)
-       :db/isComponent (if (:component options) true false)
-       :db/noHistory   (if (:no-history options) true false)
-       :db/fulltext    (if (:fulltext options) true false)
-       }
-      (apply-uniqueness options))))
+(defn spec->attribute [kind attr-name spec]
+  (let [type      (:type spec)
+        options   (set (:db spec))
+        [type many?] (if (sequential? type) [(first type) true] [type false])
+        type      (if (= :kw-ref type) :ref type)
+        attribute {:db/ident       (keyword (name kind) (name attr-name))
+                   :db/valueType   (keyword "db.type" (name type))
+                   :db/cardinality (if many? :db.cardinality/many :db.cardinality/one)
+                   :db/index       (if (:index options) true false)
+                   :db/isComponent (if (:component options) true false)
+                   :db/noHistory   (if (:no-history options) true false)
+                   :db/fulltext    (if (:fulltext options) true false)}]
+    (cond (:unique-value options) (assoc attribute :db/unique :db.unique/value)
+          (:unique-identity options) (assoc attribute :db/unique :db.unique/identity)
+          :else attribute)))
 
 (defn ->entity-schema [schema]
   (let [kind (-> schema :kind :value)]
     (assert kind (str "kind missing: " schema))
     (assert (keyword? kind) (str "kind must be keyword: " kind))
-    (for [[key spec] (seq (dissoc schema :kind :id :*))]
-      (let [type (:type spec)
-            db   (:db spec)
-            [type db] (if (sequential? type) [(first type) (conj db :many)] [type db])]
-        (build-attribute kind (concat [key type] db))))))
+    (for [[attr spec] (seq (dissoc schema :kind :id :*))]
+      (spec->attribute kind attr spec))))
 
 (defn ->enum-schema [{:keys [enum values]}]
   (mapv (fn [val] {:db/ident (keyword (name enum) (name val))}) values))
@@ -60,6 +52,29 @@
     (:enum schema) (->enum-schema schema)
     :else (throw (ex-info "Invalid schema" schema))))
 
+(defn attribute->spec [attribute]
+  (let [ident       (:db/ident attribute)
+        value-type  (:db/valueType attribute)
+        cardinality (:db/cardinality attribute)
+        index?      (:db/index attribute)
+        unique      (:db/unique attribute)
+        component?  (:db/isComponent attribute)
+        no-history? (:db/noHistory attribute)
+        fulltext?   (:db/fulltext attribute)
+        kind        (keyword (namespace ident))
+        attr-name   (keyword (name ident))
+        schema-type (keyword (name value-type))
+        schema-type (if (= :db.cardinality/many cardinality) [schema-type] schema-type)
+        db          (remove nil? [(when index? :index)
+                                  (when component? :component)
+                                  (when no-history? :no-history)
+                                  (when fulltext? :fulltext)
+                                  (when (= :db.unique/identity unique) :unique-identity)
+                                  (when (= :db.unique/value unique) :unique-value)])
+        spec        {:type schema-type}
+        spec        (if (seq db) (assoc spec :db db) spec)]
+    [kind attr-name spec]))
+
 ;; ^^^^^ schema ^^^^^
 
 (defn connect [uri]
@@ -68,11 +83,17 @@
 
 (defn datomic-db [db] (datomic/db @(.-conn db)))
 
-(defn transact! [connection transaction]
-  (datomic/transact connection transaction))
+(defn transact!
+  ([transaction]
+   (transact! @api/impl transaction))
+  ([db transaction]
+   (let [connection @(.-conn db)]
+     (assert (instance? Connection connection))
+     (datomic/transact connection transaction))))
+
 
 (defn install-schema! [db]
-  @(transact! @(.-conn db) (.-db-schema db)))
+  @(transact! db (.-db-schema db)))
 
 (defn clear [db]
   (api/-assert-safety-off! "clear")
@@ -151,22 +172,22 @@
   (list (-> entity ccc/remove-nils (assoc :db/id id))))
 
 (defn- retract-field-forms [id original retracted-keys]
-  (core-reduce (fn [form key]
-                 (let [o-val (get original key)]
-                   (if (set? o-val)
-                     (core-reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form o-val)
-                     (conj form [:db/retract id key (id-or-val o-val)]))))
-               [] retracted-keys))
+  (reduce (fn [form key]
+            (let [o-val (get original key)]
+              (if (set? o-val)
+                (reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form o-val)
+                (conj form [:db/retract id key (id-or-val o-val)]))))
+          [] retracted-keys))
 
 (defn- cardinality-many-retract-forms [updated original]
-  (core-reduce (fn [form [key val]]
-                 (if (or (set? val) (sequential? val))
-                   (let [id      (:db/id updated)
-                         o-val   (ccc/map-set id-or-val (get original key))
-                         missing (set/difference o-val (set val))]
-                     (core-reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form missing))
-                   form))
-               [] updated))
+  (reduce (fn [form [key val]]
+            (if (or (set? val) (sequential? val))
+              (let [id      (:db/id updated)
+                    o-val   (ccc/map-set id-or-val (get original key))
+                    missing (set/difference o-val (set val))]
+                (reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form missing))
+              form))
+          [] updated))
 
 (defn update-form [db id updated]
   (let [original          (into {} (datomic/entity (datomic/db @(.-conn db)) id))
@@ -287,7 +308,7 @@
 
 (defn- build-where-datalog [db kind kv-pairs]
   (cond (nil? (seq kv-pairs)) (where-all-of-kind db kind)
-        (= 1 (core-count kv-pairs)) (where-single-clause kind (first kv-pairs))
+        (= 1 (count kv-pairs)) (where-single-clause kind (first kv-pairs))
         :else (where-multi-clause kind kv-pairs)))
 
 (defn- do-find [db kind options]
@@ -312,6 +333,31 @@
        (map (fn [batch] (tx* db (map api/soft-delete batch))))
        doall))
 
+(def reserved-attr-namespaces #{"db" "db.alter" "db.attr" "db.bootstrap" "db.cardinality" "db.entity" "db.excise"
+                                "db.fn" "db.install" "db.lang" "db.part" "db.sys" "db.type" "db.unique" "fressian"
+                                "deleted" "garbage"})
+
+(defn installed-schema-idents
+  "Returns a list of all the fully qualified idents in the schema."
+  [db]
+  (->> (datomic/q '[:find ?ident :where [?e :db/ident ?ident]] (datomic-db db))
+       (map first)
+       (filter #(not (reserved-attr-namespaces (namespace %))))
+       sort))
+
+(defn- build-installed-schema-legend [db]
+  (let [ddb (datomic-db db)]
+    (->> (installed-schema-idents db)
+         (map #(->> % (datomic/entity ddb) (into {})))
+         (map attribute->spec)
+         (reduce (fn [result [kind attr spec]] (assoc-in result [kind attr] spec)) {}))))
+
+(defn- do-install-attribute [db schema attr-name]
+  (let [kind (-> schema :kind :value)
+        spec (-> schema attr-name)
+        attribute (spec->attribute kind attr-name spec)]
+    (transact! db (list attribute))))
+
 (deftype DatomicDB [db-schema legend config conn]
   api/DB
   (-clear [this] (clear this))
@@ -319,15 +365,19 @@
   (-count [this kind options] (do-count this kind options))
   (-entity [this kind id] (entity this kind id))
   (-find [this kind options] (do-find this kind options))
-  (-reduce [this kind f init options] (core-reduce f init (do-find this kind options)))
+  (-reduce [this kind f init options] (reduce f init (do-find this kind options)))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
+  migrator/Migrator
+  (installed-schema-legend [this _expected-legend] (build-installed-schema-legend this))
+  (install-schema! [this schema] (transact! this (->db-schema schema)))
+  (install-attribute! [this schema attr] (do-install-attribute this schema attr))
   )
 
 (defmethod api/-create-impl :datomic [config schemas]
-  (let [legend (legend/build schemas)
+  (let [legend     (legend/build schemas)
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect (:uri config))
-        db (DatomicDB. db-schemas legend config (atom connection))]
+        db         (DatomicDB. db-schemas legend config (atom connection))]
     (install-schema! db)
     db))

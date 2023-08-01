@@ -1,6 +1,7 @@
 (ns c3kit.bucket.memory-spec
   (:require
     [c3kit.bucket.api :as db]
+    [c3kit.bucket.migrator :as migrator]
     [speclj.core #?(:clj :refer :cljs :refer-macros) [after after-all around around-all before before before-all
                                                       context describe focus-context focus-describe focus-it it
                                                       pending should should-be should-be-a should-be-nil
@@ -40,9 +41,27 @@
     (it "clear" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/clear (api/create-db config nil))))
     (it "delete-all" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/delete-all (api/create-db config nil) :foo))))
 
-  (it "specifying the story"
+  (it "specifying the store"
     (let [store (atom {:foo :bar})
           db (db/create-db {:impl :memory :store store} [])]
       (should= :bar (:foo @(.-store db)))))
+
+  (context "migrator"
+
+    (it "installed-schema-legend"
+      (let [db (api/create-db config [spec/bibelot])]
+        (should= {:bibelot spec/bibelot} (migrator/installed-schema-legend db nil))))
+
+    (it "install-schema!"
+      (let [db (api/create-db config [])]
+        (migrator/install-schema! db spec/bibelot)
+        (should= {:bibelot spec/bibelot} @(.-legend db))))
+
+    (it "install-attribute!"
+      (let [db (api/create-db config [])]
+        (migrator/install-attribute! db spec/bibelot :size)
+        (should= {:bibelot {:size {:type :long}}} @(.-legend db))))
+
+    )
   )
 

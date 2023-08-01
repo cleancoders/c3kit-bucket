@@ -5,6 +5,7 @@
     [c3kit.apron.schema :as schema]
     [c3kit.apron.utilc :as utilc]
     [c3kit.bucket.api :as api]
+    [c3kit.bucket.migrator :as migrator]
     [clojure.string :as str]))
 
 (def ^:private id-source (atom 1000))
@@ -128,7 +129,7 @@
     entities))
 
 (defn- do-find [db kind options]
-  (ensure-schema! (.-legend db) kind)
+  (ensure-schema! @(.-legend db) kind)
   (->> (or (vals (get @(.-store db) kind)) [])
        (filter-where options)
        (api/-apply-drop-take options)))
@@ -148,8 +149,8 @@
      (entity db id)
      (cond
        (nil? id) nil
-       (map? id) (get-in @(.-store db) [kind (api/-coerced-id (.-legend db) kind (:id id))])
-       :else (get-in @(.-store db) [kind (api/-coerced-id (.-legend db) kind id)])))))
+       (map? id) (get-in @(.-store db) [kind (api/-coerced-id @(.-legend db) kind (:id id))])
+       :else (get-in @(.-store db) [kind (api/-coerced-id @(.-legend db) kind id)])))))
 
 (defn clear [db]
   (api/-assert-safety-off! "clear")
@@ -164,12 +165,12 @@
 
 (defn tx [db e]
   (let [e (ensure-id e)]
-    (swap! (.-store db) #(tx-entity (.-legend db) % e))
+    (swap! (.-store db) #(tx-entity @(.-legend db) % e))
     (tx-result db e)))
 
 (defn tx* [db entities]
   (let [entities (map ensure-id entities)]
-    (swap! (.-store db) (fn [store] (core-reduce #(tx-entity (.-legend db) %1 %2) store entities)))
+    (swap! (.-store db) (fn [store] (core-reduce #(tx-entity @(.-legend db) %1 %2) store entities)))
     (map #(tx-result db %) entities)))
 
 (defn delete-all [db kind]
@@ -178,6 +179,15 @@
     (swap! (.-store db) (fn [db]
                           (-> (update db [:all] #(apply dissoc % all-ids))
                               (dissoc kind))))))
+
+(defn- do-install-schema! [db schema]
+  (let [kind (-> schema :kind :value)]
+    (swap! (.-legend db) assoc kind schema)))
+
+(defn- do-install-attribute! [db schema attr]
+  (let [kind (-> schema :kind :value)
+        spec (get schema attr)]
+    (swap! (.-legend db) assoc-in [kind attr] spec)))
 
 (deftype MemoryDB [legend store]
   api/DB
@@ -189,8 +199,12 @@
   (-reduce [this kind f init options] (core-reduce f init (do-find this kind options)))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
+  migrator/Migrator
+  (installed-schema-legend [this _expected-legend] @legend)
+  (install-schema! [this schema] (do-install-schema! this schema))
+  (install-attribute! [this schema attr] (do-install-attribute! this schema attr))
   )
 
 (defmethod api/-create-impl :memory [config schemas]
   (let [store (or (:store config) (atom {}))]
-    (MemoryDB. (legend/build schemas) store)))
+    (MemoryDB. (atom (legend/build schemas)) store)))
