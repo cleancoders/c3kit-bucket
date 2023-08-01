@@ -10,6 +10,8 @@
     [clojure.string :as str]
     [datomic.api :as api]))
 
+;; TODO - MDM: Deprecate me
+
 (defn connect [uri]
   (api/create-database uri)
   (api/connect uri))

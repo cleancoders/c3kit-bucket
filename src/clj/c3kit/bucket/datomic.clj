@@ -185,13 +185,13 @@
       (throw (Exception. "Can't retract entity without an :id")))))
 
 (defn maybe-cas-form [entity]
-  (when-let [old-vals (:cas (meta entity))]
+  (when-let [cas (api/-get-cas entity)]
     (let [kind (:kind entity)
           id   (:id entity)]
       [(list kind id)
        (map (fn [[k v]]
               (vector :db/cas id (scope-attribute kind k) v (get entity k)))
-            old-vals)])))
+            cas)])))
 
 (defn tx-entity-form [db entity]
   (let [kind (kind! entity)

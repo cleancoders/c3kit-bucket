@@ -35,6 +35,20 @@
       (should= true sut/*safety*))
 
     )
+
+  (context "cas"
+
+    (it "with id"
+      (let [entity {:kind :widget :id 123}
+            result (sut/cas {:foo "bar"} entity)]
+        (should= {:foo "bar"} (:cas (meta result)))))
+
+    (it "without id"
+      (should-throw #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core.ExceptionInfo)
+                    "cas may not be applied to new entities."
+                    (sut/cas {:foo "bar"} {:kind :widget})))
+
+    )
   )
 
 (def bibelot
@@ -623,6 +637,39 @@
         (should= nil (:bang result))
         (should= nil (:bang (sut/reload @original)))))
     )
+  )
+
+(defn cas [config]
+
+  (context "cas"
+    (helper/with-schemas config [bibelot thingy])
+
+    (it "empty"
+      (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})]
+        (should= red (sut/tx (sut/cas {} red)))))
+
+    (it "matching"
+      (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})]
+        (should= red (sut/tx (sut/cas {:name "red"} red)))
+        (should= red (sut/tx (sut/cas {:color "red"} red)))
+        (should= red (sut/tx (sut/cas {:size 1} red)))
+        (should= red (sut/tx (sut/cas {:name "red" :size 1 :color "red"} red)))))
+
+    (it "mis-matching"
+      (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})]
+        (should-throw (sut/tx (sut/cas {:name "blue"} red)))
+        (should-throw (sut/tx (sut/cas {:color "green"} red)))
+        (should-throw (sut/tx (sut/cas {:size 2} red)))))
+
+    (it "mis-match in tx*"
+      (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})
+            green (sut/tx {:kind :bibelot :name "green" :size 2 :color "green"})]
+        (should-throw (sut/tx* [(sut/cas {:name "blue"} (assoc red :size 9)) (assoc green :size 9)]))
+        (should= 1 (:size (sut/reload red)))
+        (should= 2 (:size (sut/reload green)))))
+
+    )
+
   )
 
 (defn broken-in-datomic [config]

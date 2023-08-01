@@ -1,5 +1,7 @@
 (ns c3kit.bucket.dbc)
 
+;; TODO - MDM: Deprecate me
+
 (defn entity! [e id]
   (or e
       (throw (ex-info "Entity missing!" {:id id}))))

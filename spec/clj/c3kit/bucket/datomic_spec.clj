@@ -23,6 +23,7 @@
     (spec/count-specs config)
     (spec/kind-in-entity-is-optional config)
     (spec/multi-value-fields config)
+    (spec/cas config)
     )
 
   (context "safety"

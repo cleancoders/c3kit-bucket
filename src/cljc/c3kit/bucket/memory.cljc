@@ -29,10 +29,15 @@
         (update :all dissoc id)
         (update kind dissoc id))))
 
+(defn check-cas! [entity original]
+  (when-let [cas (api/-get-cas entity)]
+    (api/-check-cas! cas entity original)))
+
 (defn- install-entity [legend store e]
   (assert (:id e) (str "entity missing id!: " e))
   (let [original (get-in store [:all (:id e)])
         schema   (legend/for-kind legend (:kind e))
+        _        (check-cas! e original)
         e        (->> (utilc/keywordize-kind e)
                       ensure-id
                       (merge-with-original original)

@@ -233,6 +233,24 @@ Requires the *safety* be turned off."
   [config schemas]
   (-create-impl config schemas))
 
+(defn cas
+  "Compare And Swap.  Marks the entity for compare and swap of old-attrs.  If the entity values do not match
+  those in old-attrs, the transaction will fail and an exception will be thrown."
+  [old-attrs entity]
+  (when-not (:id entity)
+    (throw (ex-info "cas may not be applied to new entities." {:old-attrs old-attrs :entity entity})))
+  (when old-attrs
+    (assert (map? old-attrs))
+    (with-meta entity {:cas old-attrs})))
+
+(defn -get-cas [entity] (:cas (meta entity)))
+
+(defn -check-cas! [cas entity original]
+  (doseq [[k v] cas]
+    (let [actual (get original k)]
+      (when-not (= v actual)
+        (throw (ex-info (str "cas failure: " (pr-str v) " " (pr-str actual)) {:cas cas :entity entity :original original}))))))
+
 ;; TODO - MDM:
 ;;  2) middleware for saving and loading. timestamps is a saving middleware
 ;;  3) apply to test data.  Bring in entity and for-kind features

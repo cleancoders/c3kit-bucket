@@ -99,6 +99,7 @@
       (spec/count-specs config)
       (spec/broken-in-datomic config)
       (spec/kind-is-required config)
+      (spec/cas config)
       )
 
     (context "safety"

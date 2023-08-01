@@ -3,6 +3,7 @@
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.jdbc-spec :as jdbc-spec]
+            [c3kit.bucket.postgres]
             [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all]))
 
@@ -37,6 +38,7 @@
       (spec/reduce-specs config)
       (spec/count-specs config)
       (spec/broken-in-datomic config)
+      (spec/cas config)
 
       (context "column with reserved word as name"
 

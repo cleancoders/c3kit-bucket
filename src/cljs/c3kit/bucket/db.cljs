@@ -7,6 +7,8 @@
             [c3kit.apron.utilc :as utilc]
             [c3kit.bucket.dbc :as dbc]))
 
+;; TODO - MDM: Deprecate me
+
 (def ^:private db (atom {:all {}}))
 (defn replace-db-atom! [new-atom]
   (reset! new-atom @db)

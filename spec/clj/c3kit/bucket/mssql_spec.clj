@@ -45,6 +45,7 @@
       (spec/reduce-specs config)
       (spec/count-specs config)
       (spec/broken-in-datomic config)
+      (spec/cas config)
 
       )
     )

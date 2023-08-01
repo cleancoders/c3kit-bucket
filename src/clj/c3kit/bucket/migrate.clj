@@ -9,6 +9,8 @@
     [datomic.api :as api]
     ))
 
+;; TODO - MDM: Deprecate me
+
 (def applied-migrations #{})
 
 (defn schema-attr-id [key]

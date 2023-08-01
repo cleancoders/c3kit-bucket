@@ -32,6 +32,7 @@
   (spec/kind-in-entity-is-optional config)
   (spec/broken-in-datomic config)
   (spec/multi-value-fields config)
+  (spec/cas config)
 
   (context "safety"
     (around [it] (with-redefs [api/*safety* true] (it)))
