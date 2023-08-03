@@ -6,9 +6,7 @@
             [c3kit.bucket.api :as db]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
-            [clojure.string :as str])
-  (:import (java.net URI)
-           (java.nio.file FileSystems Files Paths)))
+            [clojure.string :as str]))
 
 ;(defmethod migration-schema :postgres [_config]
 ;  (merge-with merge default-migration-schema {:kind {:db {:table "migrations"}}
@@ -21,9 +19,10 @@
 (defn migration-name? [arg] (boolean (when (string? arg) (re-matches migration-name-pattern arg))))
 
 (defn ensure-migration-schema! [{:keys [_db _preview?] :as config}]
-  (when-not (migrator/installed-schema-legend @_db "migration")
-    (migrator/install-schema! @_db (migrator/schema config))
-    (log/warn "Installed 'migration' schema because it was missing.")))
+  (when-not _preview?
+    (when-not (migrator/installed-schema-legend @_db "migration")
+      (migrator/install-schema! @_db (migrator/schema config))
+      (log/warn "Installed 'migration' schema because it was missing."))))
 
 (defn fetch-migration [{:keys [_db]} name]
   (db/ffind-by- @_db :migration :name name))
@@ -97,33 +96,14 @@
 
 ;; ^^^^^ locking ^^^^^
 
-(defn namespace->path [namespace] (-> namespace (str/replace "-" "_") (str/replace "." "/")))
-(defn namespace->package [namespace] (-> namespace (str/replace "-" "_")))
-(defn path->namespace [path] (-> path (str/replace #".clj$" "") (str/replace "_" "-") (str/replace "/" ".")))
-
-(defn- path-listing [path]
-  (let [listing (Files/list path)]
-    (mapv #(str (.getFileName %)) (-> listing .iterator iterator-seq))))
-
-(defn package-filenames [package]
-  (let [^String package-path      (namespace->path package)
-        ^ClassLoader class-loader (.getContextClassLoader (Thread/currentThread))
-        package-url               (.getResource class-loader package-path)
-        ^URI package-uri          (when package-url (.toURI package-url))]
-    (when package-url
-      (if (= "jar" (.getScheme package-uri))
-        (with-open [fs (FileSystems/newFileSystem package-uri {})]
-          (path-listing (.getPath fs package-path (into-array String []))))
-        (path-listing (Paths/get package-uri))))))
-
 (defn available-migration-names [{:keys [migration-ns] :as config}]
   (when (or (nil? migration-ns) (str/blank? (name migration-ns)))
     (throw (ex-info ":migration-ns is missing from the database config." config)))
-  (let [filenames (package-filenames (name migration-ns))]
+  (let [filenames (util/resources-in (name migration-ns))]
     (if (seq filenames)
       (->> filenames
            (filter #(re-matches #"[0-9]{8}.*\.clj" %))
-           (map path->namespace)
+           (map util/path->namespace)
            sort)
       (log/warn "No migrations found in :migration-ns" config))))
 

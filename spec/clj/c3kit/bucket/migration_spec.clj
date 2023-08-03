@@ -21,27 +21,6 @@
 
   (context "loading migration namespaces"
 
-    (context "list package files"
-
-      (it "file system"
-        (should= ["20230101.clj" "20230202.clj" "20230303.clj"]
-                 (sort (sut/package-filenames "c3kit.bucket.migration_samples"))))
-
-      (it "jar file"
-        (let [result (sut/package-filenames "clojure.java")]
-          (should-contain "io" result)))
-
-      (it "missing"
-        (should= nil (sut/package-filenames "some.missing.package")))
-
-      )
-
-    (it "ns / path"
-      (should= "foo/bar/fizz_bang" (sut/namespace->path "foo.bar.fizz-bang"))
-      (should= "foo.bar.fizz-bang" (sut/path->namespace "foo/bar/fizz_bang"))
-      (should= "fizz-bang" (sut/path->namespace "fizz_bang.clj"))
-      (should= "foo.bar.fizz-bang" (sut/path->namespace "foo/bar/fizz_bang.clj")))
-
     (it "find available migrations - missing :migration-ns"
       (should-throw ExceptionInfo ":migration-ns is missing from the database config."
                     (sut/available-migration-names {})))
