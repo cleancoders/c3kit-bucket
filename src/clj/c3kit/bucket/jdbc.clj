@@ -6,6 +6,7 @@
             [c3kit.apron.schema :as schema]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
+            [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
@@ -31,7 +32,6 @@
      (log/debug "executing SQL:" command)
      (jdbc/execute! conn command options)
      (catch Exception e
-       (prn "Choked on SQL: " command)
        (log/error "Choked on SQL: " command)
        (throw e)))))
 
@@ -61,7 +61,9 @@
   {:int     "int4"
    :long    "int4"
    :boolean "bool"
-   :instant "timestamp without time zone"})
+   :instant "timestamp without time zone"
+   ;:string  "text"
+   })
 
 (defn dialect [db] (.-dialect db))
 
@@ -72,22 +74,22 @@
   ([[key spec]] (column-name key spec))
   ([key spec] (or (-> spec :db :column) (name key))))
 
-(defn sql-table-col [dialect key spec]
+(defn sql-col-type [dialect spec]
   (let [type (:type spec)]
-    (str "\"" (column-name key spec) "\" "
-         (or (-> spec :db :type) (schema-type->db-type dialect type) (name type)))))
+    (or (-> spec :db :type) (schema-type->db-type dialect type) (name type))))
 
-(defn sql-add-column [dialect schema attr]
-  (str "ALTER TABLE " (table-name schema)
-       " ADD COLUMN " (sql-table-col dialect attr (get schema attr))))
+(defn sql-table-col [dialect key spec] (str "\"" (column-name key spec) "\" " (sql-col-type dialect spec)))
+
+(defn sql-add-column
+  ([dialect table col spec]
+   (str "ALTER TABLE " (name table) " ADD COLUMN \"" (name col) "\" " (sql-col-type dialect spec)))
+  ([dialect schema attr]
+   (str "ALTER TABLE " (table-name schema) " ADD COLUMN " (sql-table-col dialect attr (get schema attr)))))
 
 (defn sql-create-table [dialect schema]
   (str "CREATE TABLE " (table-name schema) " ("
        (str/join "," (map (fn [[key spec]] (sql-table-col dialect key spec)) (dissoc schema :kind)))
        ")"))
-
-(defn add-column [db schema attr]
-  (execute-conn! (.-ds db) [(sql-add-column (.-dialect db) schema attr)]))
 
 (defn create-table-from-schema [db schema]
   (let [dialect (.-dialect db)
@@ -400,6 +402,10 @@
                                    :cursors     :close
                                    :result-type :forward-only}))))
 
+(defmulti existing-tables (fn [db] (.-dialect db)))
+(defmulti table-column-specs (fn [db _table] (.-dialect db)))
+(defmulti sql-rename-column (fn [db _table _col-old _col-new] (.-dialect db)))
+
 (defn clear [db]
   (api/-assert-safety-off! "clear")
   (doseq [[_ schema] (.-legend db)]
@@ -412,6 +418,39 @@
         sql (str "DELETE FROM " table " WHERE 1 = 1")]
     (execute-one-conn! (.-ds db) [sql])))
 
+(defn build-table-schema [db name->key result table]
+  (let [columns (table-column-specs db table)
+        schema  (core-reduce (fn [result [column spec]]
+                               (let [key (get name->key [table column] (keyword column))]
+                                 (assoc result key spec)))
+                             {} columns)]
+    (assoc result (get name->key table) schema)))
+
+(defn build-installed-schema-legend [db legend]
+  (let [db-names->schema-keys (core-reduce (fn [result [kind schema]]
+                                             (let [table  (table-name schema)
+                                                   result (assoc result table kind)]
+                                               (core-reduce (fn [result [attr spec]]
+                                                              (let [column (column-name attr spec)]
+                                                                (assoc result [table column] attr)))
+                                                            result (dissoc schema :kind)))) {} legend)
+        tables                (existing-tables db)]
+    (core-reduce (partial build-table-schema db db-names->schema-keys) {} tables)))
+
+(defn do-add-attribute!
+  ([db schema attr] (execute! db [(sql-add-column (.-dialect db) schema attr)]))
+  ([db kind attr spec] (execute! db [(sql-add-column (.-dialect db) kind attr spec)])))
+
+(defn do-remove-attribute! [db kind attr]
+  (let [sql (str "ALTER TABLE " (name kind) " DROP COLUMN IF EXISTS \"" (name attr) "\"")]
+    (execute! db [sql])))
+
+(defn do-rename-attribute! [db kind attr new-kind new-attr]
+  (when-not (= kind new-kind)
+    (throw (ex-info "cannot rename attribute kind" {:kind kind :attr attr :new-kind new-kind :new-attr new-attr})))
+  (let [sql (sql-rename-column db kind attr new-attr)]
+    (execute! db [sql])))
+
 (deftype JDBCDB [legend dialect ds mappings]
   api/DB
   (-clear [this] (clear this))
@@ -422,7 +461,13 @@
   (-reduce [this kind f init options] (reduce this kind f init options))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
-  )
+  migrator/Migrator
+  (installed-schema-legend [this existing-legend] (build-installed-schema-legend this existing-legend))
+  (install-schema! [this schema] (execute! this (sql-create-table dialect schema)))
+  (add-attribute! [this schema attr] (do-add-attribute! this schema attr))
+  (add-attribute! [this kind attr spec] (do-add-attribute! this kind attr spec))
+  (remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
+  (rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :jdbc [config schemas]
   (let [dialect (:dialect config)
@@ -442,3 +487,10 @@
   "Perform a custom SQL query for a specific kind on the default db instance (api/impl)."
   [kind sql]
   (find-sql- @api/impl kind sql))
+
+(defmulti auto-int-primary-key identity)
+(defmethod auto-int-primary-key :default [_] "serial PRIMARY KEY")
+
+(defmethod migrator/schema :jdbc [config]
+  (merge-with merge migrator/default-migration-schema {:id   {:db {:type "serial PRIMARY KEY"}}
+                                                       :name {:db {:type "varchar(255) UNIQUE"}}}))

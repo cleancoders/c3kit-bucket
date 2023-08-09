@@ -194,7 +194,7 @@
         (when-not (= (str/lower-case (name expected)) (str/lower-case (name actual-type)))
           (log/warn (str kind "/" (name attr) " - type mismatch. expected: '" expected "' but was '" actual-type "'"))))
       (do (log/warn (str kind "/" (name attr) " - attribute missing. Creating."))
-          (when-not _preview? (migrator/install-attribute! @_db schema attr))))))
+          (when-not _preview? (migrator/add-attribute! @_db schema attr))))))
 
 (defn log-extra-attributes [schema attributes]
   (let [expected (set (keys (dissoc schema :kind)))

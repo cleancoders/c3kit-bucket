@@ -352,11 +352,49 @@
          (map attribute->spec)
          (reduce (fn [result [kind attr spec]] (assoc-in result [kind attr] spec)) {}))))
 
-(defn- do-install-attribute [db schema attr-name]
-  (let [kind (-> schema :kind :value)
-        spec (-> schema attr-name)
-        attribute (spec->attribute kind attr-name spec)]
+(defn- do-install-attribute! [db kind attr spec]
+  (let [attribute (spec->attribute kind attr spec)]
     (transact! db (list attribute))))
+
+(defn- schema-attr-id [datomic-db key]
+  (first (map first (datomic/q '[:find ?e :in $ ?ident :where [?e :db/ident ?ident]] datomic-db key))))
+
+(defn retract-attribute-values [db kind attr]
+  (let [qualified-attr (keyword (name kind) (name attr))
+        ddb            (datomic-db db)
+        attr-id        (schema-attr-id ddb qualified-attr)]
+    (when attr-id
+      (log/info (str "  retracting all values for " qualified-attr))
+      (doall (->> (datomic/q '[:find ?e ?v :in $ ?attr :where [?e ?attr ?v]] ddb qualified-attr)
+                  (map (fn [[id v]] [:db/retract id attr v]))
+                  (partition-all 100)
+                  (map (partial transact! db)))))))
+
+(defn trash-attribute [db kind attr]
+  (let [qualified-attr (keyword (name kind) (name attr))
+        ddb            (datomic-db db)
+        attr-id        (schema-attr-id ddb qualified-attr)]
+    (if attr-id
+      (do
+        (log/info (str "  removing " qualified-attr))
+        (let [new-name (keyword "garbage" (str (name kind) "." (name attr) "_" (System/currentTimeMillis)))]
+          (transact! db [{:db/id attr-id :db/ident new-name}])))
+      (log/warn "  remove: MISSING " qualified-attr))))
+
+(defn- do-remove-attribute! [db kind attr]
+  (retract-attribute-values db kind attr)
+  (trash-attribute db kind attr))
+
+(defn do-rename-attribute! [db kind attr new-kind new-attr]
+  (let [qualified-old (keyword (name kind) (name attr))
+        qualified-new (keyword (name new-kind) (name new-attr))
+        ddb           (datomic-db db)
+        old-id        (schema-attr-id ddb qualified-old)
+        new-id        (schema-attr-id ddb qualified-new)]
+    (cond (some? new-id) (throw (ex-info "rename to existing attribute" {:old qualified-old :new qualified-new}))
+          (nil? old-id) (log/warn "  rename FAILED: MISSING " qualified-old)
+          :else (do (log/info (str "  renaming " qualified-old " to " qualified-new))
+                    (transact! db [{:db/id old-id :db/ident qualified-new}])))))
 
 (deftype DatomicDB [db-schema legend config conn]
   api/DB
@@ -371,8 +409,10 @@
   migrator/Migrator
   (installed-schema-legend [this _expected-legend] (build-installed-schema-legend this))
   (install-schema! [this schema] (transact! this (->db-schema schema)))
-  (install-attribute! [this schema attr] (do-install-attribute this schema attr))
-  )
+  (add-attribute! [this schema attr] (migrator/add-attribute! this (-> schema :kind :value) attr (get schema attr)))
+  (add-attribute! [this kind attr spec] (do-install-attribute! this kind attr spec))
+  (remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
+  (rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :datomic [config schemas]
   (let [legend     (legend/build schemas)
@@ -381,3 +421,6 @@
         db         (DatomicDB. db-schemas legend config (atom connection))]
     (install-schema! db)
     db))
+
+(defmethod migrator/schema :datomic [_]
+  (merge-with merge migrator/default-migration-schema {:name {:db [:unique-value]}}))

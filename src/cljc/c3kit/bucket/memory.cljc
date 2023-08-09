@@ -2,6 +2,7 @@
   (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
   (:require
     [c3kit.apron.legend :as legend]
+    [c3kit.apron.log :as log]
     [c3kit.apron.schema :as schema]
     [c3kit.apron.utilc :as utilc]
     [c3kit.bucket.api :as api]
@@ -184,10 +185,24 @@
   (let [kind (-> schema :kind :value)]
     (swap! (.-legend db) assoc kind schema)))
 
-(defn- do-install-attribute! [db schema attr]
-  (let [kind (-> schema :kind :value)
-        spec (get schema attr)]
-    (swap! (.-legend db) assoc-in [kind attr] spec)))
+(defn do-remove-attribute! [db kind attr]
+  (tx* db (map #(dissoc % attr) (do-find db kind [])))
+  (swap! (.-legend db) update kind dissoc attr))
+
+(defn do-rename-attribute! [db kind attr new-kind new-attr]
+  (when-not (= kind new-kind)
+    (throw (ex-info "cannot rename attribute kind" {:kind kind :attr attr :new-kind new-kind :new-attr new-attr})))
+  (let [spec        (get-in @(.-legend db) [kind attr])
+        new-exists? (some? (get-in @(.-legend db) [kind new-attr]))]
+    (cond new-exists? (throw (ex-info "rename to existing attribute" {:kind kind :old attr :new new-attr}))
+          (some? spec) (do (swap! (.-legend db) #(-> (update % kind dissoc attr) (assoc-in [kind new-attr] spec)))
+                           (tx* db (->> (map (fn [e]
+                                               (when-let [v (get e attr)]
+                                                 (-> (dissoc e attr)
+                                                     (assoc new-attr v))))
+                                             (do-find db kind []))
+                                        (remove nil?))))
+          :else (log/warn "  rename FAILED: MISSING " kind attr))))
 
 (deftype MemoryDB [legend store]
   api/DB
@@ -202,8 +217,10 @@
   migrator/Migrator
   (installed-schema-legend [this _expected-legend] @legend)
   (install-schema! [this schema] (do-install-schema! this schema))
-  (install-attribute! [this schema attr] (do-install-attribute! this schema attr))
-  )
+  (add-attribute! [this schema attr] (migrator/add-attribute! this (-> schema :kind :value) attr (get schema attr)))
+  (add-attribute! [this kind attr spec] (swap! legend assoc-in [kind attr] spec))
+  (remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
+  (rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :memory [config schemas]
   (let [store (or (:store config) (atom {}))]

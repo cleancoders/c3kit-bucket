@@ -8,9 +8,11 @@
 
 (defprotocol Migrator
   "API for migration operations"
-  (installed-schema-legend [this legend])
-  (install-schema! [this schema])
-  (install-attribute! [this schema attr])
+  (installed-schema-legend [this legend] "Returns a map/legend of all schemas installed.  Uses existing legend keys for renamed tables/columns.")
+  (install-schema! [this schema] "Install the given schema into the database schema.")
+  (add-attribute! [this schema attr] [this kind attr spec] "Add an attribute to the database schema.")
+  (remove-attribute! [this kind attr] "Remove an attribute from the database schema. All values will be removed.")
+  (rename-attribute! [this kind attr new-kind new-attr] "Rename the attribute.  SQL implementations may not allow the kind to change.")
   )
 
 (defmulti schema :impl)

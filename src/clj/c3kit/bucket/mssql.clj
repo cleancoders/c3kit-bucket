@@ -29,3 +29,6 @@
         [update-sql & update-params] (jdbc/build-update-sql dialect t-map entity)]
     (cons (str "IF NOT EXISTS (" fetch-sql ") " insert-sql " ELSE " update-sql)
           (concat fetch-params insert-params update-params))))
+
+
+(defmethod jdbc/auto-int-primary-key :mssql [_] "bigint IDENTITY PRIMARY KEY")

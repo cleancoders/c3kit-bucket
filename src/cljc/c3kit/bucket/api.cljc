@@ -198,25 +198,33 @@ Useful when processing many entities without loading them all at the same time.
   (or (:db/delete? (meta entity))
       (:db/delete? entity)))
 
+(defn reload-
+  "reload with explicit db"
+  [db e] (when-let [id (:id e)] (entity- db (:kind e) id)))
+
 (defn reload
   "Returns the entity freshly loaded from the database."
-  ([e] (reload @impl e))
-  ([db e] (when-let [id (:id e)] (entity- db (:kind e) id))))
+  [e] (reload- @impl e))
 
+(defn delete-all-
+  "delete-all with explicit db"
+  [db kind]
+  (-assert-safety-off! "delete-all")
+  (-delete-all db kind))
 
 (defn delete-all
   "Delete all entities"
-  ([kind] (delete-all @impl kind))
-  ([db kind]
-   (-assert-safety-off! "delete-all")
-   (-delete-all db kind)))
+  [kind] (delete-all- @impl kind))
+
+(defn clear-
+  "clear with explicit db"
+  [db] (-clear db))
 
 (defn clear
   "Clear the database.  Removes all entities stored.
 Presumably only for tests or in-memory implementation, but it will work on any implementation.
 Requires the *safety* be turned off."
-  ([] (-clear @impl))
-  ([db] (-clear db)))
+  [] (-clear @impl))
 
 (defmulti -create-impl (fn [config _schema] (:impl config)))
 (defn create-db
