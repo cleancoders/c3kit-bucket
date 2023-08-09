@@ -1,5 +1,6 @@
 (ns c3kit.bucket.memory-spec
   (:require
+    [c3kit.apron.log :as log]
     [c3kit.bucket.api :as db]
     [c3kit.bucket.migrator :as migrator]
     [speclj.core #?(:clj :refer :cljs :refer-macros) [after after-all around around-all before before before-all
@@ -88,6 +89,12 @@
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))))
 
+    (it "remove-attribute! that doesn't exist"
+      (migrator/-install-schema! @db spec/bibelot)
+      (log/capture-logs
+        (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
+        (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
+
     (it "rename-attribute!"
       (let [_          (migrator/-install-schema! @db spec/bibelot)
             bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
@@ -105,6 +112,11 @@
     (it "rename-attribute! - new attribute exists"
       (migrator/-install-schema! @db spec/bibelot)
       (should-throw (migrator/-rename-attribute! @db :bibelot :color :bibelot :size)))
+
+    (it "rename-attribute! - existing missing"
+      (migrator/-install-schema! @db spec/bibelot)
+      (log/capture-logs
+        (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size))))
     )
   )
 

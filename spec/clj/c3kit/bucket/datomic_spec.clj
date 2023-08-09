@@ -218,8 +218,7 @@
             result (migrator/-installed-schema-legend @db {:bubble schema})]
         (should= {:type :string} (-> result :bubble :name))
         (should= {:type :long} (-> result :bubble :size))
-        (should= {:type :string} (-> result :bubble :color))
-        (should= schema (:bubble @(.-legend @db)))))
+        (should= {:type :string} (-> result :bubble :color))))
 
     (it "schema-exists?"
       (should= false (migrator/-schema-exists? @db spec/bibelot))
@@ -229,8 +228,7 @@
     (it "add-attribute!"
       (let [_      (migrator/-add-attribute! @db :gum :name {:type :string})
             result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
-        (should= {:type :string} (-> result :gum :name))
-        (should-contain :name (:gum @(.-legend @db)))))
+        (should= {:type :string} (-> result :gum :name))))
 
     (it "add-attribute! - schema attr"
       (let [_      (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
@@ -245,6 +243,12 @@
             new-legend (migrator/-installed-schema-legend @db nil)]
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))))
+
+    (it "remove-attribute! that doesn't exist"
+      (migrator/-install-schema! @db spec/bibelot)
+      (log/capture-logs
+        (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
+        (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
     (it "remove-attribute! - multi"
       (let [db         (api/create-db config [])
@@ -269,5 +273,10 @@
     (it "rename-attribute! - new attribute exists"
       (migrator/-install-schema! @db spec/bibelot)
       (should-throw (migrator/-rename-attribute! @db :bibelot :color :bibelot :size)))
+
+    (it "rename-attribute! - existing missing"
+      (migrator/-install-schema! @db spec/bibelot)
+      (log/capture-logs
+        (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size))))
     )
   )

@@ -220,28 +220,30 @@
               result (migrator/-installed-schema-legend @db {:bubble schema})]
           (should= {:type :string :db {:type "varchar(42)"}} (-> result :bubble :name))
           (should= {:type :long :db {:type "integer"}} (-> result :bubble :size))
-          (should= {:type :string :db {:type "varchar(55)"}} (-> result :bubble :color))
-          (should= schema (:bubble @(.-legend @db)))))
+          (should= {:type :string :db {:type "varchar(55)"}} (-> result :bubble :color))))
 
       (it "schema-exists?"
         (should= false (migrator/-schema-exists? @db bibelot))
         (migrator/-install-schema! @db bibelot)
         (should= true (migrator/-schema-exists? @db bibelot)))
 
+      (it "column-exists?"
+        (should= false (jdbc/column-exists? @db "bibelot" "name"))
+        (migrator/-install-schema! @db bibelot)
+        (should= true (jdbc/column-exists? @db "bibelot" "name")))
+
       (it "add-attribute!"
         (let [_      (migrator/-install-schema! @db bibelot)
               _      (migrator/-add-attribute! @db :bibelot :fizz {:type :string :db {:type "varchar(123)"}})
               result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
-          (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))
-          (should-contain :fizz (:bibelot @(.-legend @db)))))
+          (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))))
 
       (it "add-attribute! - schema attr"
         (let [_      (migrator/-install-schema! @db bibelot)
               schema (assoc bibelot :fizz {:type :string :db {:type "varchar(123)"}})
               _      (migrator/-add-attribute! @db schema :fizz)
               result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
-          (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))
-          (should-contain :fizz (:bibelot @(.-legend @db)))))
+          (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))))
 
       (it "remove-attribute!"
         (let [_          (migrator/-install-schema! @db bibelot)
@@ -257,7 +259,7 @@
         (migrator/-install-schema! @db bibelot)
         (log/capture-logs
           (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
-          (should-throw (migrator/-remove-attribute! @db :fizz :bang))))
+          (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
       (it "rename-attribute!"
         (let [_          (migrator/-install-schema! @db bibelot)
@@ -278,6 +280,12 @@
         (migrator/-install-schema! @db bibelot)
         (log/capture-logs
           (should-throw (migrator/-rename-attribute! @db :bibelot :color :bibelot :size))))
+
+      (it "rename-attribute! - existing doesnt exist"
+        (migrator/-install-schema! @db bibelot)
+        (log/capture-logs
+          (should-not-throw (migrator/-rename-attribute! @db :bibelot :blah :bibelot :size))
+          (should-not-throw (migrator/-rename-attribute! @db :fizz :blah :fizz :size))))
 
       (context "schema translation"
 

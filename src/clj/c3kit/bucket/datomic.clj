@@ -362,16 +362,19 @@
 (defn- do-install-schema! [db schema]
   (let [kind (-> schema :kind :value)]
     (log/info (str "  installing schema " kind))
-    @(transact! db (->db-schema schema))
-    (swap! (.-legend db) assoc kind schema)))
-
-(defn- do-install-attribute! [db kind attr spec]
-  (let [attribute (spec->attribute kind attr spec)]
-    (transact! db (list attribute)))
-  (swap! (.-legend db) assoc-in [kind attr] spec))
+    @(transact! db (->db-schema schema))))
 
 (defn- schema-attr-id [datomic-db key]
   (first (map first (datomic/q '[:find ?e :in $ ?ident :where [?e :db/ident ?ident]] datomic-db key))))
+
+(defn- do-add-attribute! [db kind attr spec]
+  (let [qualified-attr (keyword (name kind) (name attr))
+        attr-id        (schema-attr-id (datomic-db db) qualified-attr)]
+    (if attr-id
+      (log/warn "  add attribute ALREADY EXISTS " qualified-attr)
+      (let [attribute (spec->attribute kind attr spec)]
+        (log/info "  adding attribute " qualified-attr)
+        (transact! db (list attribute))))))
 
 (defn retract-attribute-values [db kind attr]
   (let [qualified-attr (keyword (name kind) (name attr))
@@ -425,7 +428,7 @@
   (-installed-schema-legend [this _expected-legend] (installed-schema-legend this))
   (-install-schema! [this schema] (do-install-schema! this schema))
   (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))
-  (-add-attribute! [this kind attr spec] (do-install-attribute! this kind attr spec))
+  (-add-attribute! [this kind attr spec] (do-add-attribute! this kind attr spec))
   (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 

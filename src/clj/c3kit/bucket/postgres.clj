@@ -85,3 +85,9 @@
 
 (defmethod jdbc/table-exists? :postgres [db table]
   (:exists (jdbc/execute-one! db ["SELECT EXISTS (SELECT FROM pg_tables WHERE tablename=?)" table])))
+
+(defmethod jdbc/column-exists? :postgres [db table column]
+  (->> (jdbc/execute! db ["SELECT column_name FROM information_schema.columns WHERE table_name = ?" table])
+       (map :columns/column_name)
+       (some #(= column %))
+       boolean))

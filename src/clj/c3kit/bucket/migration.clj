@@ -93,9 +93,9 @@
   `(-attempt-with-lock ~config (fn [] ~@body)))
 
 (defn- config-from-service []
-  (let [config (:bucket/config app/app)
+  (let [config  (:bucket/config app/app)
         schemas (:bucket/schemas app/app)
-        impl (:bucket/impl app/app)]
+        impl    (:bucket/impl app/app)]
     (when-not (some? config) (throw (ex-info "bucket service must be started in order to sync-schemas" {})))
     (assoc config :-db impl :-schemas schemas)))
 
@@ -205,7 +205,7 @@
         extra    (set/difference actual expected)
         kind     (-> schema :kind :value)]
     (doseq [attr extra]
-      (log/warn (str kind "/" attr " - extra attribute. Unused?")))))
+      (log/warn (str kind "/" (name attr) " - extra attribute. Unused?")))))
 
 (defn- sync-kind [{:keys [-preview? -db -installed-legend] :as config} schema]
   (let [kind            (-> schema :kind :value)
@@ -222,7 +222,7 @@
 
 (def ^:private sync-buffer-time (time/minutes 3))
 
-(defn- sync-needed? [{:keys [-preview? -db] :as config}]
+(defn- sync-needed? [config]
   (let [last-sync      (fetch-sync config)
         last-synced-at (or (:at last-sync) time/epoch)]
     (time/before? last-synced-at (time/ago sync-buffer-time))))
@@ -256,6 +256,7 @@
   ([config schemas]
    (-ensure-migration-schema! config)
    (-wait-for-unlock! config)
+   (println "modded")
    (if (sync-needed? config)
      (when-not (attempt-with-lock! config (-maybe-sync-schemas-unlocked! config schemas))
        (recur config schemas))

@@ -186,8 +186,10 @@
     (swap! (.-legend db) assoc kind schema)))
 
 (defn do-remove-attribute! [db kind attr]
-  (tx* db (map #(dissoc % attr) (do-find db kind [])))
-  (swap! (.-legend db) update kind dissoc attr))
+  (if (some? (get @(.-legend db) kind))
+    (do (tx* db (map #(dissoc % attr) (do-find db kind [])))
+        (swap! (.-legend db) update kind dissoc attr))
+    (log/warn "  remove MISSING " (keyword (name kind) (name attr)))))
 
 (defn do-rename-attribute! [db kind attr new-kind new-attr]
   (when-not (= kind new-kind)

@@ -70,3 +70,9 @@
 
 (defmethod jdbc/table-exists? :h2 [db table]
   (some? (jdbc/execute-one! db ["SELECT * FROM information_schema.tables WHERE table_name=?" table])))
+
+(defmethod jdbc/column-exists? :h2 [db table column]
+  (->> (jdbc/execute! db ["SELECT column_name FROM information_schema.columns WHERE table_name = ?" table])
+       (map :columns/column_name)
+       (some #(= column %))
+       boolean))

@@ -406,6 +406,7 @@
 (defmulti table-column-specs (fn [db _table] (.-dialect db)))
 (defmulti sql-rename-column (fn [db _table _col-old _col-new] (.-dialect db)))
 (defmulti table-exists? (fn [db _table] (.-dialect db)))
+(defmulti column-exists? (fn [db _table _column] (.-dialect db)))
 
 (defn clear [db]
   (api/-assert-safety-off! "clear")
@@ -443,26 +444,32 @@
     (core-reduce (partial build-table-schema db db-names->schema-keys) {} tables)))
 
 (defn- do-install-schema [db schema]
-  (execute! db (sql-create-table dialect schema))
-  (swap! (.-legend db) assoc (-> schema :kind :value) schema))
+  (log/info (str "  installing schema " (-> schema :kind :value) " (" (table-name schema) ")"))
+  (execute! db (sql-create-table dialect schema)))
 
 (defn do-add-attribute!
   ([db schema attr]
-   (execute! db [(sql-add-column (.-dialect db) schema attr)])
-   (swap! (.-legend db) assoc-in [(-> schema :kind :value) attr] (get schema attr)))
+   (execute! db [(sql-add-column (.-dialect db) schema attr)]))
   ([db kind attr spec]
-   (execute! db [(sql-add-column (.-dialect db) kind attr spec)])
-   (swap! (.-legend db) assoc-in [kind attr] spec)))
+   (if (column-exists? db (name kind) (name attr))
+     (log/warn "  add attribute ALREADY EXISTS " (keyword (name kind) (name attr)))
+     (execute! db [(sql-add-column (.-dialect db) kind attr spec)]))))
 
 (defn do-remove-attribute! [db kind attr]
-  (let [sql (str "ALTER TABLE " (name kind) " DROP COLUMN IF EXISTS \"" (name attr) "\"")]
-    (execute! db [sql])))
+  (if (column-exists? db (name kind) (name attr))
+    (let [sql (str "ALTER TABLE " (name kind) " DROP COLUMN IF EXISTS \"" (name attr) "\"")]
+      (log/info "  removing " (keyword (name kind) (name attr)))
+      (execute! db [sql]))
+    (log/warn "  remove MISSING " (keyword (name kind) (name attr)))))
 
 (defn do-rename-attribute! [db kind attr new-kind new-attr]
   (when-not (= kind new-kind)
     (throw (ex-info "cannot rename attribute kind" {:kind kind :attr attr :new-kind new-kind :new-attr new-attr})))
-  (let [sql (sql-rename-column db kind attr new-attr)]
-    (execute! db [sql])))
+  (if (column-exists? db (name kind) (name attr))
+    (let [sql (sql-rename-column db kind attr new-attr)]
+      (log/info (str "  renaming " (keyword (name kind) (name attr)) " to " (keyword (name new-kind) (name new-attr))))
+      (execute! db [sql]))
+    (log/warn "  rename MISSING " (keyword (name kind) (name attr)))))
 
 (deftype JDBCDB [legend dialect ds mappings]
   api/DB

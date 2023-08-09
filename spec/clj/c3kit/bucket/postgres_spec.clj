@@ -93,6 +93,11 @@
           (migrator/-install-schema! @db jdbc-spec/bibelot)
           (should= true (migrator/-schema-exists? @db jdbc-spec/bibelot)))
 
+        (it "column-exists?"
+          (should= false (jdbc/column-exists? @db "bibelot" "name"))
+          (migrator/-install-schema! @db jdbc-spec/bibelot)
+          (should= true (jdbc/column-exists? @db "bibelot" "name")))
+
         (it "add-attribute!"
           (let [_      (migrator/-install-schema! @db jdbc-spec/bibelot)
                 _      (migrator/-add-attribute! @db :bibelot :fizz {:type :string :db {:type "varchar(123)"}})
