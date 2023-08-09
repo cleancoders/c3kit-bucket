@@ -91,7 +91,6 @@
      (assert (instance? Connection connection))
      (datomic/transact connection transaction))))
 
-
 (defn install-schema! [db]
   @(transact! db (.-db-schema db)))
 
@@ -419,7 +418,6 @@
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect (:uri config))
         db         (DatomicDB. db-schemas legend config (atom connection))]
-    (install-schema! db)
     db))
 
 (defmethod migrator/migration-schema :datomic [_]
