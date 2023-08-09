@@ -256,7 +256,6 @@
   ([config schemas]
    (-ensure-migration-schema! config)
    (-wait-for-unlock! config)
-   (println "modded")
    (if (sync-needed? config)
      (when-not (attempt-with-lock! config (-maybe-sync-schemas-unlocked! config schemas))
        (recur config schemas))
