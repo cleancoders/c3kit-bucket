@@ -1,91 +1,89 @@
 (ns c3kit.bucket.migration
-  (:require [c3kit.apron.legend :as legend]
+  (:require [c3kit.apron.app :as app]
+            [c3kit.apron.corec :as ccc]
+            [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
             [c3kit.apron.time :as time]
             [c3kit.apron.util :as util]
+            [c3kit.bucket.api :as api]
             [c3kit.bucket.api :as db]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [clojure.string :as str]))
-
-;(defmethod migration-schema :postgres [_config]
-;  (merge-with merge default-migration-schema {:kind {:db {:table "migrations"}}
-;                                              :id   {:db {:type "serial primary key"}}
-;                                              :name {:db {:type "varchar(255) UNIQUE"}}}))
 
 (def LOCK "LOCK")
 (def SYNC_SCHEMAS "SYNC_SCHEMAS")
 (def migration-name-pattern #"[0-9]{8}.*")
 (defn migration-name? [arg] (boolean (when (string? arg) (re-matches migration-name-pattern arg))))
 
-(defn ensure-migration-schema! [{:keys [_db _preview?] :as config}]
-  (when-not _preview?
-    (when-not (migrator/installed-schema-legend @_db "migration")
-      (migrator/install-schema! @_db (migrator/schema config))
+(defn -ensure-migration-schema! [{:keys [-db -preview?] :as config}]
+  (when-not -preview?
+    (when-not (migrator/installed-schema-legend @-db "migration")
+      (migrator/install-schema! @-db (migrator/schema config))
       (log/warn "Installed 'migration' schema because it was missing."))))
 
-(defn fetch-migration [{:keys [_db]} name]
-  (db/ffind-by- @_db :migration :name name))
+(defn -fetch-migration [{:keys [-db]} name]
+  (db/ffind-by- @-db :migration :name name))
 
-(defn create-migration! [{:keys [_db]} name]
-  (db/tx- @_db {:kind :migration :name name :at (time/now)}))
+(defn -create-migration! [{:keys [-db]} name]
+  (db/tx- @-db {:kind :migration :name name :at (time/now)}))
 
-(defn delete-migration! [{:keys [_db] :as config} name]
-  (when-let [migration (fetch-migration config name)]
-    (db/delete- @_db migration)))
+(defn -delete-migration! [{:keys [-db] :as config} name]
+  (when-let [migration (-fetch-migration config name)]
+    (db/delete- @-db migration)))
 
-(defn applied-migrations [{:keys [_db]}]
-  (db/find- @_db :migration))
+(defn -applied-migrations [{:keys [-db]}]
+  (db/find- @-db :migration))
 
-(defn applied-migration-names [config]
-  (->> (applied-migrations config)
+(defn -applied-migration-names [config]
+  (->> (-applied-migrations config)
        (map :name)
        (filter migration-name?)
        sort))
 
 ;; ----- locking -----
 
-(defn fetch-lock [{:keys [_db] :as config}]
-  (or (fetch-migration config LOCK) (db/tx- @_db {:kind :migration :name LOCK})))
+(defn -fetch-lock [{:keys [-db] :as config}]
+  (or (-fetch-migration config LOCK) (db/tx- @-db {:kind :migration :name LOCK})))
 
-(defn attempt-lock! [{:keys [_db] :as config}]
-  (let [lock (fetch-lock config)]
+(defn -attempt-lock! [{:keys [-db] :as config}]
+  (let [lock (-fetch-lock config)]
     (try
-      (db/tx- @_db (db/cas {:at nil} (assoc lock :at (time/now))))
+      (db/tx- @-db (db/cas {:at nil} (assoc lock :at (time/now))))
       (catch Exception _ nil))))
 
-(defn release-lock! [{:keys [_db] :as config}]
-  (let [lock (fetch-lock config)]
+(defn -release-lock! [{:keys [-db] :as config}]
+  (let [lock (-fetch-lock config)]
     (when (:at lock)
-      (db/tx- @_db lock :at nil))))
+      (db/tx- @-db lock :at nil))))
 
-(defn locked? [config]
-  (let [lock (fetch-lock config)]
+(defn -locked? [config]
+  (let [lock (-fetch-lock config)]
     (boolean (and lock (:at lock)))))
 
-(def lock-wait-time (time/seconds 10))
-(def lock-check-delay (time/milliseconds 250))
+(def ^:private lock-wait-time (time/seconds 10))
+(def ^:private lock-check-delay (time/milliseconds 250))
 
-(defn wait-for-unlock! [config]
-  (when (locked? config)
+(defn -wait-for-unlock! [config]
+  (when (-locked? config)
     (log/report "Waiting for lock to release...")
     (let [attempts (/ lock-wait-time lock-check-delay)]
       (loop [attempts attempts]
         (when (not (pos? attempts))
           (throw (Exception. "Migration failed to acquire lock on database!")))
-        (when (locked? config)
+        (when (-locked? config)
           (Thread/sleep lock-check-delay)
           (recur (dec attempts)))))))
 
-(defn -attempt-with-lock [{:keys [_preview?] :as config} action-fn]
-  (cond _preview? (do (action-fn) true)
-        (attempt-lock! config) (try
-                                 (log/report "Lock acquired.")
-                                 (action-fn)
-                                 true
-                                 (finally
-                                   (release-lock! config)
-                                   (log/report "Lock released.")))
+(defn -attempt-with-lock [{:keys [-preview?] :as config} action-fn]
+  (cond -preview? (do (action-fn) true)
+        (-attempt-lock! config) (try
+                                  (log/report "Lock acquired.")
+                                  (action-fn)
+                                  true
+                                  (finally
+                                    (-release-lock! config)
+                                    (log/report "Lock released.")))
         :else false))
 
 (defmacro attempt-with-lock!
@@ -94,9 +92,16 @@
   [config & body]
   `(-attempt-with-lock ~config (fn [] ~@body)))
 
+(defn- config-from-service []
+  (let [config (:bucket/config app/app)
+        schemas (:bucket/schemas app/app)
+        impl (:bucket/impl app/app)]
+    (when-not (some? config) (throw (ex-info "bucket service must be started in order to sync-schemas" {})))
+    (assoc config :-db impl :-schemas schemas)))
+
 ;; ^^^^^ locking ^^^^^
 
-(defn available-migration-names [{:keys [migration-ns] :as config}]
+(defn -available-migration-names [{:keys [migration-ns] :as config}]
   (when (or (nil? migration-ns) (str/blank? (name migration-ns)))
     (throw (ex-info ":migration-ns is missing from the database config." config)))
   (let [filenames (util/resources-in (name migration-ns))]
@@ -112,16 +117,17 @@
 (defn- str<= [a b] (not (str> a b)))
 (defn- str>= [a b] (not (str< a b)))
 
-(defn calculate-ups [available current target]
+(defn- calculate-ups [available current target]
   (filter #(and (str> % current) (str<= % target)) available))
-(defn calculate-downs [available existing current target]
+
+(defn- calculate-downs [available existing current target]
   (let [available-path (filter #(and (str> % target) (str<= % current)) available)
         existing-path  (filter #(and (str> % target)) existing)]
     (when-not (= available-path existing-path)
       (throw (Exception. (str target " - can't find consistent path down. migration(s) were not recorded."))))
     (reverse existing-path)))
 
-(defn calculate-ups-and-downs [available existing target]
+(defn -calculate-ups-and-downs [available existing target]
   (let [target  (if (nil? target) (last available) target)
         current (last existing)]
     (cond (nil? target) {:up [] :down []}
@@ -131,19 +137,13 @@
           (str< target current) {:up [] :down (calculate-downs available existing current target)}
           :else (log/error "How did I get here?"))))
 
-(defn init-config [config]
-  (let [db (delay (db/create-db config [(migrator/schema config)]))]
-    (merge
-      {:_db db}
-      config)))
-
-(defn migrations-needed [config available target]
-  (let [applied (applied-migration-names config)
-        {:keys [up down] :as result} (calculate-ups-and-downs available applied target)]
+(defn- migrations-needed [config available target]
+  (let [applied (-applied-migration-names config)
+        {:keys [up down] :as result} (-calculate-ups-and-downs available applied target)]
     (when (or (seq up) (seq down))
       result)))
 
-(defn -maybe-migrate-unlocked! [{:keys [migration-ns _preview?] :as config} available target]
+(defn -maybe-migrate-unlocked! [{:keys [migration-ns -preview?] :as config} available target]
   (if-let [{:keys [up down]} (migrations-needed config available target)]
     (do
       (when (seq up)
@@ -152,33 +152,36 @@
           (let [var-sym (symbol (str migration-ns "." m "/up"))
                 m-fn    (util/resolve-var var-sym)]
             (log/info (str m " - applying migration UP"))
-            (when-not _preview?
+            (when-not -preview?
               (m-fn)
-              (create-migration! config m)))))
+              (-create-migration! config m)))))
       (when (seq down)
         (log/report "Running Database Migrations DOWN")
         (doseq [m down]
           (let [var-sym (symbol (str migration-ns "." m "/down"))
                 m-fn    (util/resolve-var var-sym)]
             (log/info (str m " - applying migration DOWN"))
-            (when-not _preview?
+            (when-not -preview?
               (m-fn)
-              (delete-migration! config m))))))
+              (-delete-migration! config m))))))
     (log/report "No migrations needed.")))
 
 (defn- maybe-lock-and-migrate! [config available target]
-  (wait-for-unlock! config)
+  (-wait-for-unlock! config)
   (if (migrations-needed config available target)
     (when-not (attempt-with-lock! config (-maybe-migrate-unlocked! config available target))
       (recur config available target))
     (log/report "No migrations needed.")))
 
 (defn migrate!
+  "Migrate the database. The :migration-ns (in config) will be search for migration scripts that will be run either up
+  or down to reach the target migration.  If no target is provided, it will migrate up to the latest."
+  ([] (migrate! (config-from-service)))
   ([config] (migrate! config nil))
-  ([{:keys [_preview?] :as config} target]
-   (let [config    (init-config config)
-         available (available-migration-names config)]
-     (if _preview?
+  ([{:keys [-preview?] :as config} target]
+   (-ensure-migration-schema! config)
+   (let [available (-available-migration-names config)]
+     (if -preview?
        (-maybe-migrate-unlocked! config available target)
        (maybe-lock-and-migrate! config available target)))))
 
@@ -186,17 +189,17 @@
 
 ;; ----- synchronization -----
 
-(defn sync-attribute [{:keys [_preview? _db] :as config} schema attr installed-attrs]
+(defn- sync-attribute [{:keys [-preview? -db] :as config} schema attr installed-attrs]
   (let [spec (get schema attr)
         kind (-> schema :kind :value)]
-    (if-let [actual-type (get installed-attrs attr)]
+    (if-let [actual-type (or (get-in installed-attrs [attr :db :type]) (get-in installed-attrs [attr :type]))]
       (let [expected (or (-> spec :db :type) (:type spec))]
         (when-not (= (str/lower-case (name expected)) (str/lower-case (name actual-type)))
           (log/warn (str kind "/" (name attr) " - type mismatch. expected: '" expected "' but was '" actual-type "'"))))
       (do (log/warn (str kind "/" (name attr) " - attribute missing. Creating."))
-          (when-not _preview? (migrator/add-attribute! @_db schema attr))))))
+          (when-not -preview? (migrator/add-attribute! @-db schema attr))))))
 
-(defn log-extra-attributes [schema attributes]
+(defn- log-extra-attributes [schema attributes]
   (let [expected (set (keys (dissoc schema :kind)))
         actual   (set (keys attributes))
         extra    (set/difference actual expected)
@@ -204,31 +207,31 @@
     (doseq [attr extra]
       (log/warn (str kind "/" attr " - extra attribute. Unused?")))))
 
-(defn sync-kind [{:keys [_preview? _db _installed-legend] :as config} schema]
+(defn- sync-kind [{:keys [-preview? -db -installed-legend] :as config} schema]
   (let [kind            (-> schema :kind :value)
-        installed-attrs (get _installed-legend kind)]
+        installed-attrs (get -installed-legend kind)]
     (if (seq installed-attrs)
       (doseq [attr (sort (keys (dissoc schema :kind)))]
         (sync-attribute config schema attr installed-attrs))
       (do (log/warn (str kind " - kind missing. Creating."))
-          (when-not _preview? (migrator/install-schema! @_db schema))))
+          (when-not -preview? (migrator/install-schema! @-db schema))))
     (log-extra-attributes schema installed-attrs)))
 
-(defn fetch-sync [{:keys [_db] :as config}]
-  (or (fetch-migration config SYNC_SCHEMAS) (db/tx- @_db {:kind :migration :name SYNC_SCHEMAS})))
+(defn- fetch-sync [{:keys [-db] :as config}]
+  (or (-fetch-migration config SYNC_SCHEMAS) (db/tx- @-db {:kind :migration :name SYNC_SCHEMAS})))
 
-(def sync-buffer-time (time/minutes 3))
+(def ^:private sync-buffer-time (time/minutes 3))
 
-(defn sync-needed? [{:keys [_preview? _db] :as config}]
+(defn- sync-needed? [{:keys [-preview? -db] :as config}]
   (let [last-sync      (fetch-sync config)
         last-synced-at (or (:at last-sync) time/epoch)]
     (time/before? last-synced-at (time/ago sync-buffer-time))))
 
-(defn perform-synchronization! [{:keys [_db] :as config} schemas]
+(defn- perform-synchronization! [{:keys [-db] :as config} schemas]
   (log/report (str "Synchronizing " (count schemas) " schema(s) with the database"))
   (let [legend           (legend/build schemas)
-        installed-legend (migrator/installed-schema-legend @_db legend)
-        config           (assoc config :_installed-legend installed-legend :_expected-legend legend)]
+        installed-legend (migrator/installed-schema-legend @-db legend)
+        config           (assoc config :-installed-legend installed-legend :_expected-legend legend)]
     (doseq [schema (sort-by #(-> % :kind :value) schemas)]
       (sync-kind config schema))
     (let [expected (set (map #(-> % :kind :value) schemas))
@@ -237,39 +240,33 @@
       (doseq [kind (sort extra)]
         (log/warn (str kind " - extra kind. Unused?"))))))
 
-(defn maybe-sync-schemas-unlocked! [{:keys [_preview? _db] :as config} schemas]
+(defn -maybe-sync-schemas-unlocked! [{:keys [-preview? -db] :as config} schemas]
   (if (sync-needed? config)
     (do (perform-synchronization! config schemas)
-        (when-not _preview?
-          (db/tx- @_db (fetch-sync config) :at (time/now))))
+        (when-not -preview?
+          (db/tx- @-db (fetch-sync config) :at (time/now))))
     (log/info "Synchronization was performed recently. Skipping.")))
 
-(defn- maybe-lock-and-sync! [config schemas]
-  (wait-for-unlock! config)
-  (if (sync-needed? config)
-    (when-not (attempt-with-lock! config (maybe-sync-schemas-unlocked! config schemas))
-      (recur config schemas))
-    (log/info "Synchronization was performed recently. Skipping.")))
+(defn sync-schemas!
+  "Non-destructive synchronization of database schema from the supplied schemas.  That is, any new kinds or attributes
+  will be added, but existing attributes will not be changed or removed.  Inconsistencies will be logged."
+  ([]
+   (let [config (config-from-service)]
+     (sync-schemas! config (:-schemas config))))
+  ([config schemas]
+   (-wait-for-unlock! config)
+   (if (sync-needed? config)
+     (when-not (attempt-with-lock! config (-maybe-sync-schemas-unlocked! config schemas))
+       (recur config schemas))
+     (log/info "Synchronization was performed recently. Skipping."))))
 
 ;; ^^^^^ synchronization ^^^^^
 
-(def usage (str "\n**** c3kit migration USAGE:\n"
-                "\n"
-                "clj -Mmigrate:test [command | migration-name] [preview]\n"
-                "\n"
-                " Commands:\n"
-                "   help:  prints this message\n"
-                "   init:  synchronize the database schema with :full-schema-var\n"
-                "   list:  show available and when they were applied\n"
-                " migration-name - e.g. 20220806-first\n"
-                "   migrations will be applied UP or DOWN to make the named migration the latest applied\n"
-                " no command will migrate UP to latest migration\n"
-                " preview: migrations/syncing will not update the database\n"))
+;; ----- Main -----
 
-
-(defn list-migrations [config]
-  (let [available (available-migration-names config)
-        applied   (reduce #(assoc %1 (:name %2) %2) {} (applied-migrations config))]
+(defn- list-migrations [config]
+  (let [available (-available-migration-names config)
+        applied   (reduce #(assoc %1 (:name %2) %2) {} (-applied-migrations config))]
     (println "\nmigration listing:\n")
     (println (format "%-50s %-20s" "Migration" "Applied At"))
     (println (apply str (take 75 (repeat "-"))))
@@ -277,20 +274,37 @@
       (let [at (get-in applied [name :at])]
         (println (format "%-50s %s" name (if at (time/unparse :iso8601 at) "")))))))
 
-;(defn run [args]
-;  (let [first-arg (first args)]
-;    (cond (= "help" first-arg) (println usage)
-;          ;(= "init" first-arg) (sync-schemas! config (vals all/schemas))
-;          (= "list" first-arg) (list-migrations config)
-;          (nil? first-arg) (migrate! config nil)
-;          (migration-name? first-arg) (migrate! config first-arg)
-;          :else (do (println "ERROR - unrecognized migration argument:" first-arg)
-;                    (println usage)))))
 
-;(defn -main [& args]
-;  (app/start! [main/legend main/db])
-;  (if (contains? (set args) "preview")
-;    (binding [migration/preview? true]
-;      (println "Migration preview mode turned on")
-;      (run (ccc/removev= args "preview")))
-;    (run args)))
+(def ^:private usage
+  (str "\n**** c3kit migration USAGE:\n"
+       "\n"
+       "clj -Mmigrate:test [command | migration-name] [preview]\n"
+       "\n"
+       " Commands:\n"
+       "   help:  prints this message\n"
+       "   init:  synchronize the database schema with :full-schema-var\n"
+       "   list:  show available and when they were applied\n"
+       " migration-name - e.g. 20220806-first\n"
+       "   migrations will be applied UP or DOWN to make the named migration the latest applied\n"
+       " no arguments will migrate UP to latest migration\n"
+       " preview: migrations/syncing will not update the database\n"))
+
+(defn -main [& args]
+  (app/start! [api/service])
+  (let [impl     @api/impl
+        config   (:bucket/config app/app)
+        schemas  (:bucket/schemas app/app)
+        preview? (contains? (set args) "preview")
+        config   (assoc config :-db impl :-preview? preview?)
+        args     (ccc/removev= args "preview")]
+    (when preview? (println "Migration preview mode turned on"))
+    (let [first-arg (first args)]
+      (cond (= "help" first-arg) (println usage)
+            (= "init" first-arg) (sync-schemas! config schemas)
+            (= "list" first-arg) (list-migrations config)
+            (nil? first-arg) (migrate! config nil)
+            (migration-name? first-arg) (migrate! config first-arg)
+            :else (do (println "ERROR - unrecognized migration argument:" first-arg)
+                      (println usage))))))
+
+;; ^^^^^ Main ^^^^^

@@ -15,7 +15,8 @@
             [c3kit.bucket.spec-helperc :as helper]
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
-            [c3kit.apron.time :as time :refer [ago minutes]]))
+            [c3kit.apron.time :as time :refer [ago minutes]]
+            #?(:clj [c3kit.apron.util :as util])))
 
 (describe "API"
 
@@ -49,6 +50,55 @@
                     (sut/cas {:foo "bar"} {:kind :widget})))
 
     )
+
+  #?(:clj
+     (context "clj"
+       (context "config"
+
+         (with-stubs)
+
+         (it "loading"
+           (with-redefs [util/read-edn-resource (stub :read-edn {:return {:foo "bar"}})]
+             (let [result (sut/load-config)]
+               (should= {:foo "bar"} result)
+               (should-have-invoked :read-edn {:with ["config/bucket.edn"]}))))
+
+         (it "config-var"
+           (let [config {:foo "bar" :config-var 'foo.bar}]
+             (with-redefs [util/read-edn-resource (stub :read-edn {:return config})
+                           util/var-value         (stub :var-value {:return {:fizz "bang"}})]
+               (let [result (sut/load-config)]
+                 (should= {:foo "bar" :fizz "bang"} result)
+                 (should-have-invoked :var-value {:with ['foo.bar]})))))
+
+         )
+
+       (context "service"
+
+         (it "start"
+           (let [config {:full-schema 'foo/bar :impl :memory}]
+             (with-redefs [sut/load-config (constantly config)
+                           util/var-value  (constantly [])]
+               (let [app (sut/-start-service {})]
+                 (should-contain :bucket/impl app)
+                 (should= config (:bucket/config app))
+                 (should= [] (:bucket/schemas app))))))
+
+         (it "start - missing :full-schema"
+           (with-redefs [sut/load-config (constantly {:impl :memory})]
+             (should-throw (sut/-start-service {}))))
+
+         (it "stop"
+           (let [app (sut/-stop-service {:bucket/impl :blah
+                                         :bucket/config :blah
+                                         :bucket/schemas :blah})]
+             (should-not-contain :bucket/impl app)
+             (should-not-contain :bucket/config app)
+             (should-not-contain :bucket/schemas app)))
+
+         )
+       )
+     )
   )
 
 (def bibelot
@@ -662,7 +712,7 @@
         (should-throw (sut/tx (sut/cas {:size 2} red)))))
 
     (it "mis-match in tx*"
-      (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})
+      (let [red   (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})
             green (sut/tx {:kind :bibelot :name "green" :size 2 :color "green"})]
         (should-throw (sut/tx* [(sut/cas {:name "blue"} (assoc red :size 9)) (assoc green :size 9)]))
         (should= 1 (:size (sut/reload red)))

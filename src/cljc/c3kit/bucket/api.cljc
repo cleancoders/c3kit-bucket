@@ -9,7 +9,8 @@
             [c3kit.apron.log :as log]
             [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
-            [c3kit.apron.schema :as schema]))
+            [c3kit.apron.schema :as schema]
+            #?(:clj [c3kit.apron.util :as util])))
 
 (defprotocol DB
   "API for database operations"
@@ -23,7 +24,7 @@
   (-tx* [this entities])
   )
 
-#?(:clj  (defonce impl (app/resolution! :db))
+#?(:clj  (defonce impl (app/resolution! :bucket/impl))
    :cljs (def impl (atom nil)))
 #?(:cljs (def set-impl! (partial reset! impl)))
 
@@ -258,6 +259,40 @@ Requires the *safety* be turned off."
     (let [actual (get original k)]
       (when-not (= v actual)
         (throw (ex-info (str "cas failure: " (pr-str v) " " (pr-str actual)) {:cas cas :entity entity :original original}))))))
+
+#?(:clj
+   (defn load-config
+     "Read config/bucket.edn from the classpath.  The config may should contain:
+       :impl         - and other keys required by create-db
+       :full-schema  - symbol of qualified var that holds a seq of all db schemas (for migration)
+       :migration-ns - symbol of namespace where all migration scripts are located
+       :config-var   - symbol of qualified var that holds the config map which will be merged in"
+     []
+     (let [config (util/read-edn-resource "config/bucket.edn")]
+       (if-let [config-var (:config-var config)]
+         (let [dynamic-config (util/var-value config-var)]
+           (-> (merge config dynamic-config)
+               (dissoc :config-var)))
+         config))))
+
+#?(:clj
+   (defn -start-service [app]
+     (let [config      (load-config)
+           _           (log/info "Starting bucket service: " (:impl config))
+           schemas-var (:full-schema config)
+           _           (when-not schemas-var (throw (ex-info ":full-schema missing from bucket config" config)))
+           schemas     (util/var-value schemas-var)
+           impl        (create-db config schemas)]
+       (assoc app :bucket/impl impl
+                  :bucket/config config
+                  :bucket/schemas schemas))))
+
+#?(:clj
+   (defn -stop-service [app]
+     (log/info "Stopping bucket service")
+     (dissoc app :bucket/impl :bucket/config :bucket/schemas)))
+
+#?(:clj (def service (app/service 'c3kit.bucket.api/-start-service 'c3kit.bucket.api/-stop-service)))
 
 ;; TODO - MDM:
 ;;  2) middleware for saving and loading. timestamps is a saving middleware
