@@ -174,7 +174,7 @@
      }))
 
 (defn key-map
-  ([db kind] (key-map (.-legend db) (.-mappings db) kind))
+  ([db kind] (key-map @(.-legend db) (.-mappings db) kind))
   ([legend mappings kind]
    (if-let [m (get @mappings kind)]
      m
@@ -282,8 +282,8 @@
       (api/-check-cas! cas entity (fetch-entity db conn t-map kind (:id entity)))
       (upsert-by-id-strategy db conn t-map entity))
     (jdbc/with-transaction [tx conn]
-      (api/-check-cas! cas entity (fetch-entity db tx t-map kind (:id entity)))
-      (upsert-by-id-strategy db tx t-map entity))))
+                           (api/-check-cas! cas entity (fetch-entity db tx t-map kind (:id entity)))
+                           (upsert-by-id-strategy db tx t-map entity))))
 
 (defn- do-tx [db conn entity]
   (let [kind  (:kind entity)
@@ -299,7 +299,7 @@
 (defn tx* [db entities]
   (binding [in-transaction? true]
     (jdbc/with-transaction [tx (.-ds db)]
-      (doall (map #(do-tx db tx %) entities)))))
+                           (doall (map #(do-tx db tx %) entities)))))
 
 (defn clause-with-operator [dialect {:keys [key->type] :as t-map} k v operator]
   (let [type (get key->type k)]
@@ -405,10 +405,11 @@
 (defmulti existing-tables (fn [db] (.-dialect db)))
 (defmulti table-column-specs (fn [db _table] (.-dialect db)))
 (defmulti sql-rename-column (fn [db _table _col-old _col-new] (.-dialect db)))
+(defmulti table-exists? (fn [db _table] (.-dialect db)))
 
 (defn clear [db]
   (api/-assert-safety-off! "clear")
-  (doseq [[_ schema] (.-legend db)]
+  (doseq [[_ schema] @(.-legend db)]
     (drop-table-from-schema db schema)
     (create-table-from-schema db schema)))
 
@@ -426,6 +427,10 @@
                              {} columns)]
     (assoc result (get name->key table) schema)))
 
+(defn schema-exists? [db schema]
+  (let [table-name (table-name schema)]
+    (table-exists? db table-name)))
+
 (defn build-installed-schema-legend [db legend]
   (let [db-names->schema-keys (core-reduce (fn [result [kind schema]]
                                              (let [table  (table-name schema)
@@ -437,9 +442,17 @@
         tables                (existing-tables db)]
     (core-reduce (partial build-table-schema db db-names->schema-keys) {} tables)))
 
+(defn- do-install-schema [db schema]
+  (execute! db (sql-create-table dialect schema))
+  (swap! (.-legend db) assoc (-> schema :kind :value) schema))
+
 (defn do-add-attribute!
-  ([db schema attr] (execute! db [(sql-add-column (.-dialect db) schema attr)]))
-  ([db kind attr spec] (execute! db [(sql-add-column (.-dialect db) kind attr spec)])))
+  ([db schema attr]
+   (execute! db [(sql-add-column (.-dialect db) schema attr)])
+   (swap! (.-legend db) assoc-in [(-> schema :kind :value) attr] (get schema attr)))
+  ([db kind attr spec]
+   (execute! db [(sql-add-column (.-dialect db) kind attr spec)])
+   (swap! (.-legend db) assoc-in [kind attr] spec)))
 
 (defn do-remove-attribute! [db kind attr]
   (let [sql (str "ALTER TABLE " (name kind) " DROP COLUMN IF EXISTS \"" (name attr) "\"")]
@@ -462,8 +475,9 @@
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   migrator/Migrator
+  (-schema-exists? [this schema] (schema-exists? this schema))
   (-installed-schema-legend [this existing-legend] (build-installed-schema-legend this existing-legend))
-  (-install-schema! [this schema] (execute! this (sql-create-table dialect schema)))
+  (-install-schema! [this schema] (do-install-schema this schema))
   (-add-attribute! [this schema attr] (do-add-attribute! this schema attr))
   (-add-attribute! [this kind attr spec] (do-add-attribute! this kind attr spec))
   (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
@@ -472,7 +486,7 @@
 (defmethod api/-create-impl :jdbc [config schemas]
   (let [dialect (:dialect config)
         ds      (jdbc/get-datasource config)
-        legend  (legend/build schemas)]
+        legend  (atom (legend/build schemas))]
     (require [(symbol (str "c3kit.bucket." (name dialect)))])
     (JDBCDB. legend dialect ds (atom {}))))
 
@@ -494,4 +508,5 @@
 
 (defmethod migrator/migration-schema :jdbc [config]
   (merge-with merge migrator/default-migration-schema {:id   {:db {:type "serial PRIMARY KEY"}}
-                                                       :name {:db {:type "varchar(255) UNIQUE"}}}))
+                                                       :name {:db {:type "varchar(255) UNIQUE"}}
+                                                       :at   {:db {:type "timestamp"}}}))

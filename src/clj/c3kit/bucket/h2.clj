@@ -67,3 +67,6 @@
 
 (defmethod jdbc/sql-rename-column :h2 [_db table col-old col-new]
   (str "ALTER TABLE " (name table) " ALTER COLUMN IF EXISTS \"" (name col-old) "\" RENAME TO \"" (name col-new) "\""))
+
+(defmethod jdbc/table-exists? :h2 [db table]
+  (some? (jdbc/execute-one! db ["SELECT * FROM information_schema.tables WHERE table_name=?" table])))

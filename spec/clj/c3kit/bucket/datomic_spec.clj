@@ -218,12 +218,19 @@
             result (migrator/-installed-schema-legend @db {:bubble schema})]
         (should= {:type :string} (-> result :bubble :name))
         (should= {:type :long} (-> result :bubble :size))
-        (should= {:type :string} (-> result :bubble :color))))
+        (should= {:type :string} (-> result :bubble :color))
+        (should= schema (:bubble @(.-legend @db)))))
+
+    (it "schema-exists?"
+      (should= false (migrator/-schema-exists? @db spec/bibelot))
+      (migrator/-install-schema! @db spec/bibelot)
+      (should= true (migrator/-schema-exists? @db spec/bibelot)))
 
     (it "add-attribute!"
       (let [_      (migrator/-add-attribute! @db :gum :name {:type :string})
             result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
-        (should= {:type :string} (-> result :gum :name))))
+        (should= {:type :string} (-> result :gum :name))
+        (should-contain :name (:gum @(.-legend @db)))))
 
     (it "add-attribute! - schema attr"
       (let [_      (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)

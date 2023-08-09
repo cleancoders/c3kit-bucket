@@ -279,7 +279,7 @@ Requires the *safety* be turned off."
 #?(:clj
    (defn -start-service [app]
      (let [config      (load-config)
-           _           (log/info "Starting bucket service: " (:impl config))
+           _           (log/info "Starting bucket service:" (:impl config))
            schemas-var (:full-schema config)
            _           (when-not schemas-var (throw (ex-info ":full-schema missing from bucket config" config)))
            schemas     (util/var-value schemas-var)

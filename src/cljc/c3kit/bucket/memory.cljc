@@ -215,6 +215,7 @@
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   migrator/Migrator
+  (-schema-exists? [this schema] (contains? @legend (-> schema :kind :value)))
   (-installed-schema-legend [this _expected-legend] @legend)
   (-install-schema! [this schema] (do-install-schema! this schema))
   (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))

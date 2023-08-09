@@ -88,6 +88,11 @@
             (should= {:type :long :db {:type "int4"}} (-> result :bubble :size))
             (should= {:type :string :db {:type "varchar(55)"}} (-> result :bubble :color))))
 
+        (it "schema-exists?"
+          (should= false (migrator/-schema-exists? @db jdbc-spec/bibelot))
+          (migrator/-install-schema! @db jdbc-spec/bibelot)
+          (should= true (migrator/-schema-exists? @db jdbc-spec/bibelot)))
+
         (it "add-attribute!"
           (let [_      (migrator/-install-schema! @db jdbc-spec/bibelot)
                 _      (migrator/-add-attribute! @db :bibelot :fizz {:type :string :db {:type "varchar(123)"}})

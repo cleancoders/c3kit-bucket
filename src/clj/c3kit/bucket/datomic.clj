@@ -84,6 +84,7 @@
 (defn datomic-db [db] (datomic/db @(.-conn db)))
 
 (defn transact!
+  "transact a datomic form. Returns a future, so don't forget to deref it if you need it to execute."
   ([transaction]
    (transact! @api/impl transaction))
   ([db transaction]
@@ -290,7 +291,7 @@
         :else (list ['?e attr value])))
 
 (defn- where-all-of-kind [db kind]
-  (let [schema       (legend/for-kind (.-legend db) kind)
+  (let [schema       (legend/for-kind @(.-legend db) kind)
         attrs        (keys (dissoc schema :id :kind))
         scoped-attrs (map #(scope-attribute kind %) attrs)]
     [(cons 'or (map (fn [a] ['?e a]) scoped-attrs))]))
@@ -345,6 +346,10 @@
         (filter #(not (reserved-attr-namespaces (namespace %))))
         sort)))
 
+(defn schema-exists? [db schema]
+  (let [kind (-> schema :kind :value name)]
+    (boolean (some #(= kind (namespace %)) (installed-schema-idents db)))))
+
 (defn installed-schema-legend
   ([] (installed-schema-legend @api/impl))
   ([db]
@@ -354,9 +359,16 @@
           (map attribute->spec)
           (reduce (fn [result [kind attr spec]] (assoc-in result [kind attr] spec)) {})))))
 
+(defn- do-install-schema! [db schema]
+  (let [kind (-> schema :kind :value)]
+    (log/info (str "  installing schema " kind))
+    @(transact! db (->db-schema schema))
+    (swap! (.-legend db) assoc kind schema)))
+
 (defn- do-install-attribute! [db kind attr spec]
   (let [attribute (spec->attribute kind attr spec)]
-    (transact! db (list attribute))))
+    (transact! db (list attribute)))
+  (swap! (.-legend db) assoc-in [kind attr] spec))
 
 (defn- schema-attr-id [datomic-db key]
   (first (map first (datomic/q '[:find ?e :in $ ?ident :where [?e :db/ident ?ident]] datomic-db key))))
@@ -366,7 +378,7 @@
         ddb            (datomic-db db)
         attr-id        (schema-attr-id ddb qualified-attr)]
     (when attr-id
-      (log/info (str "  retracting all values for " qualified-attr))
+      (log/info "  retracting all values for " qualified-attr)
       (doall (->> (datomic/q '[:find ?e ?v :in $ ?attr :where [?e ?attr ?v]] ddb qualified-attr)
                   (map (fn [[id v]] [:db/retract id attr v]))
                   (partition-all 100)
@@ -378,7 +390,7 @@
         attr-id        (schema-attr-id ddb qualified-attr)]
     (if attr-id
       (do
-        (log/info (str "  removing " qualified-attr))
+        (log/info "  removing " qualified-attr)
         (let [new-name (keyword "garbage" (str (name kind) "." (name attr) "_" (System/currentTimeMillis)))]
           (transact! db [{:db/id attr-id :db/ident new-name}])))
       (log/warn "  remove: MISSING " qualified-attr))))
@@ -409,15 +421,16 @@
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   migrator/Migrator
+  (-schema-exists? [this schema] (schema-exists? this schema))
   (-installed-schema-legend [this _expected-legend] (installed-schema-legend this))
-  (-install-schema! [this schema] (transact! this (->db-schema schema)))
+  (-install-schema! [this schema] (do-install-schema! this schema))
   (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))
   (-add-attribute! [this kind attr spec] (do-install-attribute! this kind attr spec))
   (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :datomic [config schemas]
-  (let [legend     (legend/build schemas)
+  (let [legend     (atom (legend/build schemas))
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect (:uri config))
         db         (DatomicDB. db-schemas legend config (atom connection))]

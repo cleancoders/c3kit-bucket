@@ -5,10 +5,11 @@
 (def default-migration-schema {:kind (s/kind :migration)
                                :id   {:type :int}
                                :name {:type :string}
-                               :at   {:type :timestamp}})
+                               :at   {:type :instant}})
 
 (defprotocol Migrator
   "API for migration operations"
+  (-schema-exists? [this schema])
   (-installed-schema-legend [this legend] "Returns a map/legend of all schemas installed.  Uses existing legend keys for renamed tables/columns.")
   (-install-schema! [this schema])
   (-add-attribute! [this schema attr] [this kind attr spec])

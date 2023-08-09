@@ -64,6 +64,11 @@
         (should= {:type :long} (-> result :bubble :size))
         (should= {:type :string} (-> result :bubble :color))))
 
+    (it "schema-exists?"
+      (should= false (migrator/-schema-exists? @db spec/bibelot))
+      (migrator/-install-schema! @db spec/bibelot)
+      (should= true (migrator/-schema-exists? @db spec/bibelot)))
+
     (it "add-attribute!"
       (let [_      (migrator/-add-attribute! @db :gum :name {:type :string})
             result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]

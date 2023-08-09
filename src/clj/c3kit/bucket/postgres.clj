@@ -82,3 +82,6 @@
 
 (defmethod jdbc/sql-rename-column :postgres [_db table col-old col-new]
   (str "ALTER TABLE " (name table) " RENAME COLUMN \"" (name col-old) "\" TO \"" (name col-new) "\""))
+
+(defmethod jdbc/table-exists? :postgres [db table]
+  (:exists (jdbc/execute-one! db ["SELECT EXISTS (SELECT FROM pg_tables WHERE tablename=?)" table])))

@@ -203,7 +203,8 @@
           (should= :migration (-> schema :kind :value))
           (should= :int (-> schema :id :type))
           (should= {:type "serial PRIMARY KEY"} (-> schema :id :db))
-          (should= {:type "varchar(255) UNIQUE"} (-> schema :name :db))))
+          (should= {:type "varchar(255) UNIQUE"} (-> schema :name :db))
+          (should= {:type "timestamp"} (-> schema :at :db))))
 
       (it "installed-schema-legend"
         (let [_      (jdbc/create-table-from-schema @db bibelot)
@@ -219,20 +220,28 @@
               result (migrator/-installed-schema-legend @db {:bubble schema})]
           (should= {:type :string :db {:type "varchar(42)"}} (-> result :bubble :name))
           (should= {:type :long :db {:type "integer"}} (-> result :bubble :size))
-          (should= {:type :string :db {:type "varchar(55)"}} (-> result :bubble :color))))
+          (should= {:type :string :db {:type "varchar(55)"}} (-> result :bubble :color))
+          (should= schema (:bubble @(.-legend @db)))))
+
+      (it "schema-exists?"
+        (should= false (migrator/-schema-exists? @db bibelot))
+        (migrator/-install-schema! @db bibelot)
+        (should= true (migrator/-schema-exists? @db bibelot)))
 
       (it "add-attribute!"
         (let [_      (migrator/-install-schema! @db bibelot)
               _      (migrator/-add-attribute! @db :bibelot :fizz {:type :string :db {:type "varchar(123)"}})
               result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
-          (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))))
+          (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))
+          (should-contain :fizz (:bibelot @(.-legend @db)))))
 
       (it "add-attribute! - schema attr"
         (let [_      (migrator/-install-schema! @db bibelot)
               schema (assoc bibelot :fizz {:type :string :db {:type "varchar(123)"}})
               _      (migrator/-add-attribute! @db schema :fizz)
               result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
-          (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))))
+          (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))
+          (should-contain :fizz (:bibelot @(.-legend @db)))))
 
       (it "remove-attribute!"
         (let [_          (migrator/-install-schema! @db bibelot)

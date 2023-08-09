@@ -15,10 +15,11 @@
 (def migration-name-pattern #"[0-9]{8}.*")
 (defn migration-name? [arg] (boolean (when (string? arg) (re-matches migration-name-pattern arg))))
 
-(defn -ensure-migration-schema! [{:keys [-db -preview?] :as config}]
-  (when-not -preview?
-    (when-not (migrator/-installed-schema-legend -db "migration")
-      (migrator/-install-schema! -db (migrator/migration-schema config))
+(defn -ensure-migration-schema! [{:keys [-db] :as config}]
+  (let [schema (migrator/migration-schema config)]
+    (swap! (.-legend -db) assoc (-> schema :kind :value) schema)
+    (when-not (migrator/-schema-exists? -db schema)
+      (migrator/-install-schema! -db schema)
       (log/warn "Installed 'migration' schema because it was missing."))))
 
 (defn -fetch-migration [{:keys [-db]} name]
@@ -109,7 +110,7 @@
            (filter #(re-matches #"[0-9]{8}.*\.clj" %))
            (map util/path->namespace)
            sort)
-      (log/warn "No migrations found in :migration-ns" config))))
+      (log/warn "No migrations found in :migration-ns" (select-keys config [:migration-ns])))))
 
 (defn- str> [a b] (pos? (compare a b)))
 (defn- str< [a b] (neg? (compare a b)))
@@ -235,7 +236,7 @@
       (sync-kind config schema))
     (let [expected (set (map #(-> % :kind :value) schemas))
           actual   (set (keys installed-legend))
-          extra    (disj (set/difference actual expected) "migration")]
+          extra    (disj (set/difference actual expected) :migration)]
       (doseq [kind (sort extra)]
         (log/warn (str kind " - extra kind. Unused?"))))))
 
@@ -253,6 +254,7 @@
    (let [config (config-from-service)]
      (sync-schemas! config (:-schemas config))))
   ([config schemas]
+   (-ensure-migration-schema! config)
    (-wait-for-unlock! config)
    (if (sync-needed? config)
      (when-not (attempt-with-lock! config (-maybe-sync-schemas-unlocked! config schemas))
@@ -263,7 +265,8 @@
 
 ;; ----- Main -----
 
-(defn- list-migrations [config]
+(defn- list-migrations [{:keys [-db] :as config}]
+  (-ensure-migration-schema! config)
   (let [available (-available-migration-names config)
         applied   (reduce #(assoc %1 (:name %2) %2) {} (-applied-migrations config))]
     (println "\nmigration listing:\n")
@@ -303,6 +306,8 @@
             (nil? first-arg) (migrate! config nil)
             (migration-name? first-arg) (migrate! config first-arg)
             :else (do (println "ERROR - unrecognized migration argument:" first-arg)
-                      (println usage))))))
+                      (println usage)
+                      (System/exit -1)))))
+  (System/exit 0))
 
 ;; ^^^^^ Main ^^^^^
