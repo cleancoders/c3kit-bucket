@@ -18,8 +18,8 @@
 
 (defn -ensure-migration-schema! [{:keys [-db -preview?] :as config}]
   (when-not -preview?
-    (when-not (migrator/installed-schema-legend @-db "migration")
-      (migrator/install-schema! @-db (migrator/schema config))
+    (when-not (migrator/-installed-schema-legend @-db "migration")
+      (migrator/-install-schema! @-db (migrator/migration-schema config))
       (log/warn "Installed 'migration' schema because it was missing."))))
 
 (defn -fetch-migration [{:keys [-db]} name]
@@ -197,7 +197,7 @@
         (when-not (= (str/lower-case (name expected)) (str/lower-case (name actual-type)))
           (log/warn (str kind "/" (name attr) " - type mismatch. expected: '" expected "' but was '" actual-type "'"))))
       (do (log/warn (str kind "/" (name attr) " - attribute missing. Creating."))
-          (when-not -preview? (migrator/add-attribute! @-db schema attr))))))
+          (when-not -preview? (migrator/-add-attribute! @-db schema attr))))))
 
 (defn- log-extra-attributes [schema attributes]
   (let [expected (set (keys (dissoc schema :kind)))
@@ -214,7 +214,7 @@
       (doseq [attr (sort (keys (dissoc schema :kind)))]
         (sync-attribute config schema attr installed-attrs))
       (do (log/warn (str kind " - kind missing. Creating."))
-          (when-not -preview? (migrator/install-schema! @-db schema))))
+          (when-not -preview? (migrator/-install-schema! @-db schema))))
     (log-extra-attributes schema installed-attrs)))
 
 (defn- fetch-sync [{:keys [-db] :as config}]
@@ -230,7 +230,7 @@
 (defn- perform-synchronization! [{:keys [-db] :as config} schemas]
   (log/report (str "Synchronizing " (count schemas) " schema(s) with the database"))
   (let [legend           (legend/build schemas)
-        installed-legend (migrator/installed-schema-legend @-db legend)
+        installed-legend (migrator/-installed-schema-legend @-db legend)
         config           (assoc config :-installed-legend installed-legend :_expected-legend legend)]
     (doseq [schema (sort-by #(-> % :kind :value) schemas)]
       (sync-kind config schema))

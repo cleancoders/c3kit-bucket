@@ -199,7 +199,7 @@
     (before (api/clear- @db))
 
     (it "schema"
-      (let [schema (migrator/schema {:impl :datomic})]
+      (let [schema (migrator/migration-schema {:impl :datomic})]
         (should= :migration (-> schema :kind :value))
         (should= :int (-> schema :id :type))
         (should= [:unique-value] (-> schema :name :db))))
@@ -207,60 +207,60 @@
     (it "installed-schema-legend"
       (let [db     (api/create-db config [])
             _      (sut/transact! db (sut/->db-schema spec/bibelot))
-            result (migrator/installed-schema-legend db {:bibelot spec/bibelot})]
+            result (migrator/-installed-schema-legend db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :bibelot :name))
         (should= {:type :long} (-> result :bibelot :size))
         (should= {:type :string} (-> result :bibelot :color))))
 
     (it "install-schema!"
       (let [schema (assoc-in spec/bibelot [:kind :value] :bubble)
-            _      (migrator/install-schema! @db schema)
-            result (migrator/installed-schema-legend @db {:bubble schema})]
+            _      (migrator/-install-schema! @db schema)
+            result (migrator/-installed-schema-legend @db {:bubble schema})]
         (should= {:type :string} (-> result :bubble :name))
         (should= {:type :long} (-> result :bubble :size))
         (should= {:type :string} (-> result :bubble :color))))
 
     (it "add-attribute!"
-      (let [_      (migrator/add-attribute! @db :gum :name {:type :string})
-            result (migrator/installed-schema-legend @db {:bibelot spec/bibelot})]
+      (let [_      (migrator/-add-attribute! @db :gum :name {:type :string})
+            result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "add-attribute! - schema attr"
-      (let [_      (migrator/add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
-            result (migrator/installed-schema-legend @db {:bibelot spec/bibelot})]
+      (let [_      (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
+            result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "remove-attribute!"
-      (let [_          (migrator/install-schema! @db spec/bibelot)
+      (let [_          (migrator/-install-schema! @db spec/bibelot)
             bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
-            _          (migrator/remove-attribute! @db :bibelot :color)
+            _          (migrator/-remove-attribute! @db :bibelot :color)
             reloaded   (api/reload- @db bibelot)
-            new-legend (migrator/installed-schema-legend @db nil)]
+            new-legend (migrator/-installed-schema-legend @db nil)]
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))))
 
     (it "remove-attribute! - multi"
       (let [db         (api/create-db config [])
-            _          (migrator/install-schema! db spec/doodad)
+            _          (migrator/-install-schema! db spec/doodad)
             doodad     (api/tx- db {:kind :doodad :names ["bill" "bob"] :numbers [123 456]})
-            _          (migrator/remove-attribute! db :doodad :numbers)
+            _          (migrator/-remove-attribute! db :doodad :numbers)
             reloaded   (api/reload- db doodad)
-            new-legend (migrator/installed-schema-legend db nil)]
+            new-legend (migrator/-installed-schema-legend db nil)]
         (should= nil (:numbers reloaded))
         (should-not-contain :numbers (:doodad new-legend))))
 
     (it "rename-attribute!"
-      (let [_          (migrator/install-schema! @db spec/bibelot)
+      (let [_          (migrator/-install-schema! @db spec/bibelot)
             bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
-            _          (migrator/rename-attribute! @db :bibelot :color :bibelot :hue)
-            new-legend (migrator/installed-schema-legend @db nil)
+            _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
+            new-legend (migrator/-installed-schema-legend @db nil)
             reloaded   (api/reload- @db bibelot)]
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))
         (should= :string (get-in new-legend [:bibelot :hue :type]))))
 
     (it "rename-attribute! - new attribute exists"
-      (migrator/install-schema! @db spec/bibelot)
-      (should-throw (migrator/rename-attribute! @db :bibelot :color :bibelot :size)))
+      (migrator/-install-schema! @db spec/bibelot)
+      (should-throw (migrator/-rename-attribute! @db :bibelot :color :bibelot :size)))
     )
   )

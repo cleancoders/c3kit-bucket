@@ -47,7 +47,7 @@
   (let [schema     {:kind (schema/kind :foo) :bar spec}
         legend     {:foo schema}
         _          (jdbc/create-table-from-schema db schema)
-        new-legend (migrator/installed-schema-legend db legend)]
+        new-legend (migrator/-installed-schema-legend db legend)]
     (get-in new-legend [:foo :bar])))
 
 (defmacro should-regurgitate-spec [db spec]
@@ -199,7 +199,7 @@
       (before (doseq [table (jdbc/existing-tables @db)] (jdbc/drop-table @db table)))
 
       (it "schema"
-        (let [schema (migrator/schema {:impl :jdbc})]
+        (let [schema (migrator/migration-schema {:impl :jdbc})]
           (should= :migration (-> schema :kind :value))
           (should= :int (-> schema :id :type))
           (should= {:type "serial PRIMARY KEY"} (-> schema :id :db))
@@ -207,7 +207,7 @@
 
       (it "installed-schema-legend"
         (let [_      (jdbc/create-table-from-schema @db bibelot)
-              result (migrator/installed-schema-legend @db {:bibelot bibelot})]
+              result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
           (should= {:type :long :db {:type "serial PRIMARY KEY"}} (-> result :bibelot :id))
           (should= {:type :string :db {:type "varchar(42)"}} (-> result :bibelot :name))
           (should= {:type :long :db {:type "integer"}} (-> result :bibelot :size))
@@ -215,60 +215,60 @@
 
       (it "install-schema!"
         (let [schema (assoc-in bibelot [:kind :value] :bubble)
-              _      (migrator/install-schema! @db schema)
-              result (migrator/installed-schema-legend @db {:bubble schema})]
+              _      (migrator/-install-schema! @db schema)
+              result (migrator/-installed-schema-legend @db {:bubble schema})]
           (should= {:type :string :db {:type "varchar(42)"}} (-> result :bubble :name))
           (should= {:type :long :db {:type "integer"}} (-> result :bubble :size))
           (should= {:type :string :db {:type "varchar(55)"}} (-> result :bubble :color))))
 
       (it "add-attribute!"
-        (let [_      (migrator/install-schema! @db bibelot)
-              _      (migrator/add-attribute! @db :bibelot :fizz {:type :string :db {:type "varchar(123)"}})
-              result (migrator/installed-schema-legend @db {:bibelot bibelot})]
+        (let [_      (migrator/-install-schema! @db bibelot)
+              _      (migrator/-add-attribute! @db :bibelot :fizz {:type :string :db {:type "varchar(123)"}})
+              result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
           (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))))
 
       (it "add-attribute! - schema attr"
-        (let [_      (migrator/install-schema! @db bibelot)
+        (let [_      (migrator/-install-schema! @db bibelot)
               schema (assoc bibelot :fizz {:type :string :db {:type "varchar(123)"}})
-              _      (migrator/add-attribute! @db schema :fizz)
-              result (migrator/installed-schema-legend @db {:bibelot bibelot})]
+              _      (migrator/-add-attribute! @db schema :fizz)
+              result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
           (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))))
 
       (it "remove-attribute!"
-        (let [_          (migrator/install-schema! @db bibelot)
+        (let [_          (migrator/-install-schema! @db bibelot)
               db2        (api/create-db config [bibelot])
               entity     (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
-              _          (migrator/remove-attribute! @db :bibelot :color)
+              _          (migrator/-remove-attribute! @db :bibelot :color)
               reloaded   (api/reload- db2 entity)
-              new-legend (migrator/installed-schema-legend @db {:bibelot bibelot})]
+              new-legend (migrator/-installed-schema-legend @db {:bibelot bibelot})]
           (should= nil (:color reloaded))
           (should-not-contain :color (:bibelot new-legend))))
 
       (it "remove-attribute! - that doesn't exist"
-        (migrator/install-schema! @db bibelot)
+        (migrator/-install-schema! @db bibelot)
         (log/capture-logs
-          (should-not-throw (migrator/remove-attribute! @db :bibelot :fizz))
-          (should-throw (migrator/remove-attribute! @db :fizz :bang))))
+          (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
+          (should-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
       (it "rename-attribute!"
-        (let [_          (migrator/install-schema! @db bibelot)
+        (let [_          (migrator/-install-schema! @db bibelot)
               db2        (api/create-db config [bibelot])
               entity    (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
-              _          (migrator/rename-attribute! @db :bibelot :color :bibelot :hue)
-              new-legend (migrator/installed-schema-legend @db {:bibelot bibelot})
+              _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
+              new-legend (migrator/-installed-schema-legend @db {:bibelot bibelot})
               reloaded   (api/reload- db2 entity)]
           (should= nil (:color reloaded))
           (should-not-contain :color (:bibelot new-legend))
           (should= :string (get-in new-legend [:bibelot :hue :type]))))
 
       (it "rename-attribute! - can't change kind"
-        (migrator/install-schema! @db bibelot)
-        (should-throw (migrator/rename-attribute! @db :bibelot :color :widget :hue)))
+        (migrator/-install-schema! @db bibelot)
+        (should-throw (migrator/-rename-attribute! @db :bibelot :color :widget :hue)))
 
       (it "rename-attribute! - new attribute exists"
-        (migrator/install-schema! @db bibelot)
+        (migrator/-install-schema! @db bibelot)
         (log/capture-logs
-          (should-throw (migrator/rename-attribute! @db :bibelot :color :bibelot :size))))
+          (should-throw (migrator/-rename-attribute! @db :bibelot :color :bibelot :size))))
 
       (context "schema translation"
 

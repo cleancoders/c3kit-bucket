@@ -462,12 +462,12 @@
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   migrator/Migrator
-  (installed-schema-legend [this existing-legend] (build-installed-schema-legend this existing-legend))
-  (install-schema! [this schema] (execute! this (sql-create-table dialect schema)))
-  (add-attribute! [this schema attr] (do-add-attribute! this schema attr))
-  (add-attribute! [this kind attr spec] (do-add-attribute! this kind attr spec))
-  (remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
-  (rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
+  (-installed-schema-legend [this existing-legend] (build-installed-schema-legend this existing-legend))
+  (-install-schema! [this schema] (execute! this (sql-create-table dialect schema)))
+  (-add-attribute! [this schema attr] (do-add-attribute! this schema attr))
+  (-add-attribute! [this kind attr spec] (do-add-attribute! this kind attr spec))
+  (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
+  (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :jdbc [config schemas]
   (let [dialect (:dialect config)
@@ -491,6 +491,6 @@
 (defmulti auto-int-primary-key identity)
 (defmethod auto-int-primary-key :default [_] "serial PRIMARY KEY")
 
-(defmethod migrator/schema :jdbc [config]
+(defmethod migrator/migration-schema :jdbc [config]
   (merge-with merge migrator/default-migration-schema {:id   {:db {:type "serial PRIMARY KEY"}}
                                                        :name {:db {:type "varchar(255) UNIQUE"}}}))

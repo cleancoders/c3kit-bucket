@@ -407,12 +407,12 @@
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   migrator/Migrator
-  (installed-schema-legend [this _expected-legend] (build-installed-schema-legend this))
-  (install-schema! [this schema] (transact! this (->db-schema schema)))
-  (add-attribute! [this schema attr] (migrator/add-attribute! this (-> schema :kind :value) attr (get schema attr)))
-  (add-attribute! [this kind attr spec] (do-install-attribute! this kind attr spec))
-  (remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
-  (rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
+  (-installed-schema-legend [this _expected-legend] (build-installed-schema-legend this))
+  (-install-schema! [this schema] (transact! this (->db-schema schema)))
+  (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))
+  (-add-attribute! [this kind attr spec] (do-install-attribute! this kind attr spec))
+  (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
+  (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :datomic [config schemas]
   (let [legend     (legend/build schemas)
@@ -422,5 +422,5 @@
     (install-schema! db)
     db))
 
-(defmethod migrator/schema :datomic [_]
+(defmethod migrator/migration-schema :datomic [_]
   (merge-with merge migrator/default-migration-schema {:name {:db [:unique-value]}}))

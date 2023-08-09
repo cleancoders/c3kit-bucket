@@ -66,7 +66,7 @@
         (before (doseq [table (jdbc/existing-tables @db)] (jdbc/drop-table @db table)))
 
         (it "schema"
-          (let [schema (migrator/schema {:impl :jdbc})]
+          (let [schema (migrator/migration-schema {:impl :jdbc})]
             (should= :migration (-> schema :kind :value))
             (should= :int (-> schema :id :type))
             (should= {:type "serial PRIMARY KEY"} (-> schema :id :db))
@@ -74,7 +74,7 @@
 
         (it "installed-schema-legend"
           (let [_      (jdbc/create-table-from-schema @db jdbc-spec/bibelot)
-                result (migrator/installed-schema-legend @db {:bibelot jdbc-spec/bibelot})]
+                result (migrator/-installed-schema-legend @db {:bibelot jdbc-spec/bibelot})]
             (should= {:type :long :db {:type "serial PRIMARY KEY"}} (-> result :bibelot :id))
             (should= {:type :string :db {:type "varchar(42)"}} (-> result :bibelot :name))
             (should= {:type :long :db {:type "int4"}} (-> result :bibelot :size))
@@ -82,34 +82,34 @@
 
         (it "install-schema!"
           (let [schema (assoc-in jdbc-spec/bibelot [:kind :value] :bubble)
-                _      (migrator/install-schema! @db schema)
-                result (migrator/installed-schema-legend @db {:bubble schema})]
+                _      (migrator/-install-schema! @db schema)
+                result (migrator/-installed-schema-legend @db {:bubble schema})]
             (should= {:type :string :db {:type "varchar(42)"}} (-> result :bubble :name))
             (should= {:type :long :db {:type "int4"}} (-> result :bubble :size))
             (should= {:type :string :db {:type "varchar(55)"}} (-> result :bubble :color))))
 
         (it "add-attribute!"
-          (let [_      (migrator/install-schema! @db jdbc-spec/bibelot)
-                _      (migrator/add-attribute! @db :bibelot :fizz {:type :string :db {:type "varchar(123)"}})
-                result (migrator/installed-schema-legend @db {:bibelot jdbc-spec/bibelot})]
+          (let [_      (migrator/-install-schema! @db jdbc-spec/bibelot)
+                _      (migrator/-add-attribute! @db :bibelot :fizz {:type :string :db {:type "varchar(123)"}})
+                result (migrator/-installed-schema-legend @db {:bibelot jdbc-spec/bibelot})]
             (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))))
 
         (it "remove-attribute!"
-          (let [_          (migrator/install-schema! @db jdbc-spec/bibelot)
+          (let [_          (migrator/-install-schema! @db jdbc-spec/bibelot)
                 db2        (api/create-db config [jdbc-spec/bibelot])
                 entity     (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
-                _          (migrator/remove-attribute! @db :bibelot :color)
+                _          (migrator/-remove-attribute! @db :bibelot :color)
                 reloaded   (api/reload- db2 entity)
-                new-legend (migrator/installed-schema-legend @db {:bibelot jdbc-spec/bibelot})]
+                new-legend (migrator/-installed-schema-legend @db {:bibelot jdbc-spec/bibelot})]
             (should= nil (:color reloaded))
             (should-not-contain :color (:bibelot new-legend))))
 
         (it "rename-attribute!"
-          (let [_          (migrator/install-schema! @db jdbc-spec/bibelot)
+          (let [_          (migrator/-install-schema! @db jdbc-spec/bibelot)
                 db2        (api/create-db config [jdbc-spec/bibelot])
                 entity    (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
-                _          (migrator/rename-attribute! @db :bibelot :color :bibelot :hue)
-                new-legend (migrator/installed-schema-legend @db {:bibelot jdbc-spec/bibelot})
+                _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
+                new-legend (migrator/-installed-schema-legend @db {:bibelot jdbc-spec/bibelot})
                 reloaded   (api/reload- db2 entity)]
             (should= nil (:color reloaded))
             (should-not-contain :color (:bibelot new-legend))

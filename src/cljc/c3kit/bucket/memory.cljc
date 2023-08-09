@@ -215,12 +215,12 @@
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   migrator/Migrator
-  (installed-schema-legend [this _expected-legend] @legend)
-  (install-schema! [this schema] (do-install-schema! this schema))
-  (add-attribute! [this schema attr] (migrator/add-attribute! this (-> schema :kind :value) attr (get schema attr)))
-  (add-attribute! [this kind attr spec] (swap! legend assoc-in [kind attr] spec))
-  (remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
-  (rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
+  (-installed-schema-legend [this _expected-legend] @legend)
+  (-install-schema! [this schema] (do-install-schema! this schema))
+  (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))
+  (-add-attribute! [this kind attr spec] (swap! legend assoc-in [kind attr] spec))
+  (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
+  (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :memory [config schemas]
   (let [store (or (:store config) (atom {}))]
