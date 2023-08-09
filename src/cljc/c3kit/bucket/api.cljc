@@ -240,6 +240,7 @@ Requires the *safety* be turned off."
     :dialect :h2 | :postgres | :mssql
     "
   [config schemas]
+  #?(:clj (require [(symbol (str "c3kit.bucket." (name (:impl config))))]))
   (-create-impl config schemas))
 
 (defn cas

@@ -473,6 +473,7 @@
   (let [dialect (:dialect config)
         ds      (jdbc/get-datasource config)
         legend  (legend/build schemas)]
+    (require [(symbol (str "c3kit.bucket." (name dialect)))])
     (JDBCDB. legend dialect ds (atom {}))))
 
 (defn find-sql-

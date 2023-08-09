@@ -5,7 +5,6 @@
             [c3kit.apron.log :as log]
             [c3kit.apron.time :as time]
             [c3kit.apron.util :as util]
-            [c3kit.bucket.api :as api]
             [c3kit.bucket.api :as db]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
@@ -274,7 +273,6 @@
       (let [at (get-in applied [name :at])]
         (println (format "%-50s %s" name (if at (time/unparse :iso8601 at) "")))))))
 
-
 (def ^:private usage
   (str "\n**** c3kit migration USAGE:\n"
        "\n"
@@ -290,8 +288,8 @@
        " preview: migrations/syncing will not update the database\n"))
 
 (defn -main [& args]
-  (app/start! [api/service])
-  (let [impl     @api/impl
+  (app/start! [db/service])
+  (let [impl     @db/impl
         config   (:bucket/config app/app)
         schemas  (:bucket/schemas app/app)
         preview? (contains? (set args) "preview")
