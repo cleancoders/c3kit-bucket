@@ -17,22 +17,22 @@
 
 (defn -ensure-migration-schema! [{:keys [-db -preview?] :as config}]
   (when-not -preview?
-    (when-not (migrator/-installed-schema-legend @-db "migration")
-      (migrator/-install-schema! @-db (migrator/migration-schema config))
+    (when-not (migrator/-installed-schema-legend -db "migration")
+      (migrator/-install-schema! -db (migrator/migration-schema config))
       (log/warn "Installed 'migration' schema because it was missing."))))
 
 (defn -fetch-migration [{:keys [-db]} name]
-  (db/ffind-by- @-db :migration :name name))
+  (db/ffind-by- -db :migration :name name))
 
 (defn -create-migration! [{:keys [-db]} name]
-  (db/tx- @-db {:kind :migration :name name :at (time/now)}))
+  (db/tx- -db {:kind :migration :name name :at (time/now)}))
 
 (defn -delete-migration! [{:keys [-db] :as config} name]
   (when-let [migration (-fetch-migration config name)]
-    (db/delete- @-db migration)))
+    (db/delete- -db migration)))
 
 (defn -applied-migrations [{:keys [-db]}]
-  (db/find- @-db :migration))
+  (db/find- -db :migration))
 
 (defn -applied-migration-names [config]
   (->> (-applied-migrations config)
@@ -43,18 +43,18 @@
 ;; ----- locking -----
 
 (defn -fetch-lock [{:keys [-db] :as config}]
-  (or (-fetch-migration config LOCK) (db/tx- @-db {:kind :migration :name LOCK})))
+  (or (-fetch-migration config LOCK) (db/tx- -db {:kind :migration :name LOCK})))
 
 (defn -attempt-lock! [{:keys [-db] :as config}]
   (let [lock (-fetch-lock config)]
     (try
-      (db/tx- @-db (db/cas {:at nil} (assoc lock :at (time/now))))
+      (db/tx- -db (db/cas {:at nil} (assoc lock :at (time/now))))
       (catch Exception _ nil))))
 
 (defn -release-lock! [{:keys [-db] :as config}]
   (let [lock (-fetch-lock config)]
     (when (:at lock)
-      (db/tx- @-db lock :at nil))))
+      (db/tx- -db lock :at nil))))
 
 (defn -locked? [config]
   (let [lock (-fetch-lock config)]
@@ -196,7 +196,7 @@
         (when-not (= (str/lower-case (name expected)) (str/lower-case (name actual-type)))
           (log/warn (str kind "/" (name attr) " - type mismatch. expected: '" expected "' but was '" actual-type "'"))))
       (do (log/warn (str kind "/" (name attr) " - attribute missing. Creating."))
-          (when-not -preview? (migrator/-add-attribute! @-db schema attr))))))
+          (when-not -preview? (migrator/-add-attribute! -db schema attr))))))
 
 (defn- log-extra-attributes [schema attributes]
   (let [expected (set (keys (dissoc schema :kind)))
@@ -213,11 +213,11 @@
       (doseq [attr (sort (keys (dissoc schema :kind)))]
         (sync-attribute config schema attr installed-attrs))
       (do (log/warn (str kind " - kind missing. Creating."))
-          (when-not -preview? (migrator/-install-schema! @-db schema))))
+          (when-not -preview? (migrator/-install-schema! -db schema))))
     (log-extra-attributes schema installed-attrs)))
 
 (defn- fetch-sync [{:keys [-db] :as config}]
-  (or (-fetch-migration config SYNC_SCHEMAS) (db/tx- @-db {:kind :migration :name SYNC_SCHEMAS})))
+  (or (-fetch-migration config SYNC_SCHEMAS) (db/tx- -db {:kind :migration :name SYNC_SCHEMAS})))
 
 (def ^:private sync-buffer-time (time/minutes 3))
 
@@ -229,7 +229,7 @@
 (defn- perform-synchronization! [{:keys [-db] :as config} schemas]
   (log/report (str "Synchronizing " (count schemas) " schema(s) with the database"))
   (let [legend           (legend/build schemas)
-        installed-legend (migrator/-installed-schema-legend @-db legend)
+        installed-legend (migrator/-installed-schema-legend -db legend)
         config           (assoc config :-installed-legend installed-legend :_expected-legend legend)]
     (doseq [schema (sort-by #(-> % :kind :value) schemas)]
       (sync-kind config schema))
@@ -243,7 +243,7 @@
   (if (sync-needed? config)
     (do (perform-synchronization! config schemas)
         (when-not -preview?
-          (db/tx- @-db (fetch-sync config) :at (time/now))))
+          (db/tx- -db (fetch-sync config) :at (time/now))))
     (log/info "Synchronization was performed recently. Skipping.")))
 
 (defn sync-schemas!

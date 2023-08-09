@@ -74,7 +74,7 @@
   (context "with mem db"
 
     (helperc/with-schemas [migrator/default-migration-schema])
-    (with config (assoc db-config :-db db/impl))
+    (with config (assoc db-config :-db @db/impl))
 
     (it "applied-migrations"
       (should= [] (sut/-applied-migrations @config))
