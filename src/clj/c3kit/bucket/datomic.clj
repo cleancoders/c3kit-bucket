@@ -338,18 +338,21 @@
 
 (defn installed-schema-idents
   "Returns a list of all the fully qualified idents in the schema."
-  [db]
-  (->> (datomic/q '[:find ?ident :where [?e :db/ident ?ident]] (datomic-db db))
-       (map first)
-       (filter #(not (reserved-attr-namespaces (namespace %))))
-       sort))
+  ([] (installed-schema-idents @api/impl))
+  ([db]
+   (->> (datomic/q '[:find ?ident :where [?e :db/ident ?ident]] (datomic-db db))
+        (map first)
+        (filter #(not (reserved-attr-namespaces (namespace %))))
+        sort)))
 
-(defn- build-installed-schema-legend [db]
-  (let [ddb (datomic-db db)]
-    (->> (installed-schema-idents db)
-         (map #(->> % (datomic/entity ddb) (into {})))
-         (map attribute->spec)
-         (reduce (fn [result [kind attr spec]] (assoc-in result [kind attr] spec)) {}))))
+(defn installed-schema-legend
+  ([] (installed-schema-legend @api/impl))
+  ([db]
+   (let [ddb (datomic-db db)]
+     (->> (installed-schema-idents db)
+          (map #(->> % (datomic/entity ddb) (into {})))
+          (map attribute->spec)
+          (reduce (fn [result [kind attr spec]] (assoc-in result [kind attr] spec)) {})))))
 
 (defn- do-install-attribute! [db kind attr spec]
   (let [attribute (spec->attribute kind attr spec)]
@@ -384,7 +387,7 @@
   (retract-attribute-values db kind attr)
   (trash-attribute db kind attr))
 
-(defn do-rename-attribute! [db kind attr new-kind new-attr]
+(defn- do-rename-attribute! [db kind attr new-kind new-attr]
   (let [qualified-old (keyword (name kind) (name attr))
         qualified-new (keyword (name new-kind) (name new-attr))
         ddb           (datomic-db db)
@@ -406,7 +409,7 @@
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   migrator/Migrator
-  (-installed-schema-legend [this _expected-legend] (build-installed-schema-legend this))
+  (-installed-schema-legend [this _expected-legend] (installed-schema-legend this))
   (-install-schema! [this schema] (transact! this (->db-schema schema)))
   (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))
   (-add-attribute! [this kind attr spec] (do-install-attribute! this kind attr spec))
