@@ -12,12 +12,12 @@
             [speclj.core :refer :all]))
 
 (def json-entity
-  {:kind  (assoc (s/kind :json-entity) :db {:table "json_entity"})
+  {:kind  (assoc (s/kind :json-entity) :db {:name "json_entity"})
    :id    {:type :int :db {:type "serial PRIMARY KEY"}}
    :stuff {:type :string :db {:type "jsonb"}}})
 
 (def str-id-entity
-  {:kind  (assoc (s/kind :str-id-entity) :db {:table "str_id_entity"})
+  {:kind  (assoc (s/kind :str-id-entity) :db {:name "str_id_entity"})
    :id    {:type :string :db {:type "varchar(255) PRIMARY KEY"} :strategy :pre-populated}
    :value {:type :int}})
 
@@ -66,12 +66,12 @@
 
         (it "name"
           (should= "CREATE TABLE foo ()" (sut/sql-create-table :foo {:kind {:value :foo}}))
-          (should= "CREATE TABLE bar ()" (sut/sql-create-table :foo {:kind {:value :foo :db {:table "bar"}}})))
+          (should= "CREATE TABLE bar ()" (sut/sql-create-table :foo {:kind {:value :foo :db {:name "bar"}}})))
 
         (it "id"
           (should= "\"id\" int auto_increment PRIMARY KEY" (sut/sql-table-col :foo :id {:type :int :db {:type "int auto_increment PRIMARY KEY"}}))
-          (should= "\"eyeD\" uuid" (sut/sql-table-col :foo :id {:type :uuid :db {:column "eyeD"}}))
-          (should= "\"eyeD\" varchar" (sut/sql-table-col :foo :id {:type :uuid :db {:column "eyeD" :type "varchar"}})))
+          (should= "\"eyeD\" uuid" (sut/sql-table-col :foo :id {:type :uuid :db {:name "eyeD"}}))
+          (should= "\"eyeD\" varchar" (sut/sql-table-col :foo :id {:type :uuid :db {:name "eyeD" :type "varchar"}})))
 
         (it "bibelot"
           (should= (str "CREATE TABLE bibelot ("
@@ -213,6 +213,15 @@
           (should= {:type :string :db {:type "varchar(42)"}} (-> result :bibelot :name))
           (should= {:type :long :db {:type "integer"}} (-> result :bibelot :size))
           (should= {:type :string :db {:type "varchar(55)"}} (-> result :bibelot :color))))
+
+      ;(it "installed-schema-legend with renamed column"
+      ;  (let [schema (assoc-in bibelot [:color :db :name] "hue")
+      ;        _      (jdbc/create-table-from-schema @db schema)
+      ;        result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
+      ;    (should= {:type :long :db {:type "serial PRIMARY KEY"}} (-> result :bibelot :id))
+      ;    (should= {:type :string :db {:type "varchar(42)"}} (-> result :bibelot :name))
+      ;    (should= {:type :long :db {:type "integer"}} (-> result :bibelot :size))
+      ;    (should= {:type :string :db {:type "varchar(55)"}} (-> result :bibelot :color))))
 
       (it "install-schema!"
         (let [schema (assoc-in bibelot [:kind :value] :bubble)

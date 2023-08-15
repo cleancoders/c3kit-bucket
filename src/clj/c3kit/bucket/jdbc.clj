@@ -39,15 +39,17 @@
 
 (defn execute-one!
   "Execute SQL returning 1 raw result"
+  ([command] (execute-one! @api/impl command))
   ([db command] (execute-one-conn! (.-ds db) (maybe-str->command command) {}))
   ([db command options] (execute-one-conn! (.-ds db) (maybe-str->command command) options)))
 
 (defn execute!
   "Execute SQL returning all results."
+  ([command] (execute! @api/impl command))
   ([db command] (execute-conn! (.-ds db) (maybe-str->command command) {}))
   ([db command options] (execute-conn! (.-ds db) (maybe-str->command command) options)))
 
-(defn table-name [schema] (or (-> schema :kind :db :table) (-> schema :kind :value name)))
+(defn table-name [schema] (or (-> schema :kind :db :name) (-> schema :kind :value name)))
 
 (defn drop-table [db table-name]
   (execute-conn! (.-ds db) [(str "DROP TABLE IF EXISTS " table-name)]))
@@ -72,7 +74,7 @@
 
 (defn column-name
   ([[key spec]] (column-name key spec))
-  ([key spec] (or (-> spec :db :column) (name key))))
+  ([key spec] (or (-> spec :db :name) (name key))))
 
 (defn sql-col-type [dialect spec]
   (let [type (:type spec)]
@@ -161,7 +163,7 @@
     (->MapResultSetOptionalBuilder rs rs-meta cols key->type)))
 
 (defn compile-mapping [schema]
-  (let [k->c (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column) (get-full-key-name k)))) {} (dissoc schema :kind))
+  (let [k->c (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :name) (get-full-key-name k)))) {} (dissoc schema :kind))
         c->k (core-reduce (fn [m [k c]] (assoc m c k)) {} k->c)
         k->t (core-reduce -add-type {} (dissoc schema :kind))]
     {:table       (table-name schema)
@@ -432,6 +434,7 @@
   (let [table-name (table-name schema)]
     (table-exists? db table-name)))
 
+;; TODO - MDM: don't do name translation here, let migration handle it.
 (defn build-installed-schema-legend [db legend]
   (let [db-names->schema-keys (core-reduce (fn [result [kind schema]]
                                              (let [table  (table-name schema)

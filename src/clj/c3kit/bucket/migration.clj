@@ -207,9 +207,11 @@
     (doseq [attr extra]
       (log/warn (str kind "/" (name attr) " - extra attribute. Unused?")))))
 
+;; TODO - MDM: Handle name translation here.
 (defn- sync-kind [{:keys [-preview? -db -installed-legend] :as config} schema]
   (let [kind            (-> schema :kind :value)
         installed-attrs (get -installed-legend kind)]
+    (prn "installed-attrs: " installed-attrs)
     (if (seq installed-attrs)
       (doseq [attr (sort (keys (dissoc schema :kind)))]
         (sync-attribute config schema attr installed-attrs))
@@ -301,7 +303,7 @@
     (when preview? (println "Migration preview mode turned on"))
     (let [first-arg (first args)]
       (cond (= "help" first-arg) (println usage)
-            (= "init" first-arg) (sync-schemas! config schemas)
+            (= "sync" first-arg) (sync-schemas! config schemas)
             (= "list" first-arg) (list-migrations config)
             (nil? first-arg) (migrate! config nil)
             (migration-name? first-arg) (migrate! config first-arg)

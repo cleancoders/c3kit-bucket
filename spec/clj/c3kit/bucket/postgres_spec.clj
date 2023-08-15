@@ -10,7 +10,7 @@
             [speclj.core :refer :all]))
 
 (def reserved-word-entity
-  {:kind  (assoc (s/kind :reserved-word-entity) :db {:table "reserved_word_entity"})
+  {:kind  (assoc (s/kind :reserved-word-entity) :db {:name "reserved_word_entity"})
    :id    {:type :int :db {:type "SERIAL PRIMARY KEY"}}
    :limit {:type :int}})                                    ;; limit is a reserved word in psql
 
