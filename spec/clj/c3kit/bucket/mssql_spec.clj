@@ -21,13 +21,19 @@
     jdbc-spec/bibelot
     {:id {:db {:type "bigint IDENTITY PRIMARY KEY"}}}))
 
+(def disorganized
+  (schema/merge-schemas
+    jdbc-spec/disorganized
+    {:id {:db {:type "int IDENTITY PRIMARY KEY"}}}))
+
 (def thingy
   (schema/merge-schemas
     jdbc-spec/thingy
     {:id {:db {:type "int primary key"}}}))
 
-(with-redefs [spec/bibelot bibelot
-              spec/thingy  thingy]
+(with-redefs [spec/bibelot      bibelot
+              spec/disorganized disorganized
+              spec/thingy       thingy]
 
   (describe "MS SQL Server"
 
@@ -50,4 +56,3 @@
       )
     )
   )
-

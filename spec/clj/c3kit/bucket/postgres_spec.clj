@@ -12,7 +12,7 @@
 (def reserved-word-entity
   {:kind  (assoc (s/kind :reserved-word-entity) :db {:name "reserved_word_entity"})
    :id    {:type :int :db {:type "SERIAL PRIMARY KEY"}}
-   :limit {:type :int}})                                    ;; limit is a reserved word in psql
+   :limit {:type :int}}) ;; limit is a reserved word in psql
 
 (def config {:impl    :jdbc
              :dialect :postgres
@@ -23,8 +23,9 @@
 
 (declare db)
 
-(with-redefs [spec/bibelot jdbc-spec/bibelot
-              spec/thingy  jdbc-spec/thingy]
+(with-redefs [spec/bibelot      jdbc-spec/bibelot
+              spec/thingy       jdbc-spec/thingy
+              spec/disorganized jdbc-spec/disorganized]
 
   (describe "PostgresSQL"
 
@@ -117,7 +118,7 @@
         (it "rename-attribute!"
           (let [_          (migrator/-install-schema! @db jdbc-spec/bibelot)
                 db2        (api/create-db config [jdbc-spec/bibelot])
-                entity    (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
+                entity     (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
                 _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
                 new-legend (migrator/-installed-schema-legend @db {:bibelot jdbc-spec/bibelot})
                 reloaded   (api/reload- db2 entity)]

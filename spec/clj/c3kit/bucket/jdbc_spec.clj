@@ -32,6 +32,12 @@
      :name  {:db {:type "varchar(42)"}}
      :color {:db {:type "varchar(55)"}}}))
 
+(def disorganized
+  (schema/merge-schemas
+    spec/disorganized
+    {:type {:db {:type "varchar(255)"}}
+     :id   {:db {:type "serial PRIMARY KEY"}}
+     :name {:db {:type "varchar(255)"}}}))
 
 (def thingy
   (schema/merge-schemas
@@ -53,8 +59,9 @@
 (defmacro should-regurgitate-spec [db spec]
   `(should= ~spec (regurgitate-spec ~db ~spec)))
 
-(with-redefs [spec/bibelot bibelot
-              spec/thingy  thingy]
+(with-redefs [spec/bibelot      bibelot
+              spec/thingy       thingy
+              spec/disorganized disorganized]
   (describe "JDBC DB (H2)"
 
     (around [it] (api/with-safety-off (it)))
@@ -273,7 +280,7 @@
       (it "rename-attribute!"
         (let [_          (migrator/-install-schema! @db bibelot)
               db2        (api/create-db config [bibelot])
-              entity    (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
+              entity     (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
               _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
               new-legend (migrator/-installed-schema-legend @db {:bibelot bibelot})
               reloaded   (api/reload- db2 entity)]

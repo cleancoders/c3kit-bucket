@@ -89,8 +89,8 @@
              (should-throw (sut/-start-service {}))))
 
          (it "stop"
-           (let [app (sut/-stop-service {:bucket/impl :blah
-                                         :bucket/config :blah
+           (let [app (sut/-stop-service {:bucket/impl    :blah
+                                         :bucket/config  :blah
                                          :bucket/schemas :blah})]
              (should-not-contain :bucket/impl app)
              (should-not-contain :bucket/config app)
@@ -123,6 +123,12 @@
    :names   {:type [:string]}
    :numbers {:type [:long]}})
 
+(def disorganized
+  {:name {:type :string}
+   :type {:type :string}
+   :id   {:type :long}
+   :kind (s/kind :disorganized)})
+
 ;(def timepiece
 ;  {:kind       (s/kind :timepiece)
 ;   :id         {:type :long :db {:type "bigint IDENTITY PRIMARY KEY"}}
@@ -140,7 +146,7 @@
 
   (context "CRUD"
 
-    (helper/with-schemas config [bibelot thingy])
+    (helper/with-schemas config [bibelot thingy disorganized])
 
     (it "returns nil on missing id"
       (log/capture-logs
@@ -158,6 +164,12 @@
       (let [saved (sut/tx {:kind :bibelot :name "thingy"})]
         (should= :bibelot (:kind saved))
         (should= "thingy" (:name saved))))
+
+    (it "creates one - disorganized schema"
+      (let [saved (sut/tx {:kind :disorganized :name "messy" :type "drawer"})]
+        (should= :disorganized (:kind saved))
+        (should= "messy" (:name saved))
+        (should= "drawer" (:type saved))))
 
     (it "creates one - pre-populated"
       (let [saved (sut/tx {:kind :thingy :id 123 :name "thingy"})]

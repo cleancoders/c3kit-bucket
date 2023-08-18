@@ -256,7 +256,7 @@
 
 (defn- insert-entity [db conn t-map entity]
   (let [command (build-insert-sql (.-dialect db) t-map entity)
-        result  (execute-one-conn! conn command {:return-keys true})
+        result  (execute-one-conn! conn command {:return-keys [:id]})
         id      (first (vals result))]
     (fetch-entity db conn t-map (:kind entity) id)))
 
