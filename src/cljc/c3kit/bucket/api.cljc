@@ -247,6 +247,7 @@ Requires the *safety* be turned off."
     :uri - datomic connection uri
     JDBC (included keys for jdbc/next library https://github.com/seancorfield/next-jdbc/blob/develop/src/next/jdbc.clj#L76)
     :dialect :h2 | :postgres | :mssql
+    :connection-pool? - uses a connection pool when truthy
     "
   [config schemas]
   #?(:clj (require [(symbol (str "c3kit.bucket." (name (:impl config))))]))
