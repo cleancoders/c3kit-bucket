@@ -1,5 +1,6 @@
 (ns c3kit.bucket.api-spec
-  (:require [speclj.core #?(:clj :refer :cljs :refer-macros) [after after-all around around-all before before before-all
+  (:require [c3kit.bucket.api :as api]
+            [speclj.core #?(:clj :refer :cljs :refer-macros) [after after-all around around-all before before before-all
                                                               context describe focus-context focus-describe focus-it it
                                                               pending should should-be should-be-a should-be-nil
                                                               should-be-same should-contain should-end-with should-fail
@@ -53,9 +54,11 @@
 
   #?(:clj
      (context "clj"
+
+       (with-stubs)
+
        (context "config"
 
-         (with-stubs)
 
          (it "loading"
            (with-redefs [util/read-edn-resource (stub :read-edn {:return {:foo "bar"}})]
@@ -89,12 +92,14 @@
              (should-throw (sut/-start-service {}))))
 
          (it "stop"
-           (let [app (sut/-stop-service {:bucket/impl    :blah
-                                         :bucket/config  :blah
-                                         :bucket/schemas :blah})]
-             (should-not-contain :bucket/impl app)
-             (should-not-contain :bucket/config app)
-             (should-not-contain :bucket/schemas app)))
+           (with-redefs [api/close (stub :close)]
+             (let [app (sut/-stop-service {:bucket/impl    :blah
+                                           :bucket/config  :blah
+                                           :bucket/schemas :blah})]
+               (should-not-contain :bucket/impl app)
+               (should-not-contain :bucket/config app)
+               (should-not-contain :bucket/schemas app))
+             (should-have-invoked :close)))
 
          )
        )

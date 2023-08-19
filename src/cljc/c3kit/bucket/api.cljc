@@ -14,6 +14,7 @@
 
 (defprotocol DB
   "API for database operations"
+  (close [this])
   (-clear [this])
   (-count [this kind options])
   (-delete-all [this kind])
@@ -227,6 +228,14 @@ Presumably only for tests or in-memory implementation, but it will work on any i
 Requires the *safety* be turned off."
   [] (-clear @impl))
 
+;(defn close-
+;  "close with explicit db"
+;  [db] (-close db))
+;
+;(defn close
+;  "Close the database."
+;  [] (-close @impl))
+
 (defmulti -create-impl (fn [config _schema] (:impl config)))
 (defn create-db
   "Create an instance of DB based off the configuration.
@@ -291,6 +300,7 @@ Requires the *safety* be turned off."
 #?(:clj
    (defn -stop-service [app]
      (log/info "Stopping bucket service")
+     (when-let [db (:bucket/impl app)] (close db))
      (dissoc app :bucket/impl :bucket/config :bucket/schemas)))
 
 #?(:clj (def service (app/service 'c3kit.bucket.api/-start-service 'c3kit.bucket.api/-stop-service)))

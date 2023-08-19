@@ -415,6 +415,7 @@
 
 (deftype DatomicDB [db-schema legend config conn]
   api/DB
+  (close [_this] (comment "Nothing to do here"))
   (-clear [this] (clear this))
   (-delete-all [this kind] (delete-all this kind))
   (-count [this kind options] (do-count this kind options))

@@ -9,7 +9,8 @@
             [c3kit.bucket.jdbc :as sut]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
-            [speclj.core :refer :all]))
+            [speclj.core :refer :all])
+  (:import (com.mchange.v2.c3p0 PooledDataSource)))
 
 (def json-entity
   {:kind  (assoc (s/kind :json-entity) :db {:name "json_entity"})
@@ -131,7 +132,8 @@
       (around [it] (with-redefs [api/*safety* true] (it)))
 
       (it "clear" (should-throw AssertionError (sut/clear (config nil))))
-      (it "delete-all" (should-throw AssertionError (sut/delete-all (config nil) :foo))))
+      (it "delete-all" (should-throw AssertionError (sut/delete-all (config nil) :foo)))
+      )
 
     (context "SQL Injection"
 
@@ -153,6 +155,17 @@
         (api/tx {:kind :str-id-entity :id "' OR 1 = 1;--" :value 1})
         (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"})
         (should= 0 (api/count :str-id-entity)))
+      )
+
+    (context "connection pool"
+
+      (it "doesn't use a pool by default"
+        (with-open [db (api/create-db config [])]
+          (should= false (instance? PooledDataSource (.-ds db)))))
+
+      (it ":connection-pool? option activates pooling"
+        (with-open [db (api/create-db (assoc config :connection-pool? true) [])]
+          (should= true (instance? PooledDataSource (.-ds db)))))
       )
 
     (context "local api"

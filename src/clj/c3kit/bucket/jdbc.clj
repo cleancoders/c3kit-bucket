@@ -10,8 +10,10 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [next.jdbc :as jdbc]
+            [next.jdbc.connection :as connection]
             [next.jdbc.result-set :as rs])
-  (:import (java.sql ResultSet)))
+  (:import (com.mchange.v2.c3p0 ComboPooledDataSource PooledDataSource)
+           (java.sql ResultSet)))
 
 (def ^:dynamic in-transaction? false)
 
@@ -474,8 +476,14 @@
       (execute! db [sql]))
     (log/warn "  rename MISSING " (keyword (name kind) (name attr)))))
 
+(defn do-close [db]
+  (let [ds (.-ds db)]
+    (when (instance? PooledDataSource ds)
+      (.close ds))))
+
 (deftype JDBCDB [legend dialect ds mappings]
   api/DB
+  (close [this] (do-close this))
   (-clear [this] (clear this))
   (-delete-all [this kind] (delete-all this kind))
   (-count [this kind options] (do-count this kind options))
@@ -493,9 +501,16 @@
   (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
+(defn connect [config]
+  (if (:connection-pool? config)
+    (let [^PooledDataSource ds (connection/->pool ComboPooledDataSource config)]
+      (.close (jdbc/get-connection ds))                     ;; initialize and validate pool says the docs
+      ds)
+    (jdbc/get-datasource config)))
+
 (defmethod api/-create-impl :jdbc [config schemas]
   (let [dialect (:dialect config)
-        ds      (jdbc/get-datasource config)
+        ds      (connect config)
         legend  (atom (legend/build schemas))]
     (require [(symbol (str "c3kit.bucket." (name dialect)))])
     (JDBCDB. legend dialect ds (atom {}))))
