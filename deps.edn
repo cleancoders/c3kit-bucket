@@ -1,7 +1,7 @@
 {
  :paths   ["src/clj" "src/cljc" "src/cljs"]
  :deps    {
-           com.cleancoders.c3kit/apron {:git/url "https://github.com/cleancoders/c3kit-apron.git" :git/sha "e0057d079d4d7b8f3e061d8be2f28c6379036cdd"}
+           com.cleancoders.c3kit/apron {:mvn/version "2.0.0"}
            cljsjs/hashids              {:mvn/version "1.0.2-0"}
            jstrutz/hashids             {:mvn/version "1.0.1"}
            org.clojure/clojure         {:mvn/version "1.11.1"}
@@ -22,5 +22,7 @@
                   :extra-paths   ["dev" "spec/clj" "spec/cljc" "spec/cljs"]}
            :spec {:main-opts ["-m" "speclj.main" "-c" "-t" "~slow"]}
            :cljs {:main-opts ["-m" "c3kit.scaffold.cljs"]}
+           :build {:extra-deps {io.github.clojure/tools.build {:mvn/version "0.9.5"}}
+                   :ns-default build}
            }
  }
