@@ -7,22 +7,28 @@
            org.clojure/clojure         {:mvn/version "1.11.1"}
            }
  :aliases {
-           :test {:extra-deps    {
-                                  com.cleancoders.c3kit/scaffold    {:local/root "../scaffold" :exclusions [com.google.code.findbugs/jsr305]}
-                                  com.datomic/datomic-free          {:mvn/version "0.9.5697" :exclusions [com.google.guava/guava]}
-                                  com.github.seancorfield/next.jdbc {:mvn/version "1.2.761"}
-                                  com.microsoft.sqlserver/sqljdbc4  {:mvn/version "4.0"}
-                                  com.h2database/h2                 {:mvn/version "2.1.214"}
-                                  org.clojure/clojurescript         {:mvn/version "1.11.60"}
-                                  org.postgresql/postgresql         {:mvn/version "42.1.1"}
-                                  com.mchange/c3p0                  {:mvn/version "0.9.5.5"}
-                                  speclj/speclj                     {:mvn/version "3.4.3"}
-                                  }
-                  :override-deps {com.cleancoders.c3kit/apron {:local/root "../apron"}}
-                  :extra-paths   ["dev" "spec/clj" "spec/cljc" "spec/cljs"]}
-           :spec {:main-opts ["-m" "speclj.main" "-c" "-t" "~slow"]}
-           :cljs {:main-opts ["-m" "c3kit.scaffold.cljs"]}
-           :build {:extra-deps {io.github.clojure/tools.build {:mvn/version "0.9.5"}}
-                   :ns-default build}
+           :test  {:extra-deps    {
+                                   clj-commons/pomegranate           {:mvn/version "1.2.23"}
+                                   com.cleancoders.c3kit/scaffold    {:mvn/version "2.0.0"}
+                                   com.datomic/datomic-free          {:mvn/version "0.9.5697" :exclusions [com.google.guava/guava]}
+                                   com.github.seancorfield/next.jdbc {:mvn/version "1.2.761"}
+                                   com.h2database/h2                 {:mvn/version "2.1.214"}
+                                   com.mchange/c3p0                  {:mvn/version "0.9.5.5"}
+                                   com.microsoft.sqlserver/sqljdbc4  {:mvn/version "4.0"}
+                                   io.github.clojure/tools.build     {:mvn/version "0.9.5"}
+                                   org.clojure/clojurescript         {:mvn/version "1.11.60"}
+                                   org.postgresql/postgresql         {:mvn/version "42.1.1"}
+                                   speclj/speclj                     {:mvn/version "3.4.3"}
+                                   }
+                   :override-deps {com.cleancoders.c3kit/apron    {:local/root "../apron"}
+                                   com.cleancoders.c3kit/scaffold {:local/root "../scaffold"}}
+                   :extra-paths   ["dev" "spec/clj" "spec/cljc" "spec/cljs"]}
+           :spec  {:main-opts ["-m" "speclj.main" "-c" "-t" "~slow"]}
+           :cljs  {:main-opts ["-m" "c3kit.scaffold.cljs"]}
+           :build {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.9.5"}
+                                 clj-commons/pomegranate       {:mvn/version "1.2.23"}}
+                   :ns-default  build
+                   :extra-paths ["dev"]
+                   }
            }
  }

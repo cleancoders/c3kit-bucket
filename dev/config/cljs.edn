@@ -1,6 +1,7 @@
 {
  ; :env-keys ["property.name" "ENV_NAME"] ; default: ["c3.env" "C3_ENV"]
- :run-cmd "node dev/specs/speclj.js"
+ :ns-prefix "c3kit.bucket"
+ :ignore-errors ["goog/i18n/bidi.js"]
  :development {:cache-analysis true
                :optimizations  :none
                :output-dir     "target/cljs/"
