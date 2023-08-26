@@ -31,20 +31,13 @@ Bucket offers an identical API for dealing with data on both the server side (da
 In order to deploy to c3kit you must be a member of the Clojars group `com.cleancoders.c3kit`.
 
 1. Go to https://clojars.org/tokens and configure a token with the appropriate scope
-2. Add the following to ~/.m2/settings.xml
+2. Set the following environment variables
 
-```xml
-<servers>
-    <server>
-        <id>clojars</id>
-        <username>[clojars username]</username>
-        <password>[deploy token]</password>
-    </server>
-</servers>
+```
+CLOJARS_USERNAME=<your username>
+CLOJARS_PASSWORD=<your deploy key>
 ```
 
-3. If dependencies were changed, run `clj -Spom` to regenerate the `pom.xml` file in the root dir of the project.
-4. Update the `version` in `pom.xml` and ensure that the `groupId` and `artifactId` are set for the project (e.g. `com.cleancoders.c3kit` and `bucket`, respectively)
-5. Build the jar using `clj -T:build jar`
-6. Deploy to maven `mvn deploy`
+3. Update VERSION file
+4. `clj -T:build deploy`
 
