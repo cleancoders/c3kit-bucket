@@ -1,7 +1,7 @@
 {
  :paths   ["src/clj" "src/cljc" "src/cljs"]
  :deps    {
-           com.cleancoders.c3kit/apron {:mvn/version "2.0.0"}
+           com.cleancoders.c3kit/apron {:mvn/version "2.0.1"}
            cljsjs/hashids              {:mvn/version "1.0.2-0"}
            jstrutz/hashids             {:mvn/version "1.0.1"}
            org.clojure/clojure         {:mvn/version "1.11.1"}
@@ -9,7 +9,7 @@
  :aliases {
            :test  {:extra-deps    {
                                    clj-commons/pomegranate           {:mvn/version "1.2.23"}
-                                   com.cleancoders.c3kit/scaffold    {:mvn/version "2.0.0"}
+                                   com.cleancoders.c3kit/scaffold    {:mvn/version "2.0.1"}
                                    com.datomic/datomic-free          {:mvn/version "0.9.5697" :exclusions [com.google.guava/guava]}
                                    com.github.seancorfield/next.jdbc {:mvn/version "1.2.761"}
                                    com.h2database/h2                 {:mvn/version "2.1.214"}
@@ -20,8 +20,10 @@
                                    org.postgresql/postgresql         {:mvn/version "42.1.1"}
                                    speclj/speclj                     {:mvn/version "3.4.3"}
                                    }
-                   :override-deps {com.cleancoders.c3kit/apron    {:local/root "../apron"}
-                                   com.cleancoders.c3kit/scaffold {:local/root "../scaffold"}}
+                   :override-deps {
+                                   ;com.cleancoders.c3kit/apron    {:local/root "../apron"}
+                                   ;com.cleancoders.c3kit/scaffold {:local/root "../scaffold"}
+                                   }
                    :extra-paths   ["dev" "spec/clj" "spec/cljc" "spec/cljs"]}
            :spec  {:main-opts ["-m" "speclj.main" "-c" "-t" "~slow"]}
            :cljs  {:main-opts ["-m" "c3kit.scaffold.cljs"]}

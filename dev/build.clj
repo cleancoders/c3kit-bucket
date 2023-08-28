@@ -5,9 +5,10 @@
             [clojure.tools.build.api :as b]))
 
 (def lib-name "bucket")
+(def group-name "com.cleancoders.c3kit")
 (def basis (b/create-basis {:project "deps.edn"}))
 (def src-dirs (:paths basis))
-(def lib (symbol "com.cleancoders.c3kit" lib-name))
+(def lib (symbol group-name lib-name))
 (def version (str/trim (slurp "VERSION")))
 (def class-dir "target/classes")
 (def jar-file (format "target/%s-%s.jar" lib-name version))
@@ -46,6 +47,7 @@
       (jar nil)
       (aether/deploy {:coordinates       [lib version]
                       :jar-file          jar-file
+                      :pom-file          (str/join "/" [class-dir "META-INF/maven" group-name lib-name "pom.xml"])
                       :repository        {"clojars" {:url      "https://clojars.org/repo"
                                                      :username (System/getenv "CLOJARS_USERNAME")
                                                      :password (System/getenv "CLOJARS_PASSWORD")}}
