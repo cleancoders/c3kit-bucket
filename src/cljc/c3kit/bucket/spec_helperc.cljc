@@ -12,8 +12,10 @@
    (list
      (around-all [it]
        (with-redefs [api/*safety* false
-                     api/impl (delay (api/create-db config schemas))]
-         (it)
-         (api/close @api/impl)))
+                     api/impl     (delay (api/create-db config schemas))]
+         (try
+           (it)
+           (finally
+             (api/close @api/impl)))))
      (before (api/clear)))))
 
