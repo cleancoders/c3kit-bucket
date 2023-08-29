@@ -1,11 +1,10 @@
 (ns c3kit.bucket.bg
-  (:import (java.util.concurrent ScheduledThreadPoolExecutor TimeUnit ScheduledFuture))
   (:require
     [c3kit.apron.app :as app]
     [c3kit.apron.log :as log]
     [c3kit.apron.time :as time]
-    [c3kit.bucket.db :as db]
-    ))
+    [c3kit.bucket.api :as db])
+  (:import (java.util.concurrent ScheduledFuture ScheduledThreadPoolExecutor TimeUnit)))
 
 (defn start [app]
   (log/info "Starting background manager")
@@ -33,7 +32,7 @@
   (fn []
     (try
       (let [record (db/reload record)
-            now (time/now)]
+            now    (time/now)]
         (task (:last-ran-at record) now)
         (db/tx record :last-ran-at now))
       (catch Exception e
@@ -42,12 +41,12 @@
 
 (defn ^ScheduledFuture schedule [key period ^Runnable task]
   (log/info "Scheduling task: " key period)
-  (let [record (or (db/ffind-by :bg-task :key key) (new-task-record! key))
+  (let [record           (or (db/ffind-by :bg-task :key key) (new-task-record! key))
         millis-since-ran (time/millis-between (time/now) (:last-ran-at record))
-        initial-delay (max 0 (- period millis-since-ran))
-        wrapped (wrap-task record task)
-        executor (executor)
-        scheduled (.scheduleAtFixedRate executor wrapped initial-delay period TimeUnit/MILLISECONDS)]
+        initial-delay    (max 0 (- period millis-since-ran))
+        wrapped          (wrap-task record task)
+        executor         (executor)
+        scheduled        (.scheduleAtFixedRate executor wrapped initial-delay period TimeUnit/MILLISECONDS)]
     (swap! @background assoc key scheduled)
     scheduled))
 

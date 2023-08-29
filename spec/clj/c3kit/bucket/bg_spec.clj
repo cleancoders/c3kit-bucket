@@ -1,11 +1,11 @@
 (ns c3kit.bucket.bg-spec
   (:require
     [c3kit.apron.log :as log]
-    [c3kit.apron.time :as time :refer [seconds hours ago from-now]]
+    [c3kit.apron.time :as time :refer [ago seconds]]
+    [c3kit.bucket.api :as db]
     [c3kit.bucket.bg :as bg]
     [c3kit.bucket.bg-schema :as bg-schema]
-    [c3kit.bucket.db :as db]
-    [c3kit.bucket.spec-helper :as helper]
+    [c3kit.bucket.spec-helperc :as helperc]
     [speclj.core :refer :all]
     ))
 
@@ -17,11 +17,9 @@
 
 (describe "Background"
 
-  (helper/with-db-schemas [bg-schema/bg-task])
+  (helperc/with-schemas [bg-schema/bg-task])
+  (redefs-around [bg/background (delay (:background @app))])
 
-  (around [it]
-    (with-redefs [bg/background (delay (:background @app))]
-      (it)))
   (before (reset! app {})
           (reset! counter 0)
           (swap! app bg/start))
