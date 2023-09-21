@@ -181,6 +181,18 @@
         (should= :thingy (:kind saved))
         (should= "thingy" (:name saved))))
 
+    (it "updates deleted entity"
+      (let [saved   (sut/tx {:kind :bibelot :name "thingy"})
+            _       (sut/delete saved)
+            updated (sut/tx saved)]
+        ;; TODO [BAC]: What is expected here?
+        ;; This line passes in SQL...
+        ;(should-be-nil updated)
+
+        ;; ...but this line passes in non-SQL
+        ;(should= saved updated)
+        ))
+
     (it "updates one"
       (let [saved   (sut/tx {:kind :bibelot :name "thingy"})
             updated (sut/tx saved :name "new-y")]
@@ -715,12 +727,18 @@
       (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})]
         (should= red (sut/tx (sut/cas {} red)))))
 
-    (it "matching"
+    (it "matching 1"
       (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})]
         (should= red (sut/tx (sut/cas {:name "red"} red)))
         (should= red (sut/tx (sut/cas {:color "red"} red)))
         (should= red (sut/tx (sut/cas {:size 1} red)))
         (should= red (sut/tx (sut/cas {:name "red" :size 1 :color "red"} red)))))
+
+    (it "matching 2"
+      (let [red  (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})
+            blue (sut/tx {:kind :bibelot :name "blue" :size 1 :color "red"})]
+        (should= red (sut/tx (sut/cas {:color "red"} red)))
+        (should= blue (sut/reload blue))))
 
     (it "mis-matching"
       (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})]

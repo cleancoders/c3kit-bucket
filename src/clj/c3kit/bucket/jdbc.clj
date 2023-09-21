@@ -202,109 +202,6 @@
         value  (->sql-value type id)]
     [(str "SELECT * FROM " table " WHERE " column " = " param) value]))
 
-(defn- fetch-entity [db conn t-map kind id]
-  (when-let [id (if (map? id) (:id id) id)]
-    (let [{:keys [id-type builder-fn]} t-map
-          id      (api/-coerced-id id-type id)
-          command (build-fetch-sql (.-dialect db) t-map id)
-          result  (execute-one-conn! conn command {:builder-fn builder-fn})]
-      (when result
-        (assoc result :kind kind)))))
-
-(defn entity [db kind id]
-  (if (nil? kind)
-    (throw (UnsupportedOperationException. "JDBC/entity requires a kind"))
-    (fetch-entity db (.-ds db) (key-map db kind) kind id)))
-
-(defn build-update-sql [dialect t-map entity]
-  (let [{:keys [table key->col key->type]} t-map
-        ->sql-args (partial ->sql-args dialect key->col key->type entity)
-        id-arg     (->sql-args :id)
-        used-keys  (disj (set/intersection (set (keys entity)) (set (keys key->col))) :id)
-        sql-args   (map ->sql-args used-keys)
-        cols       (->> (map :column sql-args) (map #(str "\"" % "\"")))]
-    (cons (str "UPDATE " table " "
-               "SET " (str/join ", " (map #(str %1 " = " %2) cols (map :param sql-args))) " "
-               "WHERE " (:column id-arg) " = " (:param id-arg))
-          (concat (map :value sql-args) [(:value id-arg)]))))
-
-(defn build-insert-sql [dialect t-map entity]
-  (let [{:keys [table key->col key->type]} t-map
-        used-key->col (select-keys key->col (keys entity))
-        ->sql-args    (partial ->sql-args dialect used-key->col key->type entity)
-        sql-args      (->> used-key->col keys (map ->sql-args))
-        cols          (->> (map :column sql-args) (map #(str "\"" % "\"")))]
-    (cons (str "INSERT INTO " table " (" (str/join ", " cols) ") "
-               "VALUES (" (str/join ", " (map :param sql-args)) ")")
-          (map :value sql-args))))
-
-(defmulti build-upsert-sql (fn [dialect _t-map _entity] dialect))
-
-(defn- build-delete-sql [dialect t-map entity]
-  (let [{:keys [table key->col key->type]} t-map
-        {:keys [column param value]} (->sql-args dialect key->col key->type entity :id)]
-    [(str "DELETE FROM " table " WHERE " column " = " param) value]))
-
-(defn- delete-entity [dialect conn t-map entity]
-  (let [sql    (build-delete-sql dialect t-map entity)
-        result (execute-one-conn! conn sql)]
-    (when-not (= 1 (:next.jdbc/update-count result)) (throw (ex-info "delete failed" {:entity entity :result result})))
-    (api/soft-delete entity)))
-
-(defn- update-entity [db conn t-map entity]
-  (let [command (build-update-sql (.-dialect db) t-map entity)]
-    (execute-one-conn! conn command)
-    (fetch-entity db conn t-map (:kind entity) (:id entity))))
-
-(defn- insert-entity [db conn t-map entity]
-  (let [command (build-insert-sql (.-dialect db) t-map entity)
-        result  (execute-one-conn! conn command {:return-keys [:id]})
-        id      (first (vals result))]
-    (fetch-entity db conn t-map (:kind entity) id)))
-
-(defn- upsert-entity [db conn t-map entity]
-  (let [command (build-upsert-sql (.-dialect db) t-map entity)]
-    (execute-one-conn! conn command)
-    (fetch-entity db conn t-map (:kind entity) (:id entity))))
-
-(defmulti upsert-by-id-strategy (fn [_db _conn t-map _entity] (:id-strategy t-map)))
-
-(defmethod upsert-by-id-strategy :default [_db _conn t-map {:keys [kind] :as _entity}]
-  (throw (ex-info "Unhandled id strategy" {:kind kind :id-strategy (:id-strategy t-map)})))
-
-(defmethod upsert-by-id-strategy :db-generated [db conn t-map entity]
-  (if (:id entity)
-    (update-entity db conn t-map entity)
-    (insert-entity db conn t-map entity)))
-
-(defmethod upsert-by-id-strategy :pre-populated [db conn t-map entity]
-  (upsert-entity db conn t-map entity))
-
-(defn- cas-upset [db conn entity t-map kind cas]
-  (if in-transaction?
-    (do
-      (api/-check-cas! cas entity (fetch-entity db conn t-map kind (:id entity)))
-      (upsert-by-id-strategy db conn t-map entity))
-    (jdbc/with-transaction [tx conn]
-                           (api/-check-cas! cas entity (fetch-entity db tx t-map kind (:id entity)))
-                           (upsert-by-id-strategy db tx t-map entity))))
-
-(defn- do-tx [db conn entity]
-  (let [kind  (:kind entity)
-        t-map (key-map db kind)]
-    (if (api/delete? entity)
-      (delete-entity (.-dialect db) conn t-map entity)
-      (if-let [cas (api/-get-cas entity)]
-        (cas-upset db conn entity t-map kind cas)
-        (upsert-by-id-strategy db conn t-map entity)))))
-
-(defn tx [db entity] (do-tx db (.-ds db) entity))
-
-(defn tx* [db entities]
-  (binding [in-transaction? true]
-    (jdbc/with-transaction [tx (.-ds db)]
-                           (doall (map #(do-tx db tx %) entities)))))
-
 (defn clause-with-operator [dialect {:keys [key->type] :as t-map} k v operator]
   (let [type (get key->type k)]
     [(str (->field-name t-map k) " " operator " " (->sql-param dialect type))
@@ -360,16 +257,120 @@
 (defn ->sql-clauses [dialect t-map kv-pairs]
   (map (partial ->sql-clause dialect t-map) kv-pairs))
 
-(defn -seq->sql [& sql-bits]
-  (->> (flatten sql-bits)
-       (remove nil?)
-       (str/join " ")))
-
 (defn -build-where [dialect t-map kv-pairs]
   (if-let [sql-conditions (seq (->sql-clauses dialect t-map kv-pairs))]
     (cons (str/join " " (cons "WHERE" (interpose "AND" (map first sql-conditions))))
           (mapcat rest sql-conditions))
     [""]))
+
+(defn- fetch-entity [db conn t-map kind id]
+  (when-let [id (if (map? id) (:id id) id)]
+    (let [{:keys [id-type builder-fn]} t-map
+          id      (api/-coerced-id id-type id)
+          command (build-fetch-sql (.-dialect db) t-map id)
+          result  (execute-one-conn! conn command {:builder-fn builder-fn})]
+      (when result
+        (assoc result :kind kind)))))
+
+(defn entity [db kind id]
+  (if (nil? kind)
+    (throw (UnsupportedOperationException. "JDBC/entity requires a kind"))
+    (fetch-entity db (.-ds db) (key-map db kind) kind id)))
+
+(defn arg->set-sql [{:keys [column param]}] (str \" column "\" = " param))
+
+(defn build-update-sql
+  ([dialect t-map entity] (build-update-sql dialect t-map entity {}))
+  ([dialect t-map entity cas]
+   (let [{:keys [table key->col key->type]} t-map
+         ->sql-args (partial ->sql-args dialect key->col key->type entity)
+         used-keys  (disj (set/intersection (set (keys entity)) (set (keys key->col))) :id)
+         sql-args   (map ->sql-args used-keys)
+         set-sql    (str/join ", " (map arg->set-sql sql-args))
+         [where-sql & args] (-build-where dialect t-map (assoc cas :id (:id entity)))]
+     (cons (str "UPDATE " table " SET " set-sql " " where-sql)
+           (concat (map :value sql-args) args)))))
+
+(defn build-insert-sql [dialect t-map entity]
+  (let [{:keys [table key->col key->type]} t-map
+        used-key->col (select-keys key->col (keys entity))
+        ->sql-args    (partial ->sql-args dialect used-key->col key->type entity)
+        sql-args      (->> used-key->col keys (map ->sql-args))
+        cols          (->> (map :column sql-args) (map #(str \" % \")))]
+    (cons (str "INSERT INTO " table " (" (str/join ", " cols) ") "
+               "VALUES (" (str/join ", " (map :param sql-args)) ")")
+          (map :value sql-args))))
+
+(defmulti build-upsert-sql (fn [dialect _t-map _entity] dialect))
+
+(defn- build-delete-sql [dialect t-map entity]
+  (let [{:keys [table key->col key->type]} t-map
+        {:keys [column param value]} (->sql-args dialect key->col key->type entity :id)]
+    [(str "DELETE FROM " table " WHERE " column " = " param) value]))
+
+(defn- delete-entity [dialect conn t-map entity]
+  (let [sql    (build-delete-sql dialect t-map entity)
+        result (execute-one-conn! conn sql)]
+    (when-not (= 1 (:next.jdbc/update-count result)) (throw (ex-info "delete failed" {:entity entity :result result})))
+    (api/soft-delete entity)))
+
+(defn execute-update! [db conn t-map entity cas]
+  (let [command (build-update-sql (.-dialect db) t-map entity cas)
+        result  (execute-one-conn! conn command)]
+    (when-not (or (empty? cas) (= 1 (:next.jdbc/update-count result)))
+      (throw (ex-info "cas failure" {:cas cas :entity entity :result result})))
+    result))
+
+(defn- update-entity
+  ([db conn t-map entity] (update-entity db conn t-map entity {}))
+  ([db conn t-map entity cas]
+   (execute-update! db conn t-map entity cas)
+   (fetch-entity db conn t-map (:kind entity) (:id entity))))
+
+(defn- insert-entity [db conn t-map entity]
+  (let [command (build-insert-sql (.-dialect db) t-map entity)
+        result  (execute-one-conn! conn command {:return-keys [:id]})
+        id      (first (vals result))]
+    (fetch-entity db conn t-map (:kind entity) id)))
+
+(defn- upsert-entity [db conn t-map entity]
+  (let [command (build-upsert-sql (.-dialect db) t-map entity)]
+    (execute-one-conn! conn command)
+    (fetch-entity db conn t-map (:kind entity) (:id entity))))
+
+(defmulti upsert-by-id-strategy (fn [_db _conn t-map _entity] (:id-strategy t-map)))
+
+(defmethod upsert-by-id-strategy :default [_db _conn t-map {:keys [kind] :as _entity}]
+  (throw (ex-info "Unhandled id strategy" {:kind kind :id-strategy (:id-strategy t-map)})))
+
+(defmethod upsert-by-id-strategy :db-generated [db conn t-map entity]
+  (if (:id entity)
+    (update-entity db conn t-map entity)
+    (insert-entity db conn t-map entity)))
+
+(defmethod upsert-by-id-strategy :pre-populated [db conn t-map entity]
+  (upsert-entity db conn t-map entity))
+
+(defn- do-tx [db conn entity]
+  (let [kind  (:kind entity)
+        t-map (key-map db kind)]
+    (if (api/delete? entity)
+      (delete-entity (.-dialect db) conn t-map entity)
+      (if-let [cas (api/-get-cas entity)]
+        (update-entity db conn t-map entity cas)
+        (upsert-by-id-strategy db conn t-map entity)))))
+
+(defn tx [db entity] (do-tx db (.-ds db) entity))
+
+(defn tx* [db entities]
+  (binding [in-transaction? true]
+    (jdbc/with-transaction [tx (.-ds db)]
+      (doall (map #(do-tx db tx %) entities)))))
+
+(defn -seq->sql [& sql-bits]
+  (->> (flatten sql-bits)
+       (remove nil?)
+       (str/join " ")))
 
 (defmulti -build-find-query (fn [dialect _t-map _options] dialect))
 (defmethod -build-find-query :default [dialect t-map {:keys [where take drop]}]
@@ -504,7 +505,7 @@
 (defn connect [config]
   (if (:connection-pool? config)
     (let [^PooledDataSource ds (connection/->pool ComboPooledDataSource config)]
-      (.close (jdbc/get-connection ds))                     ;; initialize and validate pool says the docs
+      (.close (jdbc/get-connection ds)) ;; initialize and validate pool says the docs
       ds)
     (jdbc/get-datasource config)))
 
