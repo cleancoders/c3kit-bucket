@@ -185,6 +185,11 @@
           (should= red (first (sut/find-sql- @api/impl :bibelot ["SELECT * from bibelot WHERE color=?" "red"])))
           (should= green (first (sut/find-sql :bibelot "SELECT * from bibelot WHERE color='green'")))))
 
+      (it "tries to update a deleted entity with db-generated ids"
+        (let [saved (api/tx {:kind :bibelot :name "thingy"})]
+          (api/delete saved)
+          (should-be-nil (api/tx saved))))
+
       )
 
     (context "schema"

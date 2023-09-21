@@ -181,18 +181,6 @@
         (should= :thingy (:kind saved))
         (should= "thingy" (:name saved))))
 
-    (it "updates deleted entity"
-      (let [saved   (sut/tx {:kind :bibelot :name "thingy"})
-            _       (sut/delete saved)
-            updated (sut/tx saved)]
-        ;; TODO [BAC]: What is expected here?
-        ;; This line passes in SQL...
-        ;(should-be-nil updated)
-
-        ;; ...but this line passes in non-SQL
-        ;(should= saved updated)
-        ))
-
     (it "updates one"
       (let [saved   (sut/tx {:kind :bibelot :name "thingy"})
             updated (sut/tx saved :name "new-y")]
