@@ -715,6 +715,10 @@
       (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})]
         (should= red (sut/tx (sut/cas {} red)))))
 
+    (it "against full entity"
+      (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})]
+        (should= red (sut/tx (sut/cas red red)))))
+
     (it "matching 1"
       (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})]
         (should= red (sut/tx (sut/cas {:name "red"} red)))

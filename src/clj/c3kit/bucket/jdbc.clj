@@ -287,7 +287,8 @@
          used-keys  (disj (set/intersection (set (keys entity)) (set (keys key->col))) :id)
          sql-args   (map ->sql-args used-keys)
          set-sql    (str/join ", " (map arg->set-sql sql-args))
-         [where-sql & args] (-build-where dialect t-map (assoc cas :id (:id entity)))]
+         where      (-> cas (assoc :id (:id entity)) (dissoc :kind))
+         [where-sql & args] (-build-where dialect t-map where)]
      (cons (str "UPDATE " table " SET " set-sql " " where-sql)
            (concat (map :value sql-args) args)))))
 

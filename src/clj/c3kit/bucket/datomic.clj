@@ -207,8 +207,8 @@
 
 (defn maybe-cas-form [entity]
   (when-let [cas (api/-get-cas entity)]
-    (let [kind (:kind entity)
-          id   (:id entity)]
+    (let [{:keys [id kind]} entity
+          cas (dissoc cas :kind :id)]
       [(list kind id)
        (map (fn [[k v]]
               (vector :db/cas id (scope-attribute kind k) v (get entity k)))
