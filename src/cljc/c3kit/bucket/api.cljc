@@ -1,16 +1,13 @@
 (ns c3kit.bucket.api
-  (:refer-clojure :rename {find    core-find
-                           count   core-count
-                           reduce  core-reduce
-                           -find   core--find
-                           -count  core--count
-                           -reduce core--reduce})
+  (:refer-clojure :exclude [find count reduce
+                            #?@(:cljs [-find -count -reduce])])
   (:require #?(:clj [c3kit.apron.app :as app])
             [c3kit.apron.log :as log]
             [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.schema :as schema]
-            #?(:clj [c3kit.apron.util :as util])))
+            #?(:clj [c3kit.apron.util :as util])
+            #?(:clj [clojure.core :as core] :cljs [cljs.core :as core])))
 
 (defprotocol DB
   "API for database operations"
@@ -40,7 +37,7 @@
             id)))))
 
 (defn -kvs->kv-pairs [kvs]
-  (assert (even? (core-count kvs)) "filter params must come in pairs")
+  (assert (even? (core/count kvs)) "filter params must come in pairs")
   (let [kv-pairs (partition 2 kvs)]
     (assert (every? #(keyword? %) (map first kv-pairs)) "filter attributes must be keywords")
     kv-pairs))
