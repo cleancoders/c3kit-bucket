@@ -1,5 +1,6 @@
 (ns c3kit.bucket.bg-spec
   (:require
+    [c3kit.apron.corec :as ccc]
     [c3kit.apron.log :as log]
     [c3kit.apron.time :as time :refer [ago seconds]]
     [c3kit.bucket.api :as db]
@@ -93,9 +94,8 @@
     (log/capture-logs
       (bg/schedule :trouble-maker 5000 (fn [_ _] (throw (ex-info "blah" {}))))
       (Thread/sleep 10))
-    (let [logs (seq (filter #(= :error (:level %)) (log/parse-captured-logs)))]
+    (let [logs (seq (ccc/find-by (log/parse-captured-logs) :level :error))]
       (should-not-be-nil logs)
       (should= "Background Error:" (:message (first logs)))
       (should= "clojure.lang.ExceptionInfo: blah {}" (:message (second logs)))))
   )
-

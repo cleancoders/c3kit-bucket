@@ -191,7 +191,7 @@
 
 (defn update-form [db id updated]
   (let [original          (into {} (datomic/entity (datomic/db @(.-conn db)) id))
-        retracted-keys    (doall (filter #(= nil (get updated %)) (keys original)))
+        retracted-keys    (doall (filter #(nil? (get updated %)) (keys original)))
         updated           (-> (apply dissoc updated retracted-keys)
                               ccc/remove-nils
                               (assoc :db/id id))
@@ -343,7 +343,7 @@
   ([db]
    (->> (datomic/q '[:find ?ident :where [?e :db/ident ?ident]] (datomic-db db))
         (map first)
-        (filter #(not (reserved-attr-namespaces (namespace %))))
+        (filter (comp not reserved-attr-namespaces namespace))
         sort)))
 
 (defn schema-exists? [db schema]

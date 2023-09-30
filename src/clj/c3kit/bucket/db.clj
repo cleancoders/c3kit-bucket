@@ -124,7 +124,7 @@
 (defn- id-or-val [thing] (or (:db/id thing) thing))
 
 (defn dissoc-nils [entity]
-  (apply dissoc entity (filter #(= nil (get entity %)) (keys entity))))
+  (apply dissoc entity (filter #(nil? (get entity %)) (keys entity))))
 
 (defn- kind! [entity]
   (or (:kind entity)
@@ -157,7 +157,7 @@
 
 (defn update-form [id updated]
   (let [original          (into {} (api/entity (api/db @connection) id))
-        retracted-keys    (doall (filter #(= nil (get updated %)) (keys original)))
+        retracted-keys    (doall (filter #(nil? (get updated %)) (keys original)))
         updated           (-> (apply dissoc updated retracted-keys)
                               dissoc-nils
                               (assoc :db/id id))
@@ -468,7 +468,7 @@
   []
   (->> (api/q '[:find ?ident :where [?e :db/ident ?ident]] (db))
        (map first)
-       (filter #(not (reserved-attr-nses (namespace %))))
+       (filter (comp not reserved-attr-nses namespace))
        sort))
 
 (defn garbage-idents
@@ -493,8 +493,8 @@
   (let [result    (api/q '[:find ?v :where [_ :db.install/attribute ?v]] (db))
         attrs     (map #(->> % first (api/entity (db)) api/touch) result)
         app-attrs (->> attrs
-                       (remove #(reserved-attr-nses (namespace (:db/ident %))))
-                       (sort-by #(str (:db/ident %))))]
+                       (remove (comp reserved-attr-nses namespace :db/ident))
+                       (sort-by (comp str :db/ident)))]
     (println ((:title-fn inspect-table) "cleancoders DB Attributes"))
     (println (:header inspect-table))
     (doseq [[attr color] (partition 2 (interleave app-attrs (cycle [40 44])))]

@@ -19,7 +19,7 @@
 
 (defn- merge-with-original [original updated]
   (if original
-    (let [retracted-keys (doall (filter #(= nil (get updated %)) (keys original)))
+    (let [retracted-keys (doall (filter #(nil? (get updated %)) (keys original)))
           merged         (merge original updated)]
       (apply dissoc merged retracted-keys))
     updated))
@@ -132,12 +132,11 @@
         new-exists? (some? (get-in @(.-legend db) [kind new-attr]))]
     (cond new-exists? (throw (ex-info "rename to existing attribute" {:kind kind :old attr :new new-attr}))
           (some? spec) (do (swap! (.-legend db) #(-> (update % kind dissoc attr) (assoc-in [kind new-attr] spec)))
-                           (tx* db (->> (map (fn [e]
-                                               (when-let [v (get e attr)]
-                                                 (-> (dissoc e attr)
-                                                     (assoc new-attr v))))
-                                             (do-find db kind []))
-                                        (remove nil?))))
+                           (tx* db (ccc/map-some (fn [e]
+                                                   (when-let [v (get e attr)]
+                                                     (-> (dissoc e attr)
+                                                         (assoc new-attr v))))
+                                                 (do-find db kind []))))
           :else (log/warn "  rename FAILED: MISSING " kind attr))))
 
 (deftype MemoryDB [legend store]
