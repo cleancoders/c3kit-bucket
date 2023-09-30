@@ -1,13 +1,13 @@
 (ns c3kit.bucket.memory
   (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
   (:require
+    [c3kit.apron.corec :as ccc]
     [c3kit.apron.legend :as legend]
     [c3kit.apron.log :as log]
     [c3kit.apron.schema :as schema]
     [c3kit.apron.utilc :as utilc]
     [c3kit.bucket.api :as api]
-    [c3kit.bucket.migrator :as migrator]
-    [clojure.string :as str]))
+    [c3kit.bucket.migrator :as migrator]))
 
 (def ^:private id-source (atom 1000))
 (defn- gen-id [] (swap! id-source inc))
@@ -53,49 +53,6 @@
     (retract-entity store e)
     (install-entity legend store e)))
 
-(defn- pattern-comparator [v case-sensitive?]
-  (let [pattern (-> (str/replace v "%" ".*") (str/replace "_" ".") re-pattern)]
-    (fn [ev]
-      (when ev
-        (let [ev (if case-sensitive? ev (str/upper-case ev))]
-          (boolean (re-matches pattern ev)))))))
-
-(defn- multi? [v] (or (sequential? v) (set? v)))
-
-(defn- -normal-tester [f v]
-  (fn [ev]
-    (if (multi? ev)
-      (some #(f % v) ev)
-      (and (some? ev) (f ev v)))))
-
-(defn- -or-tester [values]
-  (let [v-set (set values)]
-    (fn [ev]
-      (if (multi? ev)
-        (some #(contains? v-set %) ev)
-        (contains? v-set ev)))))
-
-(defn- -nor-tester [values]
-  (let [v-set (set values)]
-    (fn [ev]
-      (if (multi? ev)
-        (not-any? #(contains? v-set %) ev)
-        (not (contains? v-set ev))))))
-
-(defn -tester [form]
-  (condp = (first form)
-    '> (let [v (second form)] (if (number? v) (-normal-tester > v) (-normal-tester #(pos? (compare %1 %2)) v)))
-    '< (let [v (second form)] (if (number? v) (-normal-tester < v) (-normal-tester #(neg? (compare %1 %2)) v)))
-    '>= (let [v (second form)] (if (number? v) (-normal-tester >= v) (-normal-tester #(>= (compare %1 %2) 0) v)))
-    '<= (let [v (second form)] (if (number? v) (-normal-tester <= v) (-normal-tester #(<= (compare %1 %2) 0) v)))
-    'like (pattern-comparator (second form) true)
-    'ilike (pattern-comparator (str/upper-case (second form)) false)
-    'not= (-nor-tester (rest form))
-    '= (-or-tester (rest form))
-    (-or-tester form)))
-
-(def ^:private eq-tester (partial -normal-tester =))
-
 (defn- ensure-key [k]
   (if (set? k)
     (map ensure-key k)
@@ -104,36 +61,13 @@
          (map keyword)
          vec)))
 
-(defn- get-tester-by-type [v]
-  (cond (set? v) (-or-tester v)
-        (sequential? v) (-tester v)
-        (nil? v) nil?
-        :else (eq-tester v)))
-
-(defn- kv->tester [[k v]]
-  (let [tester (get-tester-by-type v)]
-    (fn [e]
-      (let [attr (ensure-key k)
-            ev   (get-in e attr)]
-        (tester ev)))))
-
-(defn- spec->tester [spec]
-  (let [testers (map kv->tester spec)]
-    (fn [e] (every? #(% e) testers))))
-
 (defn- ensure-schema! [legend kind] (legend/for-kind legend kind))
-
-(defn- filter-where [{:keys [where]} entities]
-  (if (seq where)
-    (let [tester (spec->tester where)]
-      (filter tester entities))
-    entities))
 
 (defn- do-find [db kind options]
   (ensure-schema! @(.-legend db) kind)
-  (->> (or (vals (get @(.-store db) kind)) [])
-       (filter-where options)
-       (api/-apply-drop-take options)))
+  (let [es (or (vals (get @(.-store db) kind)) [])]
+    (->> (ccc/find-by es (:where options))
+         (api/-apply-drop-take options))))
 
 ;; db api -----------------------------------
 
