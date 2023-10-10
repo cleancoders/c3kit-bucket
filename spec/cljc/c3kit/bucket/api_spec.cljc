@@ -59,12 +59,18 @@
 
        (context "config"
 
-
          (it "loading"
            (with-redefs [util/read-edn-resource (stub :read-edn {:return {:foo "bar"}})]
              (let [result (sut/load-config)]
                (should= {:foo "bar"} result)
                (should-have-invoked :read-edn {:with ["config/bucket.edn"]}))))
+
+
+         (it "loading from alternative resource"
+           (with-redefs [util/read-edn-resource (stub :read-edn {:return {:foo "bar"}})]
+             (let [result (sut/load-config "foo/bar/config.edn")]
+               (should= {:foo "bar"} result)
+               (should-have-invoked :read-edn {:with ["foo/bar/config.edn"]}))))
 
          (it "config-var"
            (let [config {:foo "bar" :config-var 'foo.bar}]

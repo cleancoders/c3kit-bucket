@@ -275,13 +275,14 @@ Requires the *safety* be turned off."
        :full-schema  - symbol of qualified var that holds a seq of all db schemas (for migration)
        :migration-ns - symbol of namespace where all migration scripts are located
        :config-var   - symbol of qualified var that holds the config map which will be merged in"
-     []
-     (let [config (util/read-edn-resource "config/bucket.edn")]
-       (if-let [config-var (:config-var config)]
-         (let [dynamic-config (util/var-value config-var)]
-           (-> (merge config dynamic-config)
-               (dissoc :config-var)))
-         config))))
+     ([] (load-config "config/bucket.edn"))
+     ([config-resource]
+      (let [config (util/read-edn-resource config-resource)]
+        (if-let [config-var (:config-var config)]
+          (let [dynamic-config (util/var-value config-var)]
+            (-> (merge config dynamic-config)
+                (dissoc :config-var)))
+          config)))))
 
 #?(:clj
    (defn -start-service [app]
