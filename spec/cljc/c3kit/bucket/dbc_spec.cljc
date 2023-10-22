@@ -271,6 +271,20 @@
           (should= [] (db/find-by :tempy :when ['<= (-> 1 seconds ago)]))
           (should= [] (db/find-by :tempy :when ['>= (-> 1 seconds from-now)]))))
       )
+
+    (it "find-max-of-all"
+      (let [_ (db/tx :kind :bibelot :size 1)
+            _ (db/tx :kind :bibelot :size 2)
+            b3 (db/tx :kind :bibelot :size 3)]
+        (should= b3 (db/find-max-all :bibelot :size))
+        (should= 3 (db/find-max-val-of-all :bibelot :size))))
+
+    (it "find-min-of-all"
+      (let [b1 (db/tx :kind :bibelot :size 1)
+            _ (db/tx :kind :bibelot :size 2)
+            _ (db/tx :kind :bibelot :size 3)]
+        (should= b1 (db/find-min-all :bibelot :size))
+        (should= 1 (db/find-min-val-of-all :bibelot :size))))
     )
 
   (context "find-ids-by"

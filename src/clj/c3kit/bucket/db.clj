@@ -375,6 +375,30 @@
                          :in $ ?attribute
                          :where [?e ?attribute]] (db) (->attr-kw kind attr)))))
 
+(defn find-max-all
+  "Finds the entity with the max attribute for a given kind"
+  [kind attr]
+  (-> (q '[:find (max ?e) :in $ ?attribute
+           :where [?e ?attribute]] (->attr-kw kind attr))
+    q->entities
+    first))
+
+(defn find-max-val-of-all [kind attr]
+  "Finds the max value of a kind/attr"
+  (-> (find-max-all kind attr) (get attr)))
+
+(defn find-min-all
+  "Finds the entity with the min attribute for a given kind"
+  [kind attr]
+  (-> (q '[:find (min ?e) :in $ ?attribute
+           :where [?e ?attribute]] (->attr-kw kind attr))
+    q->entities
+    first))
+
+(defn find-min-val-of-all [kind attr]
+  "Finds the min value of a kind/attr"
+  (-> (find-min-all kind attr) (get attr)))
+
 (defn ->eid
   "Returns the entity id"
   [id-or-entity]
