@@ -134,6 +134,22 @@
   ([kind attr] (filter (attr-tester attr) (find-all kind))) ;; MDM - compatibility with datomic db
   ([kind] (vals (get @db kind))))
 
+(defn find-max-of-all [kind attr]
+  (let [entities (find-all kind attr)]
+    (-> (sort-by attr entities) last)))
+
+(defn find-max-val-of-all [kind attr]
+  (let [entities (find-all kind attr)]
+    (->> (map attr entities) (apply max))))
+
+(defn find-min-of-all [kind attr]
+  (let [entities (find-all kind attr)]
+    (-> (sort-by attr entities) first)))
+
+(defn find-min-val-of-all [kind attr]
+  (let [entities (find-all kind attr)]
+    (->> (map attr entities) (apply min))))
+
 (defn count-all
   ([kind attr] (ccc/count-where (attr-tester attr) (find-all kind))) ;; MDM - compatibility with datomic db
   ([kind] (count (get @db kind))))
