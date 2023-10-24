@@ -20,7 +20,6 @@
                                (when drop ["ORDER BY" id-col
                                            "OFFSET" drop "ROWS"
                                            (when take ["FETCH NEXT" take " ROWS ONLY"])]))]
-    ;(prn "sql: " sql)
     (cons sql args)))
 
 (defmethod jdbc/build-upsert-sql :mssql [dialect t-map {:keys [id] :as entity}]

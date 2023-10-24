@@ -48,6 +48,7 @@
       (spec/nil-value-specs config)
       (spec/find-specs config)
       (spec/filter-specs config)
+      (spec/query-specs config)
       (spec/reduce-specs config)
       (spec/count-specs config)
       (spec/broken-in-datomic config)

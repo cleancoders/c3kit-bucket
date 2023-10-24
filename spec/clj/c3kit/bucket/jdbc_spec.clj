@@ -120,6 +120,7 @@
       (spec/nil-value-specs config)
       (spec/find-specs config)
       (spec/filter-specs config)
+      (spec/query-specs config)
       (spec/reduce-specs config)
       (spec/count-specs config)
       (spec/broken-in-datomic config)
@@ -190,6 +191,56 @@
           (api/delete saved)
           (should-be-nil (api/tx saved))))
 
+      )
+
+    (context "query"
+      ;;This needs to be done explicitly in datomic ns as the queries for jdbc are different
+
+      (with db (api/create-db config [bibelot thingy]))
+
+      (it "empty db"
+        (should= [] (sut/do-query @db  "SELECT * FROM bibelot WHERE name LIKE ?" {:args ["1"] :kind :bibelot}))
+        (should= [] (sut/do-query @db  "SELECT * FROM thingy WHERE name LIKE ?" {:args ["1"] :kind :thingy})))
+
+      (context "(populated db)"
+        (before (sut/clear @db)
+          (sut/tx @db {:kind :bibelot :name "hello"})
+          (sut/tx @db {:kind :bibelot :name "world"})
+          (sut/tx @db {:kind :bibelot :name "world" :size 2})
+          (sut/tx @db  {:kind :bibelot :name "hi!" :size 2}))
+
+        (it "all"
+          (sut/tx @db {:kind :thingy :id 123 :name "world"})
+          (should= 4 (count (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot})))
+          (should= 1 (count (sut/do-query @db  "SELECT * FROM thingy" {:kind :thingy}))))
+
+        (it "some"
+          (sut/tx @db {:kind :thingy :id 123 :name "world"})
+          (should= 1 (count (sut/do-query @db  "SELECT * FROM bibelot WHERE name LIKE ?" {:args ["hello"] :kind :bibelot})))
+          (should= 2 (count (sut/do-query @db  "SELECT * FROM bibelot WHERE size= ?" {:args [2] :kind :bibelot})))
+          (should= 1 (count (sut/do-query @db  "SELECT * FROM thingy WHERE name LIKE ?" {:args ["world"] :kind :thingy}))))
+
+        (it ":take option"
+          (let [all (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot})]
+            (should= all (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :take 4}))
+            (should= all (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :take 99}))
+            (should= (take 2 all) (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :take 2}))
+            (should= (take 3 all) (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :take 3}))))
+
+        (it ":drop option"
+          (let [all (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot})]
+            (should= all (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :drop 0}))
+            (should= [] (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :drop 4}))
+            (should= [] (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :drop 99}))
+            (should= (drop 2 all) (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :drop 2}))
+            (should= (drop 3 all) (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :drop 3}))))
+
+        (it "drop and take options (pagination)"
+          (let [all (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot})]
+            (should= (take 1 (drop 1 all)) (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :drop 1 :take 1}))
+            (should= (take 1 (drop 2 all)) (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :take 1 :drop 2}))
+            (should= (take 3 all) (sut/do-query @db  "SELECT * FROM bibelot" {:kind :bibelot :take 3 :drop 0}))))
+        )
       )
 
     (context "schema"

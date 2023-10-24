@@ -319,6 +319,14 @@
            (q->entities db)))
     []))
 
+(defn query-match*? [q & vs] (some #(re-find q (.toLowerCase (str %))) vs))
+
+(defn do-query [db query options]
+  (let []
+    (->> (apply datomic/q query (datomic-db db) (:where options))
+      (api/-apply-drop-take options)
+      (q->entities db))))
+
 (defn- do-count [db kind options]
   (if-let [where (build-where-datalog db kind (:where options))]
     (let [query   (concat '[:find (count ?e) :in $ :where] where)
@@ -421,6 +429,7 @@
   (-count [this kind options] (do-count this kind options))
   (-entity [this kind id] (entity this kind id))
   (-find [this kind options] (do-find this kind options))
+  (-query [this query args] (do-query this query args))
   (-reduce [this kind f init options] (reduce f init (do-find this kind options)))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))

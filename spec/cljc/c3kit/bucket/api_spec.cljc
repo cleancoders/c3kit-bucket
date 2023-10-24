@@ -17,7 +17,8 @@
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time :refer [ago minutes]]
-            #?(:clj [c3kit.apron.util :as util])))
+            #?(:clj [c3kit.apron.util :as util])
+            [clojure.string :as str]))
 
 (describe "API"
 
@@ -47,8 +48,8 @@
 
     (it "without id"
       (should-throw #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core.ExceptionInfo)
-                    "cas may not be applied to new entities."
-                    (sut/cas {:foo "bar"} {:kind :widget})))
+        "cas may not be applied to new entities."
+        (sut/cas {:foo "bar"} {:kind :widget})))
 
     )
 
@@ -411,11 +412,13 @@
     (it "entity"
       (let [foo (sut/tx {:kind :bibelot :name "foo"})]
         (should= foo (sut/entity (:id foo)))
+        (should= foo (sut/entity :bibelot (:id foo)))
         (should= nil (sut/entity :thingy (:id foo)))))
 
     (it "entity!"
       (let [foo (sut/tx {:kind :bibelot :name "foo"})]
         (should= foo (sut/entity! (:id foo)))
+        (should= foo (sut/entity! :bibelot (:id foo)))
         (should-throw (sut/entity! :thingy (:id foo)))))
     )
   )
@@ -448,10 +451,10 @@
 
     (context "(populated db)"
       (before (sut/clear)
-              (sut/tx {:kind :bibelot :name "hello"})
-              (sut/tx {:kind :bibelot :name "world"})
-              (sut/tx {:kind :bibelot :name "world" :size 2})
-              (sut/tx {:kind :bibelot :name "hi!" :size 2}))
+        (sut/tx {:kind :bibelot :name "hello"})
+        (sut/tx {:kind :bibelot :name "world"})
+        (sut/tx {:kind :bibelot :name "world" :size 2})
+        (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
       (it "all"
         (sut/tx {:kind :thingy :id 123 :name "world"})
@@ -530,10 +533,10 @@
 
     (context "(populated db)"
       (before (sut/clear)
-              (sut/tx {:kind :bibelot :name "hello"})
-              (sut/tx {:kind :bibelot :name "world"})
-              (sut/tx {:kind :bibelot :name "world" :size 2})
-              (sut/tx {:kind :bibelot :name "hi!" :size 2}))
+        (sut/tx {:kind :bibelot :name "hello"})
+        (sut/tx {:kind :bibelot :name "world"})
+        (sut/tx {:kind :bibelot :name "world" :size 2})
+        (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
       (it "="
         (let [result       (sut/find-by :bibelot :name ['= "hi!"])
@@ -621,14 +624,26 @@
     )
   )
 
+(defn query-specs [config]
+  (context "query"
+    (helper/with-schemas config [bibelot thingy])
+
+    (it "calls to query"
+      (let [db @sut/impl]
+        (with-redefs [sut/-query (stub :sut/-query)]
+        (sut/query :kind {:options :blah})
+        (should-have-invoked :sut/-query {:with [db :kind {:options :blah}]}))))
+    )
+  )
+
 (defn reduce-specs [config]
   (context "reduce"
     (helper/with-schemas config [bibelot thingy])
     (before (sut/clear)
-            (sut/tx {:kind :bibelot :name "hello"})
-            (sut/tx {:kind :bibelot :name "world"})
-            (sut/tx {:kind :bibelot :name "world" :size 2})
-            (sut/tx {:kind :bibelot :name "hi!" :size 2}))
+      (sut/tx {:kind :bibelot :name "hello"})
+      (sut/tx {:kind :bibelot :name "world"})
+      (sut/tx {:kind :bibelot :name "world" :size 2})
+      (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
     (it "sum of none"
       (should= 0 (sut/reduce :bibelot #(+ %1 (:size %2)) 0 :where {:name "fake"})))
@@ -641,7 +656,7 @@
 
     (it "reduced map"
       (should= {"world" [2] "hi!" [2]} (sut/reduce :bibelot #(update %1 (:name %2) conj (:size %2)) {}
-                                                   :where {:size ['not= nil]})))
+                                         :where {:size ['not= nil]})))
     )
   )
 
@@ -655,11 +670,11 @@
 
     (context "populated db"
       (before (sut/clear)
-              (sut/tx {:kind :bibelot :name "hello"})
-              (sut/tx {:kind :bibelot :name "world"})
-              (sut/tx {:kind :bibelot :name "world" :size 2})
-              (sut/tx {:kind :bibelot :name "hi!" :size 2})
-              )
+        (sut/tx {:kind :bibelot :name "hello"})
+        (sut/tx {:kind :bibelot :name "world"})
+        (sut/tx {:kind :bibelot :name "world" :size 2})
+        (sut/tx {:kind :bibelot :name "hi!" :size 2})
+        )
 
       (it "all"
         (sut/tx {:kind :thingy :id 123 :name "world"})
@@ -760,9 +775,9 @@
   (context "broken in datomic"
     (helper/with-schemas config [bibelot thingy])
     (before (sut/tx {:kind :bibelot :name "hello"})
-            (sut/tx {:kind :bibelot :name "world"})
-            (sut/tx {:kind :bibelot :name "world" :size 2})
-            (sut/tx {:kind :bibelot :name "hi!" :size 2}))
+      (sut/tx {:kind :bibelot :name "world"})
+      (sut/tx {:kind :bibelot :name "world" :size 2})
+      (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
     (context "find-by"
 
