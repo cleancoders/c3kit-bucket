@@ -373,17 +373,14 @@
     (remove nil?)
     (str/join " ")))
 
-(defn add-options-to-query [query {:keys [take drop args]}]
-  (let [sql (-seq->sql query
+(defmulti -build-find-query (fn [dialect _t-map _options] dialect))
+(defmethod -build-find-query :default [dialect t-map {:keys [where take drop]}]
+  (let [[where-sql & args] (-build-where dialect t-map where)
+        sql (-seq->sql "SELECT * FROM" (:table t-map)
+              where-sql
               (when take (str "LIMIT " take))
               (when drop (str "OFFSET " drop)))]
     (cons sql args)))
-
-(defmulti -build-find-query (fn [dialect _t-map _options] dialect))
-(defmethod -build-find-query :default [dialect t-map {:keys [where] :as options}]
-  (let [[where-sql & args] (-build-where dialect t-map where)
-        query (-seq->sql "SELECT * FROM" (:table t-map) where-sql)]
-    (add-options-to-query query (assoc options :args args))))
 
 (defn- do-find [db kind options]
   (let [t-map (key-map db kind)
@@ -396,12 +393,6 @@
         [where-sql & args] (-build-where (.-dialect db) t-map where)
         sql (str/join " " ["SELECT COUNT(*) FROM" table where-sql])]
     (first (vals (execute-one-conn! (.-ds db) (cons sql args))))))
-
-(defn do-query [db query {:keys [kind] :as options}]
-  (let [t-map (key-map db kind)
-        query (add-options-to-query query options)]
-    (->> (execute-conn! (.-ds db) query {:builder-fn (:builder-fn t-map)})
-      (map #(ccc/remove-nils (assoc % :kind kind))))))
 
 (defn reduce [db kind f init options]
   (let [t-map      (key-map db kind)
@@ -500,7 +491,6 @@
   (-count [this kind options] (do-count this kind options))
   (-entity [this kind id] (entity this kind id))
   (-find [this kind options] (do-find this kind options))
-  (-query [this query options] (do-query this query options))
   (-reduce [this kind f init options] (reduce this kind f init options))
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))

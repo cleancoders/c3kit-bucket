@@ -3,7 +3,7 @@
     [c3kit.apron.log :as log]
     [c3kit.bucket.api :as db]
     [c3kit.bucket.migrator :as migrator]
-    [speclj.core #?(:clj :refer :cljs :refer-macros) [around before before context describe it should-not-contain should-not-throw should-throw should= with]]
+    [speclj.core #?(:clj :refer :cljs :refer-macros) [around focus-context before context describe it should-not-contain should-not-throw should-throw should= with]]
     [c3kit.bucket.api :as api #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
     [c3kit.bucket.api-spec :as spec]
     [c3kit.bucket.memory :as sut]))
@@ -36,7 +36,7 @@
     (let [store (atom {:foo :bar})
           db    (db/create-db {:impl :memory :store store} [])]
       (should= :bar (:foo @(.-store db)))))
-
+  
   (describe "migrator"
 
     (with db (api/create-db config []))

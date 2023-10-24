@@ -624,18 +624,6 @@
     )
   )
 
-(defn query-specs [config]
-  (context "query"
-    (helper/with-schemas config [bibelot thingy])
-
-    (it "calls to query"
-      (let [db @sut/impl]
-        (with-redefs [sut/-query (stub :sut/-query)]
-        (sut/query :kind {:options :blah})
-        (should-have-invoked :sut/-query {:with [db :kind {:options :blah}]}))))
-    )
-  )
-
 (defn reduce-specs [config]
   (context "reduce"
     (helper/with-schemas config [bibelot thingy])

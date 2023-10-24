@@ -17,7 +17,6 @@
   (-delete-all [this kind])
   (-entity [this kind id])
   (-find [this kind options])
-  (-query [this kind options])
   (-reduce [this kind f init options])
   (-tx [this entity])
   (-tx* [this entities])
@@ -156,11 +155,6 @@ Useful when processing many entities without loading them all at the same time.
 (defn count-by-
   "count-by with explicit db"
   [db kind & kvs] (-count db kind {:where (-kvs->kv-pairs kvs)}))
-
-(defn query-match*? [q & vs] (some #(re-find q (.toLowerCase (str %))) vs))
-
-(defn query [query & args]
-  (apply -query @impl query args))
 
 (defn tx-
   "tx with explicit db"

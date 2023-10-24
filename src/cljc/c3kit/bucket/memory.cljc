@@ -1,13 +1,14 @@
 (ns c3kit.bucket.memory
   (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
   (:require
-    [c3kit.apron.corec :as ccc]
-    [c3kit.apron.legend :as legend]
-    [c3kit.apron.log :as log]
-    [c3kit.apron.schema :as schema]
-    [c3kit.apron.utilc :as utilc]
-    [c3kit.bucket.api :as api]
-    [c3kit.bucket.migrator :as migrator]))
+   [c3kit.apron.corec :as ccc]
+   [c3kit.apron.legend :as legend]
+   [c3kit.apron.log :as log]
+   [c3kit.apron.schema :as schema]
+   [c3kit.apron.utilc :as utilc]
+   [c3kit.bucket.api :as api]
+   [c3kit.bucket.migrator :as migrator]
+   [clojure.string :as str]))
 
 (def ^:private id-source (atom 1000))
 (defn- gen-id [] (swap! id-source inc))
