@@ -453,9 +453,10 @@
       (api/-apply-drop-take options)
       vec)))
 
-(defn find-datalogs [query options]
+(defn find-datalogs
   "Perform raw datomic log query on default instance"
-  (find-datalogs- @api/impl query options))
+  ([query] (find-datalogs query {}))
+  ([query options] (find-datalogs- @api/impl query options)))
 
 (defn find-max-of-all-
   "Finds the entity with the max attribute for a given kind with specific db instance"
