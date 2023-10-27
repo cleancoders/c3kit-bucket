@@ -446,16 +446,16 @@
 
 (defn query-match*? [q & vs] (some #(re-find q (.toLowerCase (str %))) vs))
 
-(defn find-datalog- [db query options]
+(defn find-datalogs- [db query options]
   "Perform raw datomic log query on specific instance"
   (let []
     (->> (apply datomic/q query (datomic-db db) (:where options))
       (api/-apply-drop-take options)
-      (q->entities db))))
+      vec)))
 
-(defn find-datalog [query options]
+(defn find-datalogs [query options]
   "Perform raw datomic log query on default instance"
-  (find-datalog- @api/impl query options))
+  (find-datalogs- @api/impl query options))
 
 (defn find-max-of-all-
   "Finds the entity with the max attribute for a given kind with specific db instance"

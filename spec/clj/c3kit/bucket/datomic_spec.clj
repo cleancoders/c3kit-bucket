@@ -1,5 +1,6 @@
 (ns c3kit.bucket.datomic-spec
-  (:require [c3kit.apron.log :as log]
+  (:require [c3kit.apron.corec :as ccc]
+            [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
@@ -214,13 +215,13 @@
         (should= b1 (sut/find-min-of-all- @db :bibelot :size))
         (should= 1 (sut/find-min-val-of-all- @db :bibelot :size)))))
 
-  (context "find-datalog"
+  (context "find-datalogs"
 
     (with db (api/create-db config [spec/bibelot spec/thingy]))
 
     (it "empty db"
-      (should= [] (sut/find-datalog- @db '[:find ?e ?v :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "1")]}))
-      (should= [] (sut/find-datalog- @db '[:find ?e ?v :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "1")]})))
+      (should= [] (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "1")]}))
+      (should= [] (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "1")]})))
 
     (context "(populated db)"
         (before (sut/clear @db)
@@ -229,49 +230,57 @@
           (sut/tx @db {:kind :bibelot :name "world" :size 2})
           (sut/tx @db  {:kind :bibelot :name "hi!" :size 2}))
 
-        (it "all"
+      (it "returns entity ids & args"
+        (sut/tx @db {:kind :thingy :id 123 :name "world"})
+        (should= (sort-by first (map (fn [e] (vector (:id e) (:name e))) (api/-find @db :bibelot {})))
+          (sort-by first (sut/find-datalogs- @db '[:find ?e ?v :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})))
+        (should= (sort-by first (map (fn [e] (vector (:id e) (:name e))) (api/-find @db :thingy {})))
+          (sort-by first (sut/find-datalogs- @db '[:find ?e ?v :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]}))))
+
+      (it "all"
           (sut/tx @db {:kind :thingy :id 123 :name "world"})
-          (should= 4 (count (sut/find-datalog- @db '[:find ?e ?v :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})))
-          (should= 1 (count (sut/find-datalog- @db '[:find ?e ?v :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]}))))
+          (should= 4 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})))
+          (should= 1 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]}))))
 
       (it "some"
         (sut/tx @db {:kind :thingy :id 123 :name "world"})
-        (should= 1 (count (sut/find-datalog- @db '[:find ?e ?v :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "hello")]})))
-        (should= 2 (count (sut/find-datalog- @db '[:find ?e ?v :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "h")]})))
-        (should= 2 (count (sut/find-datalog- @db '[:find ?e ?v :in $ ?q :where [?e :bibelot/size ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "2")]})))
-        (should= 0 (count (sut/find-datalog- @db '[:find ?e ?v :in $ ?q :where [?e :bibelot/size ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "blah")]})))
-        (should= 1 (count (sut/find-datalog- @db '[:find ?e ?v :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "w")]}))))
+        (should= 1 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "hello")]})))
+        (should= 2 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "h")]})))
+        (should= 2 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/size ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "2")]})))
+        (should= 0 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/size ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "blah")]})))
+        (should= 1 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "w")]}))))
 
       (it ":take option"
-          (let [all (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
-            (should= all (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 99}))
-            (should= all (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 4}))
-            (should= (take 2 all) (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 2}))
-            (should= (take 3 all) (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 3}))))
+          (let [all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
+            (should= all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 99}))
+            (should= all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 4}))
+            (should= (take 2 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 2}))
+            (should= (take 3 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 3}))))
 
       (it ":drop option"
-          (let [all (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
-            (should= [] (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 99}))
-            (should= [] (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 4}))
-            (should= (drop 2 all) (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 2}))
-            (should= (drop 3 all) (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 3}))))
+          (let [all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
+            (should= [] (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 99}))
+            (should= [] (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 4}))
+            (should= (drop 2 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 2}))
+            (should= (drop 3 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 3}))))
 
       (it "drop and take options (pagination)"
-          (let [all (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
-            (should= (take 1 (drop 1 all)) (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 1 :take 1}))
-            (should= (take 1 (drop 2 all)) (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 2 :take 1}))
-            (should= (take 3 all) (sut/find-datalog- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 0 :take 3}))))
+          (let [all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
+            (should= (take 1 (drop 1 all)) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 1 :take 1}))
+            (should= (take 1 (drop 2 all)) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 2 :take 1}))
+            (should= (take 3 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 0 :take 3}))))
 
       (it "two attributes"
-          (let [[entity :as entities]
-                (sut/find-datalog- @db '[:find ?e
+          (let [[r :as results]
+                (sut/find-datalogs- @db '[:find ?e
                              :in $ ?q
                              :where
                              [?e :bibelot/name ?name]
-                             [?e :bibelot/size ?size][(c3kit.bucket.datomic/query-match*? ?q ?name ?size)]] {:where [(re-pattern "2")]})]
-            (should= 2 (count entities))
-            (should= "world" (:name entity))
-            (should= 2 (:size entity))))
+                             [?e :bibelot/size ?size][(c3kit.bucket.datomic/query-match*? ?q ?name ?size)]] {:where [(re-pattern "2")]})
+                r (api/entity- @db (first r))]
+            (should= 2 (count results))
+            (should= "world" (:name r))
+            (should= 2 (:size r))))
         )
     )
 
