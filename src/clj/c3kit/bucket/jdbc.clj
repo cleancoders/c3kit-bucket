@@ -51,7 +51,7 @@
   ([db command] (execute-conn! (.-ds db) (maybe-str->command command) {}))
   ([db command options] (execute-conn! (.-ds db) (maybe-str->command command) options)))
 
-(defn table-name [schema] (or (-> schema :kind :db :name) (-> schema :kind :value name)))
+(defn table-name [schema] (or (-> schema :kind :db :table) (-> schema :kind :db :name) (-> schema :kind :value name)))
 
 (defn drop-table [db table-name]
   (execute-conn! (.-ds db) [(str "DROP TABLE IF EXISTS " table-name)]))
@@ -165,7 +165,7 @@
     (->MapResultSetOptionalBuilder rs rs-meta cols key->type)))
 
 (defn compile-mapping [schema]
-  (let [k->c (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :name) (get-full-key-name k)))) {} (dissoc schema :kind))
+  (let [k->c (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column) (-> s :db :name) (get-full-key-name k)))) {} (dissoc schema :kind))
         c->k (core-reduce (fn [m [k c]] (assoc m c k)) {} k->c)
         k->t (core-reduce -add-type {} (dissoc schema :kind))]
     {:table       (table-name schema)

@@ -33,6 +33,13 @@
      :name  {:db {:type "varchar(42)"}}
      :color {:db {:type "varchar(55)"}}}))
 
+(def bibelot-2
+  {:kind  (assoc (s/kind :bibelot) :db {:table "BIBELOT"})
+   :id    {:type :long :db {:type "serial PRIMARY KEY" :column "Number"}}
+   :name  {:type :string :db {:type "varchar(42)" :column "Name"}}
+   :size  {:type :long :db {:type "int"}}
+   :color {:type :string :db {:type "varchar(55)" :column "Colour"}}})
+
 (def disorganized
   (schema/merge-schemas
     spec/disorganized
@@ -83,12 +90,12 @@
 
         (it "bibelot"
           (should= (str "CREATE TABLE bibelot ("
-                        "\"id\" serial PRIMARY KEY,"
-                        "\"name\" varchar(42),"
-                        "\"size\" int4,"
-                        "\"color\" varchar(55)"
-                        ")")
-                   (sut/sql-create-table :foo bibelot)))
+                     "\"id\" serial PRIMARY KEY,"
+                     "\"name\" varchar(42),"
+                     "\"size\" int4,"
+                     "\"color\" varchar(55)"
+                     ")")
+            (sut/sql-create-table :foo bibelot)))
 
         (it "schema-type to db-type"
           (should= "int4" (sut/schema-type->db-type :foo :int))
@@ -99,11 +106,18 @@
 
     (context "compile schema"
 
-      (it "bibelot"
+      (it "bibelot - keys = columns"
         (let [compiled (sut/compile-mapping spec/bibelot)]
           (should= "bibelot" (:table compiled))
           (should= {:id "id" :name "name" :size "size" :color "color"} (:key->col compiled))
           (should= {"id" :id "name" :name "size" :size "color" :color} (:col->key compiled))
+          (should= {:id :long :name :string :size :long :color :string} (:key->type compiled))))
+
+      (it "bibelot2 - given table & columns"
+        (let [compiled (sut/compile-mapping bibelot-2)]
+          (should= "BIBELOT" (:table compiled))
+          (should= {:id "Number" :name "Name" :size "size" :color "Colour"} (:key->col compiled))
+          (should= {"Number" :id "Name" :name "size" :size "Colour" :color} (:col->key compiled))
           (should= {:id :long :name :string :size :long :color :string} (:key->type compiled))
           ))
 
