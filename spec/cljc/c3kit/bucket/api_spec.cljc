@@ -17,8 +17,7 @@
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time :refer [ago minutes]]
-            #?(:clj [c3kit.apron.util :as util])
-            [clojure.string :as str]))
+            #?(:clj [c3kit.apron.util :as util])))
 
 (describe "API"
 
@@ -76,7 +75,7 @@
          (it "config-var"
            (let [config {:foo "bar" :config-var 'foo.bar}]
              (with-redefs [util/read-edn-resource (stub :read-edn {:return config})
-                           util/var-value (stub :var-value {:return {:fizz "bang"}})]
+                           util/var-value         (stub :var-value {:return {:fizz "bang"}})]
                (let [result (sut/load-config)]
                  (should= {:foo "bar" :fizz "bang"} result)
                  (should-have-invoked :var-value {:with ['foo.bar]})))))
@@ -88,7 +87,7 @@
          (it "start"
            (let [config {:full-schema 'foo/bar :impl :memory}]
              (with-redefs [sut/load-config (constantly config)
-                           util/var-value (constantly [])]
+                           util/var-value  (constantly [])]
                (let [app (sut/-start-service {})]
                  (should-contain :bucket/impl app)
                  (should= config (:bucket/config app))
@@ -121,13 +120,14 @@
    :color {:type :string}})
 
 (def thingy
-  {:kind (s/kind :thingy)
-   :id   {:type :int}
-   :foo  {:type :string}
-   :bar  {:type :long}
-   :fizz {:type :long}
-   :bang {:type :instant}
-   :name {:type :string}})
+  {:kind    (s/kind :thingy)
+   :id      {:type :int}
+   :foo     {:type :string}
+   :bar     {:type :long}
+   :fizz    {:type :long}
+   :truthy? {:type :boolean}
+   :bang    {:type :instant}
+   :name    {:type :string}})
 
 (def doodad
   {:kind    (s/kind :doodad)
@@ -190,12 +190,12 @@
         (should= "thingy" (:name saved))))
 
     (it "updates one"
-      (let [saved (sut/tx {:kind :bibelot :name "thingy"})
+      (let [saved   (sut/tx {:kind :bibelot :name "thingy"})
             updated (sut/tx saved :name "new-y")]
         (should= "new-y" (:name updated))))
 
     (it "reads created"
-      (let [saved (sut/tx {:kind :bibelot :name "thingy"})
+      (let [saved  (sut/tx {:kind :bibelot :name "thingy"})
             loaded (sut/entity :bibelot (:id saved))]
         (should= :bibelot (:kind loaded))
         (should= "thingy" (:name loaded))
@@ -204,7 +204,7 @@
     (it "creates many"
       (let [thing-one {:kind :bibelot :name "thing-one"}
             thing-two {:kind :thingy :id 123 :foo "thing-two"}
-            things (sut/tx* [thing-one thing-two])
+            things    (sut/tx* [thing-one thing-two])
             [saved-one saved-two] things]
         (should= 2 (count things))
         (should-not-be-nil (:id (second things)))
@@ -229,17 +229,17 @@
         (should-throw (sut/entity! :bibelot 9999))))
 
     (it "updating"
-      (let [saved (sut/tx {:kind :bibelot :name "thingy"})
+      (let [saved   (sut/tx {:kind :bibelot :name "thingy"})
             updated (sut/tx saved :name "whatsamajigger")
-            loaded (sut/entity :bibelot (:id saved))]
+            loaded  (sut/entity :bibelot (:id saved))]
         (should= "whatsamajigger" (:name loaded))
         (should= (:id saved) (:id loaded))
         (should= (:id saved) (:id updated))))
 
     (it "updating entity with missing fields doesn't clear them"
-      (let [saved (sut/tx {:kind :bibelot :name "thingy" :size 42 :color "pink"})
+      (let [saved   (sut/tx {:kind :bibelot :name "thingy" :size 42 :color "pink"})
             updated (sut/tx saved :name "whatsamajigger")
-            loaded (sut/entity :bibelot (:id saved))]
+            loaded  (sut/entity :bibelot (:id saved))]
         (should= "whatsamajigger" (:name updated))
         (should= "whatsamajigger" (:name loaded))
         (should= 42 (:size updated))
@@ -248,8 +248,8 @@
         (should= "pink" (:color loaded))))
 
     (it "updating many"
-      (let [saved-one (sut/tx {:kind :bibelot :name "thingy"})
-            saved-two (sut/tx {:kind :bibelot :name "another thing"})
+      (let [saved-one  (sut/tx {:kind :bibelot :name "thingy"})
+            saved-two  (sut/tx {:kind :bibelot :name "another thing"})
             [updated-one updated-two :as updates] (sut/tx* [(assoc saved-one :name "whatsamajigger") (assoc saved-two :name "whatchamacallit")])
             loaded-one (sut/entity :bibelot (:id saved-one))
             loaded-two (sut/entity :bibelot (:id saved-two))]
@@ -261,25 +261,25 @@
         (should= (:id saved-two) (:id updated-two))))
 
     (it "delete via metadata"
-      (let [saved (sut/tx {:kind :bibelot :name "thingy"})
+      (let [saved   (sut/tx {:kind :bibelot :name "thingy"})
             updated (sut/tx (with-meta saved {:db/delete? true}))]
         (should= nil (sut/entity :bibelot (:id saved)))
         (should= {:kind :bibelot :id (:id saved) :db/delete? true} updated)))
 
     (it "deleting via :db/delete? attr"
-      (let [saved (sut/tx {:kind :bibelot :name "thingy"})
+      (let [saved   (sut/tx {:kind :bibelot :name "thingy"})
             updated (sut/tx (assoc saved :db/delete? true))]
         (should= nil (sut/entity :bibelot (:id saved)))
         (should= {:kind :bibelot :id (:id saved) :db/delete? true} updated)))
 
     (it "deleting when passed an entity"
-      (let [saved (sut/tx {:kind :bibelot :name "thingy"})
+      (let [saved     (sut/tx {:kind :bibelot :name "thingy"})
             retracted (sut/delete saved)]
         (should= {:kind :bibelot :id (:id saved) :db/delete? true} retracted)
         (should= nil (sut/entity :bibelot (:id saved)))))
 
     (it "deleting when passed an id"
-      (let [saved (sut/tx {:kind :bibelot :name "thingy"})
+      (let [saved     (sut/tx {:kind :bibelot :name "thingy"})
             retracted (sut/delete :bibelot (:id saved))]
         (should= {:kind :bibelot :id (:id saved) :db/delete? true} retracted)
         (should= nil (sut/entity :bibelot (:id saved)))))
@@ -331,7 +331,7 @@
     (context "tx*"
 
       (it "add and delete"
-        (let [b1 (sut/tx {:kind :bibelot :name "thing 1"})
+        (let [b1     (sut/tx {:kind :bibelot :name "thing 1"})
               result (sut/tx* [(assoc b1 :db/delete? true)
                                {:kind :bibelot :name "thing 2"}])]
           (should= 2 (count result))
@@ -358,30 +358,30 @@
     (helper/with-schemas config [doodad])
 
     (it "loading"
-      (let [saved (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+      (let [saved  (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
             loaded (sut/entity (:id saved))]
         (should= (:id loaded) (:id saved))
         (should= #{"foo" "bar"} (set (:names loaded)))
         (should= #{8 42} (set (:numbers loaded)))))
 
     (it "find by attribute"
-      (let [saved (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+      (let [saved  (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
             loaded (sut/find-by :doodad :names "bar")]
         (should= 1 (count loaded))
         (should= (:id saved) (:id (first loaded)))))
 
     (it "retracting [string] value"
-      (let [saved (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+      (let [saved   (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
             updated (sut/tx saved :names nil)]
         (should-be-nil (seq (:names updated)))))
 
     (it "retracting one value from [string]"
-      (let [saved (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+      (let [saved   (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
             updated (sut/tx saved :names ["foo"])]
         (should= #{"foo"} (set (:names updated)))))
 
     (it "adding one value to [string]"
-      (let [saved (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+      (let [saved   (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
             updated (sut/tx saved :names ["foo" "bar" "fizz"])]
         (should= #{"foo" "bar" "fizz"} (set (:names updated)))))
 
@@ -540,20 +540,20 @@
               (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
       (it "="
-        (let [result (sut/find-by :bibelot :name ['= "hi!"])
+        (let [result       (sut/find-by :bibelot :name ['= "hi!"])
               result-names (map :name result)]
           (should-contain "hi!" result-names)
           (should-not-contain "world" result-names)))
 
       (it "= many"
-        (let [result (sut/find-by :bibelot :name ['= "hi!" "world"])
+        (let [result       (sut/find-by :bibelot :name ['= "hi!" "world"])
               result-names (map :name result)]
           (should-contain "hi!" result-names)
           (should-contain "world" result-names)
           (should-not-contain "hello" result-names)))
 
       (it "not= nil"
-        (let [result (sut/find-by :bibelot :size ['not= nil])
+        (let [result       (sut/find-by :bibelot :size ['not= nil])
               result-names (map :name result)]
           (should-not-contain "hello" result-names)
           (should-contain "world" result-names)
@@ -575,7 +575,7 @@
           (should= [] (sut/find-by :bibelot :name ["BLAH" "ARG"]))))
 
       (it "< > string"
-        (let [result (sut/find-by :bibelot :name ['> "g"] :name ['< "i"])
+        (let [result       (sut/find-by :bibelot :name ['> "g"] :name ['< "i"])
               result-names (map :name result)]
           (should-contain "hi!" result-names)
           (should-not-contain "world" result-names)))
@@ -618,9 +618,16 @@
 
       (it "compare against entity with nil value"
         (sut/clear)
-        (let [b1 (sut/tx :kind :bibelot :name "1" :size 1)
+        (let [b1  (sut/tx :kind :bibelot :name "1" :size 1)
               _b2 (sut/tx :kind :bibelot :name "nil" :size nil)]
           (should= [b1] (sut/find-by :bibelot :size ['>= 0]))))
+
+      (it "compare against boolean value"
+        (sut/clear)
+        (let [_thing1 (sut/tx :kind :thingy :id 123 :truthy? true)
+              thing2  (sut/tx :kind :thingy :id 124 :truthy? false)
+              _thing3 (sut/tx :kind :thingy :id 125 :truthy? nil)]
+          (should= [thing2] (sut/find-by :thingy :truthy? false))))
       )
     )
   )
@@ -662,8 +669,7 @@
               (sut/tx {:kind :bibelot :name "hello"})
               (sut/tx {:kind :bibelot :name "world"})
               (sut/tx {:kind :bibelot :name "world" :size 2})
-              (sut/tx {:kind :bibelot :name "hi!" :size 2})
-              )
+              (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
       (it "all"
         (sut/tx {:kind :thingy :id 123 :name "world"})
@@ -686,12 +692,13 @@
     (helper/with-schemas config [bibelot thingy])
 
     (with child (sut/tx {:kind :bibelot :name "child" :color "golden"}))
-    (with original (sut/tx {:kind :thingy
-                            :id   123
-                            :foo  "foo"
-                            :bar  (:id @child)
-                            :fizz 1234
-                            :bang (time/now)}))
+    (with original (sut/tx {:kind    :thingy
+                            :id      123
+                            :foo     "foo"
+                            :bar     (:id @child)
+                            :truthy? true
+                            :fizz    1234
+                            :bang    (time/now)}))
 
 
     (it "can set a string to nil"
@@ -704,15 +711,20 @@
         (should= nil (:bar result))
         (should= nil (:bar (sut/reload @original)))))
 
-    (it "can set a int to nil"
+    (it "can set an int to nil"
       (let [result (sut/tx (assoc @original :fizz nil))]
         (should= nil (:fizz result))
         (should= nil (:fizz (sut/reload @original)))))
 
-    (it "can set a instant to nil"
+    (it "can set a boolean to nil"
+      (let [result (sut/tx (assoc @original :truthy? nil))]
+        (should-be-nil (:truthy? result))
+        (should-be-nil (:truthy? (sut/reload @original)))))
+
+    (it "can set an instant to nil"
       (let [result (sut/tx (assoc @original :bang nil))]
-        (should= nil (:bang result))
-        (should= nil (:bang (sut/reload @original)))))
+        (should-be-nil (:bang result))
+        (should-be-nil (:bang (sut/reload @original)))))
     )
   )
 
@@ -737,7 +749,7 @@
         (should= red (sut/tx (sut/cas {:name "red" :size 1 :color "red"} red)))))
 
     (it "matching 2"
-      (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})
+      (let [red  (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})
             blue (sut/tx {:kind :bibelot :name "blue" :size 1 :color "red"})]
         (should= red (sut/tx (sut/cas {:color "red"} red)))
         (should= blue (sut/reload blue))))
@@ -749,7 +761,7 @@
         (should-throw (sut/tx (sut/cas {:size 2} red)))))
 
     (it "mis-match in tx*"
-      (let [red (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})
+      (let [red   (sut/tx {:kind :bibelot :name "red" :size 1 :color "red"})
             green (sut/tx {:kind :bibelot :name "green" :size 2 :color "green"})]
         (should-throw (sut/tx* [(sut/cas {:name "blue"} (assoc red :size 9)) (assoc green :size 9)]))
         (should= 1 (:size (sut/reload red)))
@@ -771,29 +783,29 @@
     (context "find-by"
 
       (it "like fuzzy match with anything before or after"
-        (let [result (sut/find-by :bibelot :name ['like "%orl%"])
+        (let [result       (sut/find-by :bibelot :name ['like "%orl%"])
               result-names (map :name result)]
           (should-contain "world" result-names)
           (should-not-contain "hi!" result-names)))
 
       (it "like fuzzy match with anything after"
-        (let [_ (sut/tx {:kind :bibelot :name "hello world"})
-              result (sut/find-by :bibelot :name ['like "worl%"])
+        (let [_            (sut/tx {:kind :bibelot :name "hello world"})
+              result       (sut/find-by :bibelot :name ['like "worl%"])
               result-names (map :name result)]
           (should-contain "world" result-names)
           (should-not-contain "hello world" result-names)))
 
       (it "like fuzzy match with _"
-        (let [_ (sut/tx {:kind :bibelot :name "words"})
-              result (sut/find-by :bibelot :name ['like "wor__"])
+        (let [_            (sut/tx {:kind :bibelot :name "words"})
+              result       (sut/find-by :bibelot :name ['like "wor__"])
               result-names (map :name result)]
           (should-contain "world" result-names)
           (should-contain "words" result-names)
           (should-not-contain "hello" result-names)))
 
       (it "like with exact match"
-        (let [_ (sut/tx {:kind :bibelot :name "words"})
-              result (sut/find-by :bibelot :name ['like "world"])
+        (let [_            (sut/tx {:kind :bibelot :name "words"})
+              result       (sut/find-by :bibelot :name ['like "world"])
               result-names (map :name result)]
           (should-contain "world" result-names)
           (should-not-contain "words" result-names)
@@ -818,14 +830,14 @@
           (should= [] (map :name result))))
 
       (it "not= many"
-        (let [result (sut/find-by :bibelot :name ['not= "hello" "world"])
+        (let [result       (sut/find-by :bibelot :name ['not= "hello" "world"])
               result-names (map :name result)]
           (should-contain "hi!" result-names)
           (should-not-contain "hello" result-names)
           (should-not-contain "world" result-names)))
 
       (it "not="
-        (let [result (sut/find-by :bibelot :name ['not= "hi!"])
+        (let [result       (sut/find-by :bibelot :name ['not= "hi!"])
               result-names (map :name result)]
           (should-not-contain "hi!" result-names)
           (should-contain "hello" result-names)
@@ -834,7 +846,3 @@
     )
 
   )
-
-
-
-

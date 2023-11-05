@@ -51,10 +51,18 @@
   ([db command] (execute-conn! (.-ds db) (maybe-str->command command) {}))
   ([db command options] (execute-conn! (.-ds db) (maybe-str->command command) options)))
 
-(defn table-name [schema] (or (-> schema :kind :db :table) (-> schema :kind :db :name) (-> schema :kind :value name)))
+(defn table-name [schema]
+  (or (-> schema :kind :db :table)
+      (-> schema :kind :db :name)
+      (-> schema :kind :value name)))
+
+(defn dialect [db] (.-dialect db))
+
+(defmulti ->safe-name (fn [dialect _name] dialect))
+(defmethod ->safe-name :default [_ name] (str \" name \"))
 
 (defn drop-table [db table-name]
-  (execute-conn! (.-ds db) [(str "DROP TABLE IF EXISTS " table-name)]))
+  (execute-conn! (.-ds db) [(str "DROP TABLE IF EXISTS " (->safe-name (dialect db) table-name))]))
 
 (defn- drop-table-from-schema [db schema]
   (drop-table db (table-name schema)))
@@ -69,31 +77,37 @@
    ;:string  "text"
    })
 
-(defn dialect [db] (.-dialect db))
-
 (defn schema-type->db-type [dialect type]
   (get (schema->db-type-map dialect) type))
 
 (defn column-name
   ([[key spec]] (column-name key spec))
-  ([key spec] (or (-> spec :db :name) (name key))))
+  ([key spec] (or (-> spec :db :name)
+                  (-> spec :db :column)
+                  (name key))))
 
 (defn sql-col-type [dialect spec]
   (let [type (:type spec)]
-    (or (-> spec :db :type) (schema-type->db-type dialect type) (name type))))
+    (or (-> spec :db :type)
+        (schema-type->db-type dialect type)
+        (name type))))
 
-(defn sql-table-col [dialect key spec] (str "\"" (column-name key spec) "\" " (sql-col-type dialect spec)))
+(defn sql-table-col [dialect key spec]
+  (let [column-name (column-name key spec)]
+    (str (->safe-name dialect column-name) " " (sql-col-type dialect spec))))
 
 (defn sql-add-column
   ([dialect table col spec]
-   (str "ALTER TABLE " (name table) " ADD COLUMN \"" (name col) "\" " (sql-col-type dialect spec)))
+   (str "ALTER TABLE " (->safe-name dialect (name table)) " ADD COLUMN " (->safe-name dialect (name col)) " " (sql-col-type dialect spec)))
   ([dialect schema attr]
    (str "ALTER TABLE " (table-name schema) " ADD COLUMN " (sql-table-col dialect attr (get schema attr)))))
 
 (defn sql-create-table [dialect schema]
-  (str "CREATE TABLE " (table-name schema) " ("
-       (str/join "," (map (fn [[key spec]] (sql-table-col dialect key spec)) (dissoc schema :kind)))
-       ")"))
+  (let [table     (->safe-name dialect (table-name schema))
+        col-specs (map (fn [[key spec]] (sql-table-col dialect key spec)) (dissoc schema :kind))]
+    (str "CREATE TABLE " table " ("
+         (str/join "," col-specs)
+         ")")))
 
 (defn create-table-from-schema [db schema]
   (let [dialect (.-dialect db)
@@ -101,29 +115,35 @@
         sql     (sql-create-table dialect schema)]
     (execute-conn! ds [sql])))
 
-(defn- ->field-name [{:keys [table key->col]} k]
-  (if (namespace k)
-    (get key->col k)
-    (str table "." (get key->col k))))
+(defn- ->field-name [dialect {:keys [table key->col]} k]
+  (cond->> (->safe-name dialect (get key->col k))
+           (not (namespace k))
+           (str (->safe-name dialect table) \.)))
 
 (defn spec->db-type [spec]
   (let [type    (:type spec)
-        db-type (get-in spec [:db :type])]
+        db-type (-> spec :db :type)]
     (if (and (= :string type) db-type (str/starts-with? db-type "json"))
       :json
       type)))
 
-(defn <-sql-value [type value]
-  (case type
-    :json (.getValue value)
-    :date (time/->local value)
-    value))
+(defn time? [type] (#{:instant :date :timestamp} type))
 
-(defn ->sql-value [type value]
+(defn <-sql-value [type value]
+  (cond
+    (= :json type) (.getValue value)
+    (and (time? type) (integer? value)) (time/from-epoch value)
+    (= :date type) (time/->local value)
+    :else value))
+
+(defmulti ->sql-value (fn [dialect _type _value] dialect))
+
+(defmethod ->sql-value :default [_ type value]
   (case type
     :date (schema/->sql-date value)
     :timestamp (schema/->timestamp value)
     :instant (schema/->timestamp value)
+    :boolean (if (integer? value) (not= 0 value) value)
     value))
 
 (defn ->sql-param [dialect type]
@@ -165,7 +185,9 @@
     (->MapResultSetOptionalBuilder rs rs-meta cols key->type)))
 
 (defn compile-mapping [schema]
-  (let [k->c (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column) (-> s :db :name) (get-full-key-name k)))) {} (dissoc schema :kind))
+  (let [k->c (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column)
+                                                       (-> s :db :name)
+                                                       (get-full-key-name k)))) {} (dissoc schema :kind))
         c->k (core-reduce (fn [m [k c]] (assoc m c k)) {} k->c)
         k->t (core-reduce -add-type {} (dissoc schema :kind))]
     {:table       (table-name schema)
@@ -192,24 +214,24 @@
         type (get key->type k)]
     {:column (get key->col k)
      :param  (->sql-param dialect type)
-     :value  (->sql-value type v)}))
+     :value  (->sql-value dialect type v)}))
 
 (defn build-fetch-sql [dialect t-map id]
   (let [{:keys [table key->col key->type]} t-map
         column (:id key->col)
         type   (:id key->type)
         param  (->sql-param dialect type)
-        value  (->sql-value type id)]
-    [(str "SELECT * FROM " table " WHERE " column " = " param) value]))
+        value  (->sql-value dialect type id)]
+    [(str "SELECT * FROM " (->safe-name dialect table) " WHERE " column " = " param) value]))
 
 (defn clause-with-operator [dialect {:keys [key->type] :as t-map} k v operator]
   (let [type (get key->type k)]
-    [(str (->field-name t-map k) " " operator " " (->sql-param dialect type))
-     (->sql-value type v)]))
+    [(str (->field-name dialect t-map k) " " operator " " (->sql-param dialect type))
+     (->sql-value dialect type v)]))
 
 (defn- -equality-clause [dialect t-map k v]
   (if (nil? v)
-    [(str (->field-name t-map k) " IS NULL")]
+    [(str (->field-name dialect t-map k) " IS NULL")]
     (clause-with-operator dialect t-map k v "=")))
 
 (defn- -build-parity-or-clause [not? dialect {:keys [key->type] :as t-map} k v]
@@ -217,14 +239,14 @@
         is-null?   (some nil? v)
         v          (->> v set (remove nil?))
         in?        (not (empty? v))
-        field-name (->field-name t-map k)
+        field-name (->field-name dialect t-map k)
         num-vals   (core-count v)]
     (cons (str "("
                (when in? (str field-name (when not? " NOT") " IN (" (str/join "," (repeat num-vals (->sql-param dialect type))) ")"))
                (when (and in? is-null?) (if not? " AND " " OR "))
                (when is-null? (str field-name " IS" (when not? " NOT") " NULL"))
                ")")
-          (map (partial ->sql-value type) v))))
+          (map (partial ->sql-value dialect type) v))))
 
 (def -build-or-clause (partial -build-parity-or-clause false))
 (def -build-nor-clause (partial -build-parity-or-clause true))
@@ -289,25 +311,26 @@
          set-sql    (str/join ", " (map arg->set-sql sql-args))
          where      (-> cas (assoc :id (:id entity)) (dissoc :kind))
          [where-sql & args] (-build-where dialect t-map where)]
-     (cons (str "UPDATE " table " SET " set-sql " " where-sql)
+     (cons (str "UPDATE " (->safe-name dialect table) " SET " set-sql " " where-sql)
            (concat (map :value sql-args) args)))))
 
-(defn build-insert-sql [dialect t-map entity]
+(defmulti build-upsert-sql (fn [dialect _t-map _entity] dialect))
+(defmulti build-insert-sql (fn [dialect _t-map _entity] dialect))
+
+(defmethod build-insert-sql :default [dialect t-map entity]
   (let [{:keys [table key->col key->type]} t-map
         used-key->col (select-keys key->col (keys entity))
         ->sql-args    (partial ->sql-args dialect used-key->col key->type entity)
         sql-args      (->> used-key->col keys (map ->sql-args))
         cols          (->> (map :column sql-args) (map #(str \" % \")))]
-    (cons (str "INSERT INTO " table " (" (str/join ", " cols) ") "
+    (cons (str "INSERT INTO " (->safe-name dialect table) " (" (str/join ", " cols) ") "
                "VALUES (" (str/join ", " (map :param sql-args)) ")")
           (map :value sql-args))))
-
-(defmulti build-upsert-sql (fn [dialect _t-map _entity] dialect))
 
 (defn- build-delete-sql [dialect t-map entity]
   (let [{:keys [table key->col key->type]} t-map
         {:keys [column param value]} (->sql-args dialect key->col key->type entity :id)]
-    [(str "DELETE FROM " table " WHERE " column " = " param) value]))
+    [(str "DELETE FROM " (->safe-name dialect table) " WHERE " column " = " param) value]))
 
 (defn- delete-entity [dialect conn t-map entity]
   (let [sql    (build-delete-sql dialect t-map entity)
@@ -366,7 +389,7 @@
 (defn tx* [db entities]
   (binding [in-transaction? true]
     (jdbc/with-transaction [tx (.-ds db)]
-                           (doall (map #(do-tx db tx %) entities)))))
+      (doall (map #(do-tx db tx %) entities)))))
 
 (defn -seq->sql [& sql-bits]
   (->> (flatten sql-bits)
@@ -376,22 +399,25 @@
 (defmulti -build-find-query (fn [dialect _t-map _options] dialect))
 (defmethod -build-find-query :default [dialect t-map {:keys [where take drop]}]
   (let [[where-sql & args] (-build-where dialect t-map where)
-        sql (-seq->sql "SELECT * FROM" (:table t-map)
-                       where-sql
-                       (when take (str "LIMIT " take))
-                       (when drop (str "OFFSET " drop)))]
+        table (->safe-name dialect (:table t-map))
+        sql   (-seq->sql "SELECT * FROM" table
+                where-sql
+                (when take (str "LIMIT " take))
+                (when drop (str "OFFSET " drop)))]
     (cons sql args)))
 
 (defn- do-find [db kind options]
   (let [t-map (key-map db kind)
-        query (-build-find-query (.-dialect db) t-map options)]
+        query (-build-find-query (dialect db) t-map options)]
     (->> (execute-conn! (.-ds db) query {:builder-fn (:builder-fn t-map)})
          (map #(ccc/remove-nils (assoc % :kind kind))))))
 
 (defn- do-count [db kind {:keys [where] :as _options}]
   (let [{:keys [table] :as t-map} (key-map db kind)
-        [where-sql & args] (-build-where (.-dialect db) t-map where)
-        sql (str/join " " ["SELECT COUNT(*) FROM" table where-sql])]
+        dialect (dialect db)
+        table   (->safe-name dialect table)
+        [where-sql & args] (-build-where dialect t-map where)
+        sql     (str/join " " ["SELECT COUNT(*) FROM" table where-sql])]
     (first (vals (execute-one-conn! (.-ds db) (cons sql args))))))
 
 (defn reduce [db kind f init options]
@@ -423,7 +449,8 @@
 (defn delete-all [db kind]
   (api/-assert-safety-off! "delete")
   (let [{:keys [table]} (key-map db kind)
-        sql (str "DELETE FROM " table " WHERE 1 = 1")]
+        table (->safe-name (dialect db) table)
+        sql   (str "DELETE FROM " table " WHERE 1 = 1")]
     (execute-one-conn! (.-ds db) [sql])))
 
 (defn build-table-schema [db name->key result table]
@@ -452,19 +479,26 @@
 
 (defn- do-install-schema [db schema]
   (log/info (str "  installing schema " (-> schema :kind :value) " (" (table-name schema) ")"))
-  (execute! db (sql-create-table dialect schema)))
+  (execute! db (sql-create-table (dialect db) schema)))
 
 (defn do-add-attribute!
   ([db schema attr]
-   (execute! db [(sql-add-column (.-dialect db) schema attr)]))
+   (execute! db [(sql-add-column (dialect db) schema attr)]))
   ([db kind attr spec]
    (if (column-exists? db (name kind) (name attr))
      (log/warn "  add attribute ALREADY EXISTS " (keyword (name kind) (name attr)))
-     (execute! db [(sql-add-column (.-dialect db) kind attr spec)]))))
+     (execute! db [(sql-add-column (dialect db) kind attr spec)]))))
+
+(defmulti drop-column-sql (fn [dialect _table _column] dialect))
+(defmethod drop-column-sql :default [_ table column]
+  (str "ALTER TABLE " table " DROP COLUMN IF EXISTS " column))
 
 (defn do-remove-attribute! [db kind attr]
   (if (column-exists? db (name kind) (name attr))
-    (let [sql (str "ALTER TABLE " (name kind) " DROP COLUMN IF EXISTS \"" (name attr) "\"")]
+    (let [dialect (dialect db)
+          table   (->safe-name dialect (name kind))
+          column  (->safe-name dialect (name attr))
+          sql     (drop-column-sql dialect table column)]
       (log/info "  removing " (keyword (name kind) (name attr)))
       (execute! db [sql]))
     (log/warn "  remove MISSING " (keyword (name kind) (name attr)))))
@@ -473,7 +507,11 @@
   (when-not (= kind new-kind)
     (throw (ex-info "cannot rename attribute kind" {:kind kind :attr attr :new-kind new-kind :new-attr new-attr})))
   (if (column-exists? db (name kind) (name attr))
-    (let [sql (sql-rename-column db kind attr new-attr)]
+    (let [dialect (dialect db)
+          table   (->safe-name dialect (name kind))
+          old-col (->safe-name dialect (name attr))
+          new-col (->safe-name dialect (name new-attr))
+          sql     (sql-rename-column db table old-col new-col)]
       (log/info (str "  renaming " (keyword (name kind) (name attr)) " to " (keyword (name new-kind) (name new-attr))))
       (execute! db [sql]))
     (log/warn "  rename MISSING " (keyword (name kind) (name attr)))))
@@ -508,7 +546,7 @@
     (let [config                    (set/rename-keys config {:min-pool-size :minPoolSize :max-pool-size :maxPoolSize})
           ^ComboPooledDataSource ds (connection/->pool ComboPooledDataSource config)]
       (log/info "\tConnection Pooling: " {:min (.getMinPoolSize ds) :max (.getMaxPoolSize ds)})
-      (.close (jdbc/get-connection ds))                     ;; initialize and validate pool says the docs
+      (.close (jdbc/get-connection ds)) ;; initialize and validate pool says the docs
       ds)
     (jdbc/get-datasource config)))
 
@@ -533,9 +571,14 @@
   (find-sql- @api/impl kind sql))
 
 (defmulti auto-int-primary-key identity)
+(defmulti timestamp-type identity)
 (defmethod auto-int-primary-key :default [_] "serial PRIMARY KEY")
+(defmethod timestamp-type :default [_] "timestamp")
 
-(defmethod migrator/migration-schema :jdbc [config]
-  (merge-with merge migrator/default-migration-schema {:id   {:db {:type "serial PRIMARY KEY"}}
-                                                       :name {:db {:type "varchar(255) UNIQUE"}}
-                                                       :at   {:db {:type "timestamp"}}}))
+(defmethod migrator/migration-schema :jdbc [{:keys [dialect]}]
+  (merge-with
+    merge
+    migrator/default-migration-schema
+    {:id   {:db {:type (auto-int-primary-key dialect)}}
+     :name {:db {:type "varchar(255) UNIQUE"}}
+     :at   {:db {:type (timestamp-type dialect)}}}))

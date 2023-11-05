@@ -66,7 +66,7 @@
     (reduce #(assoc %1 (:columns/column_name %2) (column->spec constraints %2)) {} columns)))
 
 (defmethod jdbc/sql-rename-column :h2 [_db table col-old col-new]
-  (str "ALTER TABLE " (name table) " ALTER COLUMN IF EXISTS \"" (name col-old) "\" RENAME TO \"" (name col-new) "\""))
+  (str "ALTER TABLE " table " ALTER COLUMN IF EXISTS " col-old " RENAME TO " col-new))
 
 (defmethod jdbc/table-exists? :h2 [db table]
   (some? (jdbc/execute-one! db ["SELECT * FROM information_schema.tables WHERE table_name=?" table])))

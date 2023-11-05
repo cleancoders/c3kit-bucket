@@ -1,26 +1,42 @@
-(ns c3kit.bucket.postgres-spec
-  (:require [c3kit.bucket.api :as api]
+(ns c3kit.bucket.sqlite3-spec
+  (:require [c3kit.apron.schema :as schema]
+            [c3kit.apron.schema]
+            [c3kit.apron.time :as time]
+            [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.jdbc :as jdbc]
             [c3kit.bucket.jdbc-spec :as jdbc-spec]
             [c3kit.bucket.migrator :as migrator]
-            [c3kit.bucket.postgres]
+            [c3kit.bucket.spec-helperc :as helper]
+            [c3kit.bucket.sqlite3]
             [speclj.core :refer :all]))
 
 (def config {:impl    :jdbc
-             :dialect :postgres
-             :host    "localhost"
-             :port    5432
-             :dbtype  "postgresql"
-             :dbname  "test"})
+             :dialect :sqlite3
+             :dbtype  "sqlite"
+             :dbname  "sqlite_test.db"})
+
+(def auto-id {:id {:db {:type "INTEGER PRIMARY KEY AUTOINCREMENT"}}})
+
+(def reserved-word-entity (schema/merge-schemas jdbc-spec/reserved-word-entity auto-id))
+
+(def thingy
+  (schema/merge-schemas
+    jdbc-spec/thingy
+    {:id      {:db {:type "INTEGER PRIMARY KEY" :strategy :pre-populated}}
+     :truthy? {:db {:column "truthy"}}}))
+
+(def bibelot (schema/merge-schemas jdbc-spec/bibelot auto-id))
+(def disorganized (schema/merge-schemas jdbc-spec/disorganized auto-id))
 
 (declare db)
 
-(with-redefs [spec/bibelot      jdbc-spec/bibelot
-              spec/thingy       jdbc-spec/thingy
-              spec/disorganized jdbc-spec/disorganized]
+(with-redefs [spec/bibelot                   bibelot
+              spec/thingy                    thingy
+              spec/disorganized              disorganized
+              jdbc-spec/reserved-word-entity reserved-word-entity]
 
-  (describe "PostgresSQL"
+  (describe "SQLite3"
 
     (around [it] (api/with-safety-off (it)))
     (with-stubs)
@@ -39,6 +55,21 @@
       (spec/cas config)
       (jdbc-spec/reserved-word-specs config)
 
+      (context "db specific"
+        (helper/with-schemas config [thingy])
+
+        (it "reads and writes instants"
+          (let [now    (time/now)
+                thingy (api/tx {:kind :thingy :id 1 :bang now})]
+            (should= now (:bang thingy))))
+
+        (it "reads and writes booleans"
+          (let [now    (time/now)
+                thingy (api/tx {:kind :thingy :id 1 :bang now})]
+            (should= now (:bang thingy))))
+
+        )
+
       (context "migrator"
 
         (with db (api/create-db config []))
@@ -48,16 +79,16 @@
           (let [schema (migrator/migration-schema config)]
             (should= :migration (-> schema :kind :value))
             (should= :int (-> schema :id :type))
-            (should= {:type "serial PRIMARY KEY"} (-> schema :id :db))
+            (should= {:type "INTEGER PRIMARY KEY AUTOINCREMENT"} (-> schema :id :db))
             (should= {:type "varchar(255) UNIQUE"} (-> schema :name :db))
-            (should= {:type "timestamp"} (-> schema :at :db))))
+            (should= {:type "INTEGER"} (-> schema :at :db))))
 
         (it "installed-schema-legend"
-          (let [_      (jdbc/create-table-from-schema @db jdbc-spec/bibelot)
-                result (migrator/-installed-schema-legend @db {:bibelot jdbc-spec/bibelot})]
-            (should= {:type :long :db {:type "serial PRIMARY KEY"}} (-> result :bibelot :id))
+          (let [_      (jdbc/create-table-from-schema @db bibelot)
+                result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
+            (should= {:type :long :db {:type "INTEGER PRIMARY KEY"}} (-> result :bibelot :id))
             (should= {:type :string :db {:type "varchar(42)"}} (-> result :bibelot :name))
-            (should= {:type :long :db {:type "int4"}} (-> result :bibelot :size))
+            (should= {:type :long :db {:type "INTEGER"}} (-> result :bibelot :size))
             (should= {:type :string :db {:type "varchar(55)"}} (-> result :bibelot :color))))
 
         (it "install-schema!"
@@ -65,7 +96,7 @@
                 _      (migrator/-install-schema! @db schema)
                 result (migrator/-installed-schema-legend @db {:bubble schema})]
             (should= {:type :string :db {:type "varchar(42)"}} (-> result :bubble :name))
-            (should= {:type :long :db {:type "int4"}} (-> result :bubble :size))
+            (should= {:type :long :db {:type "INTEGER"}} (-> result :bubble :size))
             (should= {:type :string :db {:type "varchar(55)"}} (-> result :bubble :color))))
 
         (it "schema-exists?"
@@ -85,40 +116,33 @@
             (should= {:type :string :db {:type "varchar(123)"}} (-> result :bibelot :fizz))))
 
         (it "remove-attribute!"
-          (let [_          (migrator/-install-schema! @db jdbc-spec/bibelot)
-                db2        (api/create-db config [jdbc-spec/bibelot])
+          (let [_          (migrator/-install-schema! @db bibelot)
+                db2        (api/create-db config [bibelot])
                 entity     (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
                 _          (migrator/-remove-attribute! @db :bibelot :color)
                 reloaded   (api/reload- db2 entity)
-                new-legend (migrator/-installed-schema-legend @db {:bibelot jdbc-spec/bibelot})]
+                new-legend (migrator/-installed-schema-legend @db {:bibelot bibelot})]
             (should= nil (:color reloaded))
             (should-not-contain :color (:bibelot new-legend))))
 
         (it "rename-attribute!"
-          (let [_          (migrator/-install-schema! @db jdbc-spec/bibelot)
-                db2        (api/create-db config [jdbc-spec/bibelot])
+          (let [_          (migrator/-install-schema! @db bibelot)
+                db2        (api/create-db config [bibelot])
                 entity     (api/tx- db2 {:kind :bibelot :name "red" :size 2 :color "red"})
                 _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
-                new-legend (migrator/-installed-schema-legend @db {:bibelot jdbc-spec/bibelot})
+                new-legend (migrator/-installed-schema-legend @db {:bibelot bibelot})
                 reloaded   (api/reload- db2 entity)]
             (should= nil (:color reloaded))
             (should-not-contain :color (:bibelot new-legend))
             (should= :string (get-in new-legend [:bibelot :hue :type]))))
 
-        ;(it "rename-attribute! - can't change kind"
-        ;  (migrator/install-schema! @db bibelot)
-        ;  (should-throw (migrator/rename-attribute! @db :bibelot :color :widget :hue)))
-        ;
-        ;(it "rename-attribute! - new attribute exists"
-        ;  (migrator/install-schema! @db bibelot)
-        ;  (log/capture-logs
-        ;    (should-throw (migrator/rename-attribute! @db :bibelot :color :bibelot :size))))
-
         (context "schema translation"
 
           (it "integer"
-            (jdbc-spec/should-regurgitate-spec @db {:type :long :db {:type "int4"}})
-            (jdbc-spec/should-regurgitate-spec @db {:type :long :db {:type "int4 UNIQUE"}}))
+            (jdbc-spec/should-regurgitate-spec @db {:type :long :db {:type "int4"}}))
+
+          (it "float"
+            (jdbc-spec/should-regurgitate-spec @db {:type :float :db {:type "REAL"}}))
 
           (it "string"
             (jdbc-spec/should-regurgitate-spec @db {:type :string :db {:type "varchar(123)"}}))
@@ -126,8 +150,23 @@
           (it "numeric"
             (jdbc-spec/should-regurgitate-spec @db {:type :bigdec :db {:type "numeric(4,3)"}}))
 
+          (it "primary key"
+            (jdbc-spec/should-regurgitate-spec @db {:type :long :db {:type "INTEGER PRIMARY KEY"}}))
+
+          (it "unique"
+            (jdbc-spec/should-regurgitate-spec @db {:type :long :db {:type "INTEGER UNIQUE"}}))
+
+          (it "not null"
+            (jdbc-spec/should-regurgitate-spec @db {:type :long :db {:type "INTEGER NOT NULL"}}))
+
+          (it "default value"
+            (jdbc-spec/should-regurgitate-spec @db {:type :long :db {:type "INTEGER DEFAULT 4"}}))
+
+          (it "hidden"
+            (jdbc-spec/should-regurgitate-spec @db {:type :string :db {:type "TEXT HIDDEN"}}))
           )
         )
+
       )
     )
   )

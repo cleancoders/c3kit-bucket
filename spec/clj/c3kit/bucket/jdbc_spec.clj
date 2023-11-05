@@ -13,6 +13,11 @@
             [speclj.core :refer :all])
   (:import (com.mchange.v2.c3p0 PooledDataSource)))
 
+(def reserved-word-entity
+  {:kind  (assoc (s/kind :reserved-word-entity) :db {:name "select"}) ;; select is a reserved word
+   :id    {:type :int :db {:type "serial PRIMARY KEY"}}
+   :where {:type :int}}) ;; where is a reserved word
+
 (def json-entity
   {:kind  (assoc (s/kind :json-entity) :db {:name "json_entity"})
    :id    {:type :int :db {:type "serial PRIMARY KEY"}}
@@ -51,9 +56,10 @@
 (def thingy
   (schema/merge-schemas
     spec/thingy
-    {:id   {:db {:type "int primary key"} :strategy :pre-populated}
-     :foo  {:db {:type "varchar(255)"}}
-     :name {:db {:type "varchar(255)"}}}))
+    {:id      {:db {:type "int primary key"} :strategy :pre-populated}
+     :foo     {:db {:type "varchar(255)"}}
+     :name    {:db {:type "varchar(255)"}}
+     :truthy? {:db {:column "truthy"}}}))
 
 (declare db)
 
@@ -68,6 +74,54 @@
 (defmacro should-regurgitate-spec [db spec]
   `(should= ~spec (regurgitate-spec ~db ~spec)))
 
+(defn reserved-word-specs [config]
+  (context "reserved-words"
+    (helper/with-schemas config [reserved-word-entity])
+
+    (it "create"
+      (let [e (api/tx {:kind :reserved-word-entity :where 123})]
+        (should= 123 (:where e))
+        (should= 123 (:where (api/reload e)))))
+
+    (it "count"
+      (api/tx {:kind :reserved-word-entity :where 123})
+      (api/tx {:kind :reserved-word-entity :where 124})
+      (should= 2 (api/count :reserved-word-entity)))
+
+    (it "count-by"
+      (api/tx {:kind :reserved-word-entity :where 123})
+      (api/tx {:kind :reserved-word-entity :where 124})
+      (should= 1 (api/count-by :reserved-word-entity :where 123)))
+
+    (it "delete"
+      (let [e (api/tx {:kind :reserved-word-entity :where 123})]
+        (api/delete e)
+        (should-be-nil (api/reload e))))
+
+    (it "delete-all"
+      (api/tx {:kind :reserved-word-entity :where 123})
+      (api/delete-all :reserved-word-entity)
+      (should-be empty? (api/find :reserved-word-entity)))
+
+    (it "update"
+      (let [e       (api/tx {:kind :reserved-word-entity :where 123})
+            updated (api/tx e :where 124)]
+        (should= (assoc e :where 124) updated)
+        (should= updated (api/reload updated))))
+
+    (it "search"
+      (let [e (api/tx {:kind :reserved-word-entity :where 123})]
+        (should= e (api/ffind-by :reserved-word-entity :where 123))))
+
+    (it "drop column"
+      (migrator/remove-attribute! "select" :where))
+
+    (it "rename column"
+      (migrator/rename-attribute! "select" "where" "select" "limit"))
+
+    )
+  )
+
 (with-redefs [spec/bibelot      bibelot
               spec/thingy       thingy
               spec/disorganized disorganized]
@@ -81,8 +135,8 @@
       (context "create table"
 
         (it "name"
-          (should= "CREATE TABLE foo ()" (sut/sql-create-table :foo {:kind {:value :foo}}))
-          (should= "CREATE TABLE bar ()" (sut/sql-create-table :foo {:kind {:value :foo :db {:name "bar"}}})))
+          (should= "CREATE TABLE \"foo\" ()" (sut/sql-create-table :foo {:kind {:value :foo}}))
+          (should= "CREATE TABLE \"bar\" ()" (sut/sql-create-table :foo {:kind {:value :foo :db {:name "bar"}}})))
 
         (it "id"
           (should= "\"id\" int auto_increment PRIMARY KEY" (sut/sql-table-col :foo :id {:type :int :db {:type "int auto_increment PRIMARY KEY"}}))
@@ -90,13 +144,13 @@
           (should= "\"eyeD\" varchar" (sut/sql-table-col :foo :id {:type :uuid :db {:name "eyeD" :type "varchar"}})))
 
         (it "bibelot"
-          (should= (str "CREATE TABLE bibelot ("
-                     "\"id\" serial PRIMARY KEY,"
-                     "\"name\" varchar(42),"
-                     "\"size\" int4,"
-                     "\"color\" varchar(55)"
-                     ")")
-            (sut/sql-create-table :foo bibelot)))
+          (should= (str "CREATE TABLE \"bibelot\" ("
+                        "\"id\" serial PRIMARY KEY,"
+                        "\"name\" varchar(42),"
+                        "\"size\" int4,"
+                        "\"color\" varchar(55)"
+                        ")")
+                   (sut/sql-create-table :foo bibelot)))
 
         (it "schema-type to db-type"
           (should= "int4" (sut/schema-type->db-type :foo :int))
@@ -140,7 +194,7 @@
       (spec/broken-in-datomic config)
       (spec/kind-is-required config)
       (spec/cas config)
-
+      (reserved-word-specs config)
       )
 
     (context "safety"
