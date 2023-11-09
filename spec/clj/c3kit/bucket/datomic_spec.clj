@@ -104,6 +104,10 @@
 
     (context "attribute->spec"
 
+      (it "ignores any without a valueType, which could be just the db"
+        (let [spec (sut/attribute->spec {:db/ident       :doodle})]
+          (should= nil spec)))
+
       (it "simple string"
         (let [spec (sut/attribute->spec {:db/ident       :foo/name
                                          :db/valueType   :db.type/string
@@ -161,6 +165,13 @@
           (should= [:foo :bar {:type :string :db [:fulltext]}] spec)))
 
       )
+
+    (it "all-attributes->specs"
+      (let [specs (sut/all-attributes->specs [{:db/ident       :doodle}
+                                              {:db/ident       :foo/name
+                                               :db/valueType   :db.type/string
+                                               :db/cardinality :db.cardinality/one}])]
+        (should= [[:foo :name {:type :string}]] specs)))
 
     (it "entity"
       (let [schema (sut/->entity-schema {:kind (s/kind :bar)

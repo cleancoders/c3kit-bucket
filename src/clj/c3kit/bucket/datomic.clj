@@ -53,27 +53,30 @@
     :else (throw (ex-info "Invalid schema" schema))))
 
 (defn attribute->spec [attribute]
-  (let [ident       (:db/ident attribute)
-        value-type  (:db/valueType attribute)
-        cardinality (:db/cardinality attribute)
-        index?      (:db/index attribute)
-        unique      (:db/unique attribute)
-        component?  (:db/isComponent attribute)
-        no-history? (:db/noHistory attribute)
-        fulltext?   (:db/fulltext attribute)
-        kind        (keyword (namespace ident))
-        attr-name   (keyword (name ident))
-        schema-type (keyword (name value-type))
-        schema-type (if (= :db.cardinality/many cardinality) [schema-type] schema-type)
-        db          (remove nil? [(when index? :index)
-                                  (when component? :component)
-                                  (when no-history? :no-history)
-                                  (when fulltext? :fulltext)
-                                  (when (= :db.unique/identity unique) :unique-identity)
-                                  (when (= :db.unique/value unique) :unique-value)])
-        spec        {:type schema-type}
-        spec        (if (seq db) (assoc spec :db db) spec)]
-    [kind attr-name spec]))
+  (when-let [value-type (:db/valueType attribute)]
+    (let [ident       (:db/ident attribute)
+          cardinality (:db/cardinality attribute)
+          index?      (:db/index attribute)
+          unique      (:db/unique attribute)
+          component?  (:db/isComponent attribute)
+          no-history? (:db/noHistory attribute)
+          fulltext?   (:db/fulltext attribute)
+          kind        (keyword (namespace ident))
+          attr-name   (keyword (name ident))
+          schema-type (keyword (name value-type))
+          schema-type (if (= :db.cardinality/many cardinality) [schema-type] schema-type)
+          db          (remove nil? [(when index? :index)
+                                    (when component? :component)
+                                    (when no-history? :no-history)
+                                    (when fulltext? :fulltext)
+                                    (when (= :db.unique/identity unique) :unique-identity)
+                                    (when (= :db.unique/value unique) :unique-value)])
+          spec        {:type schema-type}
+          spec        (if (seq db) (assoc spec :db db) spec)]
+      [kind attr-name spec])))
+
+(defn all-attributes->specs [attributes]
+  (->> attributes (map attribute->spec) (remove nil?)))
 
 ;; ^^^^^ schema ^^^^^
 
@@ -341,7 +344,7 @@
   "Returns a list of all the fully qualified idents in the schema."
   ([] (installed-schema-idents @api/impl))
   ([db]
-   (->> (datomic/q '[:find ?ident :where [?e :db/ident ?ident]] (datomic-db db))
+   (->> (datomic/q '[:find ?ident ?e :where [?e :db/ident ?ident]] (datomic-db db))
      (map first)
      (filter (comp not reserved-attr-namespaces namespace))
      sort)))
