@@ -189,12 +189,17 @@
 
 ;; ----- synchronization -----
 
+(defn valid-type? [expected actual-type]
+  (if (vector? actual-type)
+    (apply = (map #(-> % first name str/lower-case) [expected actual-type]))
+    (= (str/lower-case (name expected)) (str/lower-case (name actual-type)))))
+
 (defn- sync-attribute [{:keys [-preview? -db] :as config} schema attr installed-attrs]
   (let [spec (get schema attr)
         kind (-> schema :kind :value)]
     (if-let [actual-type (or (get-in installed-attrs [attr :db :type]) (get-in installed-attrs [attr :type]))]
       (let [expected (or (-> spec :db :type) (:type spec))]
-        (when-not (= (str/lower-case (name expected)) (str/lower-case (name actual-type)))
+        (when-not (valid-type? expected actual-type)
           (log/warn (str kind "/" (name attr) " - type mismatch. expected: '" expected "' but was '" actual-type "'"))))
       (do (log/warn (str kind "/" (name attr) " - attribute missing. Creating."))
           (when-not -preview? (migrator/-add-attribute! -db schema attr))))))
@@ -211,7 +216,6 @@
 (defn- sync-kind [{:keys [-preview? -db -installed-legend] :as config} schema]
   (let [kind            (-> schema :kind :value)
         installed-attrs (get -installed-legend kind)]
-    (prn "installed-attrs: " installed-attrs)
     (if (seq installed-attrs)
       (doseq [attr (sort (keys (dissoc schema :kind)))]
         (sync-attribute config schema attr installed-attrs))

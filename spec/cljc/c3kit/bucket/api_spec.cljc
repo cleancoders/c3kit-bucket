@@ -133,7 +133,8 @@
   {:kind    (s/kind :doodad)
    :id      s/id
    :names   {:type [:string]}
-   :numbers {:type [:long]}})
+   :numbers {:type [:long]}
+   :letters {:type [:keyword]}})
 
 (def disorganized
   {:name {:type :string}

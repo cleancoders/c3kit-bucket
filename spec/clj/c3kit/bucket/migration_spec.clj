@@ -173,6 +173,16 @@
               logs      (log/parse-captured-logs)]
           (should> (time/millis-since-epoch (:at migration)) (time/millis-since-epoch (-> 1 time/seconds time/ago)))
           (should-contain "Synchronizing 1 schema(s) with the database" (map :message logs))))
+
+      (it "updates migration with a vector type"
+        (sut/-ensure-migration-schema! @config)
+        (let [migration (sut/-create-migration! @config sut/SYNC_SCHEMAS)]
+          (db/tx migration :at (-> 6 time/minutes time/ago)))
+        (sut/-maybe-sync-schemas-unlocked! @config [spec/doodad])
+        (let [migration (sut/-fetch-migration @config sut/SYNC_SCHEMAS)
+              logs      (log/parse-captured-logs)]
+          (should> (time/millis-since-epoch (:at migration)) (time/millis-since-epoch (-> 1 time/seconds time/ago)))
+          (should-contain "Synchronizing 1 schema(s) with the database" (map :message logs))))
       )
 
     (context "migrate!"
