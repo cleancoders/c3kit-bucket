@@ -9,6 +9,7 @@
             [c3kit.bucket.jdbc :as sut]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
+            [clojure.set :as set]
             [speclj.core :refer :all])
   (:import (com.mchange.v2.c3p0 PooledDataSource)))
 
@@ -180,6 +181,19 @@
       (it ":connection-pool? option activates pooling"
         (with-open [db (api/create-db (assoc config :connection-pool? true) [])]
           (should= true (instance? PooledDataSource (.-ds db)))))
+
+      (it "default connections config"
+        (log/capture-logs
+          (with-open [db (api/create-db (assoc config :connection-pool? true) [])]
+            (should= true (instance? PooledDataSource (.-ds db)))))
+        (should-contain "Connection Pooling:  {:min 3, :max 15}" (log/captured-logs-str)))
+
+      (it "custom connection config"
+        (log/capture-logs
+          (with-open [db (api/create-db (assoc config :connection-pool? true :min-pool-size 1 :max-pool-size 42) [])]
+            (should= true (instance? PooledDataSource (.-ds db)))))
+        (should-contain "Connection Pooling:  {:min 1, :max 42}" (log/captured-logs-str)))
+
       )
 
     (context "local api"

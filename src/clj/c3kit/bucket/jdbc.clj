@@ -92,8 +92,8 @@
 
 (defn sql-create-table [dialect schema]
   (str "CREATE TABLE " (table-name schema) " ("
-    (str/join "," (map (fn [[key spec]] (sql-table-col dialect key spec)) (dissoc schema :kind)))
-    ")"))
+       (str/join "," (map (fn [[key spec]] (sql-table-col dialect key spec)) (dissoc schema :kind)))
+       ")"))
 
 (defn create-table-from-schema [db schema]
   (let [dialect (.-dialect db)
@@ -220,11 +220,11 @@
         field-name (->field-name t-map k)
         num-vals   (core-count v)]
     (cons (str "("
-            (when in? (str field-name (when not? " NOT") " IN (" (str/join "," (repeat num-vals (->sql-param dialect type))) ")"))
-            (when (and in? is-null?) (if not? " AND " " OR "))
-            (when is-null? (str field-name " IS" (when not? " NOT") " NULL"))
-            ")")
-      (map (partial ->sql-value type) v))))
+               (when in? (str field-name (when not? " NOT") " IN (" (str/join "," (repeat num-vals (->sql-param dialect type))) ")"))
+               (when (and in? is-null?) (if not? " AND " " OR "))
+               (when is-null? (str field-name " IS" (when not? " NOT") " NULL"))
+               ")")
+          (map (partial ->sql-value type) v))))
 
 (def -build-or-clause (partial -build-parity-or-clause false))
 (def -build-nor-clause (partial -build-parity-or-clause true))
@@ -260,7 +260,7 @@
 (defn -build-where [dialect t-map kv-pairs]
   (if-let [sql-conditions (seq (->sql-clauses dialect t-map kv-pairs))]
     (cons (str/join " " (cons "WHERE" (interpose "AND" (map first sql-conditions))))
-      (mapcat rest sql-conditions))
+          (mapcat rest sql-conditions))
     [""]))
 
 (defn- fetch-entity [db conn t-map kind id]
@@ -290,7 +290,7 @@
          where      (-> cas (assoc :id (:id entity)) (dissoc :kind))
          [where-sql & args] (-build-where dialect t-map where)]
      (cons (str "UPDATE " table " SET " set-sql " " where-sql)
-       (concat (map :value sql-args) args)))))
+           (concat (map :value sql-args) args)))))
 
 (defn build-insert-sql [dialect t-map entity]
   (let [{:keys [table key->col key->type]} t-map
@@ -299,8 +299,8 @@
         sql-args      (->> used-key->col keys (map ->sql-args))
         cols          (->> (map :column sql-args) (map #(str \" % \")))]
     (cons (str "INSERT INTO " table " (" (str/join ", " cols) ") "
-            "VALUES (" (str/join ", " (map :param sql-args)) ")")
-      (map :value sql-args))))
+               "VALUES (" (str/join ", " (map :param sql-args)) ")")
+          (map :value sql-args))))
 
 (defmulti build-upsert-sql (fn [dialect _t-map _entity] dialect))
 
@@ -366,27 +366,27 @@
 (defn tx* [db entities]
   (binding [in-transaction? true]
     (jdbc/with-transaction [tx (.-ds db)]
-      (doall (map #(do-tx db tx %) entities)))))
+                           (doall (map #(do-tx db tx %) entities)))))
 
 (defn -seq->sql [& sql-bits]
   (->> (flatten sql-bits)
-    (remove nil?)
-    (str/join " ")))
+       (remove nil?)
+       (str/join " ")))
 
 (defmulti -build-find-query (fn [dialect _t-map _options] dialect))
 (defmethod -build-find-query :default [dialect t-map {:keys [where take drop]}]
   (let [[where-sql & args] (-build-where dialect t-map where)
         sql (-seq->sql "SELECT * FROM" (:table t-map)
-              where-sql
-              (when take (str "LIMIT " take))
-              (when drop (str "OFFSET " drop)))]
+                       where-sql
+                       (when take (str "LIMIT " take))
+                       (when drop (str "OFFSET " drop)))]
     (cons sql args)))
 
 (defn- do-find [db kind options]
   (let [t-map (key-map db kind)
         query (-build-find-query (.-dialect db) t-map options)]
     (->> (execute-conn! (.-ds db) query {:builder-fn (:builder-fn t-map)})
-      (map #(ccc/remove-nils (assoc % :kind kind))))))
+         (map #(ccc/remove-nils (assoc % :kind kind))))))
 
 (defn- do-count [db kind {:keys [where] :as _options}]
   (let [{:keys [table] :as t-map} (key-map db kind)
@@ -431,7 +431,7 @@
         schema  (core-reduce (fn [result [column spec]]
                                (let [key (get name->key [table column] (keyword column))]
                                  (assoc result key spec)))
-                  {} columns)]
+                             {} columns)]
     (assoc result (get name->key table) schema)))
 
 (defn schema-exists? [db schema]
@@ -446,7 +446,7 @@
                                                (core-reduce (fn [result [attr spec]]
                                                               (let [column (column-name attr spec)]
                                                                 (assoc result [table column] attr)))
-                                                 result (dissoc schema :kind)))) {} legend)
+                                                            result (dissoc schema :kind)))) {} legend)
         tables                (existing-tables db)]
     (core-reduce (partial build-table-schema db db-names->schema-keys) {} tables)))
 
@@ -505,7 +505,9 @@
 
 (defn connect [config]
   (if (:connection-pool? config)
-    (let [^PooledDataSource ds (connection/->pool ComboPooledDataSource config)]
+    (let [config                    (set/rename-keys config {:min-pool-size :minPoolSize :max-pool-size :maxPoolSize})
+          ^ComboPooledDataSource ds (connection/->pool ComboPooledDataSource config)]
+      (log/info "\tConnection Pooling: " {:min (.getMinPoolSize ds) :max (.getMaxPoolSize ds)})
       (.close (jdbc/get-connection ds))                     ;; initialize and validate pool says the docs
       ds)
     (jdbc/get-datasource config)))
@@ -523,7 +525,7 @@
   (let [t-map   (key-map db kind)
         command (maybe-str->command sql)]
     (->> (execute-conn! (.-ds db) command {:builder-fn (:builder-fn t-map)})
-      (map #(ccc/remove-nils (assoc % :kind kind))))))
+         (map #(ccc/remove-nils (assoc % :kind kind))))))
 
 (defn find-sql
   "Perform a custom SQL query for a specific kind on the default db instance (api/impl)."
