@@ -2,12 +2,18 @@
   (:require [c3kit.bucket.jdbc :as jdbc]))
 
 (defmethod jdbc/schema->db-type-map :mssql [_]
-  {:long      "bigint"
-   :int       "int"
-   :uuid      "uniqueidentifier"
+  {:bigdec    "decimal(32, 16)"
+   :boolean   "bit"
+   :double    "float"
    :instant   "datetime2"
+   :int       "int"
+   :keyword   "varchar(255)"
+   :kw-ref    "varchar(255)"
+   :long      "bigint"
+   :ref       "int"
+   :string    "varchar(255)"
    :timestamp "datetime2"
-   :boolean   "bit"})
+   :uuid      "uniqueidentifier"})
 
 (defmethod jdbc/->safe-name :mssql [_ name] (str \[ name \]))
 
@@ -30,6 +36,10 @@
     (cons (str "IF NOT EXISTS (" fetch-sql ") " insert-sql " ELSE " update-sql)
           (concat fetch-params insert-params update-params))))
 
+(defmethod jdbc/->sql-value :mssql [_ type value]
+  (if (= :uuid type)
+    (str value)
+    (jdbc/->sql-value nil type value)))
 
 (defmethod jdbc/auto-int-primary-key :mssql [_] "bigint IDENTITY PRIMARY KEY")
 

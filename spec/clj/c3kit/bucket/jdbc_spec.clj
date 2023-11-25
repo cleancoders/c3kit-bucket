@@ -74,7 +74,7 @@
    `(let [value# ~value]
       (test-type ~config ~type value# value#)))
   ([config type value expected]
-   `(it (name ~type)
+   `(it (pr-str ~type)
       (helper/with-impl ~config [(-> variform
                                      (assoc-in [:variant :type] ~type)
                                      (assoc-in [:id :db :type] (jdbc/auto-int-primary-key (:dialect ~config))))]
@@ -91,12 +91,22 @@
     (test-type config :int 5)
     (test-type config :long 10)
 
-    (test-type config :bigdec 1.234567897653456789456789)
+    (test-type config :bigdec 1.234567897653456789456789 1.2345678976534569M)
     (test-type config :double 2.345)
     (test-type config :float 3.456)
 
+    ;; TODO [BAC]: :kw-ref is not a SQL type.
+    ;;   How do we want to handle these? Join table?
+    (test-type config :kw-ref :blah)
     (test-type config :keyword :blah)
     (test-type config :ref 10)
+
+    ;; TODO [BAC]: Set types could be edn strings,
+    ;;   but would not conform to the db api, as we cannot query on them.
+    ;;   Can we generate join tables based on the column spec?
+    ;(test-type config [:ref] [10 10 12] #{10 12})
+    ;(test-type config [:string] ["foo" "bar" "foo"] #{"foo" "bar"})
+
     (test-type config :string "blah")
     (test-type config :uuid (random-uuid))
 
@@ -113,9 +123,6 @@
 
     (test-type config :timestamp (time/now))
     (test-type config :timestamp time/epoch)
-
-    ;; TODO [BAC]: kw-ref is not a SQL type - How do we want to handle these?
-    ;:kw-ref
     ))
 
 (defn regurgitate-spec [db spec]

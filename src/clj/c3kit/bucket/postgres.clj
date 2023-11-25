@@ -11,6 +11,7 @@
    :double  "float"
    :string  "text"
    :keyword "text"
+   :kw-ref  "text"
    :instant "timestamp without time zone"})
 
 (defmethod jdbc/build-upsert-sql :postgres [dialect t-map {:keys [id] :as entity}]

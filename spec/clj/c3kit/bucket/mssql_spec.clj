@@ -62,6 +62,7 @@
       (spec/count-specs config)
       (spec/broken-in-datomic config)
       (spec/cas config)
+      (jdbc-spec/type-specs config)
       (jdbc-spec/reserved-word-specs config)
 
       (context "migrator"

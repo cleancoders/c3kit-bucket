@@ -7,7 +7,8 @@
 
 (defmethod jdbc/schema->db-type-map :sqlite3 [_]
   {:long      "INTEGER"
-   :timestamp "INTEGER"})
+   :timestamp "INTEGER"
+   :kw-ref    "TEXT"})
 
 (defmethod jdbc/auto-int-primary-key :sqlite3 [_] "INTEGER PRIMARY KEY AUTOINCREMENT")
 

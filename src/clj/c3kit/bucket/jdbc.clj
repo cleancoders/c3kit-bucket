@@ -76,6 +76,7 @@
    :bigdec  "float"
    :ref     "int4"
    :keyword "varchar"
+   :kw-ref  "varchar"
    :instant "timestamp without time zone"
    :date    "date"
    :string  "varchar"
@@ -145,11 +146,11 @@
 (defn <-sql-value [type value]
   (cond
     (= :json type) (.getValue value)
+    (= :uuid type) (schema/->uuid value)
+    (= :bigdec type) (schema/->bigdec value)
+    (#{:keyword :kw-ref} type) (schema/->keyword value)
     (and (time? type) (integer? value)) (time/from-epoch value)
     (and (= :boolean type) (integer? value)) (not= 0 value)
-    (= :keyword type) (schema/->keyword value)
-    (= :uuid type) (schema/->uuid value)
-    (= :date type) value
     :else value))
 
 (defmulti ->sql-value (fn [dialect _type _value] dialect))
@@ -161,6 +162,8 @@
     :instant (schema/->timestamp value)
     :boolean (cond-> value (integer? value) (not= 0))
     :keyword (str value)
+    :kw-ref (str value)
+    :ref (schema/->int value)
     value))
 
 (defn ->sql-param [dialect type]
