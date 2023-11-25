@@ -2,6 +2,7 @@
   (:require [c3kit.apron.log :as log]
             [c3kit.apron.schema :as schema]
             [c3kit.apron.schema :as s]
+            [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.h2 :as h2]
@@ -9,7 +10,6 @@
             [c3kit.bucket.jdbc :as sut]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
-            [clojure.set :as set]
             [speclj.core :refer :all])
   (:import (com.mchange.v2.c3p0 PooledDataSource)))
 
@@ -61,7 +61,62 @@
      :name    {:db {:type "varchar(255)"}}
      :truthy? {:db {:column "truthy"}}}))
 
+(def variform
+  {:kind (s/kind :variform)
+   :id   {:type :ref :db {:type "serial PRIMARY KEY"}}})
+
+(def now (time/now))
+
 (declare db)
+
+(defmacro test-type
+  ([config type value]
+   `(let [value# ~value]
+      (test-type ~config ~type value# value#)))
+  ([config type value expected]
+   `(it (name ~type)
+      (helper/with-impl ~config [(-> variform
+                                     (assoc-in [:variant :type] ~type)
+                                     (assoc-in [:id :db :type] (jdbc/auto-int-primary-key (:dialect ~config))))]
+        (let [expected# ~expected
+              variform# (api/tx {:kind :variform :variant ~value})]
+          (should= expected# (:variant variform#))
+          (should= expected# (:variant (api/reload variform#)))
+          (should= (api/soft-delete variform#) (api/delete variform#))
+          (should-be-nil (api/reload variform#)))))))
+
+(defn type-specs [config]
+  (context "data types"
+
+    (test-type config :int 5)
+    (test-type config :long 10)
+
+    (test-type config :bigdec 1.234567897653456789456789)
+    (test-type config :double 2.345)
+    (test-type config :float 3.456)
+
+    (test-type config :keyword :blah)
+    (test-type config :ref 10)
+    (test-type config :string "blah")
+    (test-type config :uuid (random-uuid))
+
+    (test-type config :boolean true)
+    (test-type config :boolean false)
+    (test-type config :boolean nil)
+
+    (test-type config :instant now)
+    (test-type config :instant time/epoch)
+
+    ;; TODO [BAC]: These fail - SQL dialects save dates differently based on timezone
+    ;(test-type config :date now (time/utc (time/year now) (time/month now) (time/day now)))
+    ;(test-type config :date time/epoch)
+
+    (test-type config :timestamp (time/now))
+    (test-type config :timestamp time/epoch)
+
+    ;; TODO [BAC]: kw-ref is not a SQL type - How do we want to handle these?
+    ;:kw-ref
+    ))
 
 (defn regurgitate-spec [db spec]
   (jdbc/drop-table db "foo")
@@ -194,6 +249,7 @@
       (spec/broken-in-datomic config)
       (spec/kind-is-required config)
       (spec/cas config)
+      (type-specs config)
       (reserved-word-specs config)
       )
 

@@ -1,19 +1,15 @@
 (ns c3kit.bucket.sqlite3
-  (:require [c3kit.apron.time :as time]
+  (:require [c3kit.apron.corec :as ccc]
+            [c3kit.apron.time :as time]
             [c3kit.bucket.jdbc :as jdbc]
             [clojure.set :as set]
             [clojure.string :as str]))
 
 (defmethod jdbc/schema->db-type-map :sqlite3 [_]
-  {:int     "INTEGER"
-   :long    "INTEGER"
-   :boolean "INTEGER"
-   :string  "TEXT"
-   ;:float   "REAL"
-   :instant "INTEGER"})
+  {:long      "INTEGER"
+   :timestamp "INTEGER"})
 
 (defmethod jdbc/auto-int-primary-key :sqlite3 [_] "INTEGER PRIMARY KEY AUTOINCREMENT")
-(defmethod jdbc/timestamp-type :sqlite3 [_] "INTEGER")
 
 (defmethod jdbc/build-insert-sql :sqlite3 [_ t-map entity]
   (let [[sql & args] (jdbc/build-insert-sql nil t-map entity)]
@@ -73,9 +69,9 @@
                       (when dflt_value (str "DEFAULT " dflt_value))]
                      (remove nil?)
                      (str/join " "))]
-    (if (str/blank? db-type)
-      {:type schema-type}
-      {:type schema-type :db {:type db-type}})))
+    (cond-> {:type schema-type}
+            (ccc/not-blank? db-type)
+            (assoc :db {:type db-type}))))
 
 (defn include-index-info [db index]
   (let [index-info (jdbc/execute-one! db [(str "PRAGMA index_info(\"" (:name index) "\")")])]
@@ -86,11 +82,17 @@
     (->> (map (partial include-index-info db) indices)
          (reduce #(assoc %1 (:column %2) %2) {}))))
 
+(defn- assoc-column-spec [indices specs column]
+  (assoc specs (keyword (:name column)) (column->spec indices column)))
+
+(defn- keywordize-keys [m]
+  (update-keys m (comp keyword name)))
+
 (defmethod jdbc/table-column-specs :sqlite3 [db table]
   (let [indices (table-indices db table)
         columns (->> (jdbc/execute! db ["SELECT * FROM pragma_table_xinfo(?)" table])
-                     (map #(update-keys % (comp keyword name))))]
-    (reduce #(assoc %1 (keyword (:name %2)) (column->spec indices %2)) {} columns)))
+                     (map keywordize-keys))]
+    (reduce (partial assoc-column-spec indices) {} columns)))
 
 (defmethod jdbc/sql-rename-column :sqlite3 [_db table col-old col-new]
   (str "ALTER TABLE " table " RENAME COLUMN " col-old " TO " col-new))

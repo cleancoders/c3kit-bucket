@@ -52,7 +52,7 @@
 
     (context "slow"
 
-      (tags :slow)
+      ;(tags :slow)
 
       (spec/crud-specs config)
       (spec/nil-value-specs config)
@@ -75,7 +75,7 @@
             (should= :int (-> schema :id :type))
             (should= {:type "bigint IDENTITY PRIMARY KEY"} (-> schema :id :db))
             (should= {:type "varchar(255) UNIQUE"} (-> schema :name :db))
-            (should= {:type "timestamp"} (-> schema :at :db))))
+            (should= {:type "datetime2"} (-> schema :at :db))))
 
         ;(it "installed-schema-legend"
         ;  (let [_      (jdbc/create-table-from-schema @db bibelot)

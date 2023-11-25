@@ -6,7 +6,11 @@
   {:int     "int4"
    :long    "int4"
    :boolean "bool"
+   :ref     "int4"
+   :bigdec  "float"
+   :double  "float"
    :string  "text"
+   :keyword "text"
    :instant "timestamp without time zone"})
 
 (defmethod jdbc/build-upsert-sql :postgres [dialect t-map {:keys [id] :as entity}]

@@ -6,16 +6,22 @@
 
 (log/warn!)
 
+(defmacro with-impl [config schemas & body]
+  `(with-redefs [api/*safety* false
+                 api/impl     (delay (api/create-db ~config ~schemas))]
+     (api/clear)
+     (try ~@body (finally (api/close @api/impl)))))
+
 (defn with-schemas
   ([schemas] (with-schemas {:impl :memory} schemas))
   ([config schemas]
    (list
      (around-all [it]
-       (with-redefs [api/*safety* false
-                     api/impl     (delay (api/create-db config schemas))]
-         (try
-           (it)
-           (finally
-             (api/close @api/impl)))))
+                 (with-redefs [api/*safety* false
+                               api/impl     (delay (api/create-db config schemas))]
+                   (try
+                     (it)
+                     (finally
+                       (api/close @api/impl)))))
      (before (api/clear)))))
 

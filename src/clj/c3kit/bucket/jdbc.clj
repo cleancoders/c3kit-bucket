@@ -73,12 +73,20 @@
   {:int     "int4"
    :long    "int4"
    :boolean "bool"
+   :bigdec  "float"
+   :ref     "int4"
+   :keyword "varchar"
    :instant "timestamp without time zone"
-   ;:string  "text"
+   :date    "date"
+   :string  "varchar"
    })
 
 (defn schema-type->db-type [dialect type]
   (get (schema->db-type-map dialect) type))
+
+(defn ->sql-type [dialect type]
+  (or (schema-type->db-type dialect type)
+      (name type)))
 
 (defn column-name
   ([[key spec]] (column-name key spec))
@@ -89,18 +97,23 @@
 (defn sql-col-type [dialect spec]
   (let [type (:type spec)]
     (or (-> spec :db :type)
-        (schema-type->db-type dialect type)
-        (name type))))
+        (->sql-type dialect type))))
 
 (defn sql-table-col [dialect key spec]
-  (let [column-name (column-name key spec)]
-    (str (->safe-name dialect column-name) " " (sql-col-type dialect spec))))
+  (let [column-name (->safe-name dialect (column-name key spec))
+        column-type (sql-col-type dialect spec)]
+    (str column-name " " column-type)))
 
 (defn sql-add-column
   ([dialect table col spec]
-   (str "ALTER TABLE " (->safe-name dialect (name table)) " ADD COLUMN " (->safe-name dialect (name col)) " " (sql-col-type dialect spec)))
+   (let [table  (->safe-name dialect (name table))
+         column (->safe-name dialect (name col))
+         type   (sql-col-type dialect spec)]
+     (str "ALTER TABLE " table " ADD COLUMN " column " " type)))
   ([dialect schema attr]
-   (str "ALTER TABLE " (table-name schema) " ADD COLUMN " (sql-table-col dialect attr (get schema attr)))))
+   (let [table  (table-name schema)
+         column (sql-table-col dialect attr (get schema attr))]
+     (str "ALTER TABLE " table " ADD COLUMN " column))))
 
 (defn sql-create-table [dialect schema]
   (let [table     (->safe-name dialect (table-name schema))
@@ -133,7 +146,10 @@
   (cond
     (= :json type) (.getValue value)
     (and (time? type) (integer? value)) (time/from-epoch value)
-    (= :date type) (time/->local value)
+    (and (= :boolean type) (integer? value)) (not= 0 value)
+    (= :keyword type) (schema/->keyword value)
+    (= :uuid type) (schema/->uuid value)
+    (= :date type) value
     :else value))
 
 (defmulti ->sql-value (fn [dialect _type _value] dialect))
@@ -143,7 +159,8 @@
     :date (schema/->sql-date value)
     :timestamp (schema/->timestamp value)
     :instant (schema/->timestamp value)
-    :boolean (if (integer? value) (not= 0 value) value)
+    :boolean (cond-> value (integer? value) (not= 0))
+    :keyword (str value)
     value))
 
 (defn ->sql-param [dialect type]
@@ -322,15 +339,17 @@
         used-key->col (select-keys key->col (keys entity))
         ->sql-args    (partial ->sql-args dialect used-key->col key->type entity)
         sql-args      (->> used-key->col keys (map ->sql-args))
-        cols          (->> (map :column sql-args) (map #(str \" % \")))]
-    (cons (str "INSERT INTO " (->safe-name dialect table) " (" (str/join ", " cols) ") "
+        cols          (->> (map :column sql-args) (map #(str \" % \")))
+        table         (->safe-name dialect table)]
+    (cons (str "INSERT INTO " table " (" (str/join ", " cols) ") "
                "VALUES (" (str/join ", " (map :param sql-args)) ")")
           (map :value sql-args))))
 
 (defn- build-delete-sql [dialect t-map entity]
   (let [{:keys [table key->col key->type]} t-map
-        {:keys [column param value]} (->sql-args dialect key->col key->type entity :id)]
-    [(str "DELETE FROM " (->safe-name dialect table) " WHERE " column " = " param) value]))
+        {:keys [column param value]} (->sql-args dialect key->col key->type entity :id)
+        table (->safe-name dialect table)]
+    [(str "DELETE FROM " table " WHERE " column " = " param) value]))
 
 (defn- delete-entity [dialect conn t-map entity]
   (let [sql    (build-delete-sql dialect t-map entity)
@@ -571,9 +590,7 @@
   (find-sql- @api/impl kind sql))
 
 (defmulti auto-int-primary-key identity)
-(defmulti timestamp-type identity)
 (defmethod auto-int-primary-key :default [_] "serial PRIMARY KEY")
-(defmethod timestamp-type :default [_] "timestamp")
 
 (defmethod migrator/migration-schema :jdbc [{:keys [dialect]}]
   (merge-with
@@ -581,4 +598,4 @@
     migrator/default-migration-schema
     {:id   {:db {:type (auto-int-primary-key dialect)}}
      :name {:db {:type "varchar(255) UNIQUE"}}
-     :at   {:db {:type (timestamp-type dialect)}}}))
+     :at   {:db {:type (->sql-type dialect :timestamp)}}}))

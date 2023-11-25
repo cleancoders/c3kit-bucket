@@ -1,6 +1,5 @@
 (ns c3kit.bucket.datomic-spec
-  (:require [c3kit.apron.corec :as ccc]
-            [c3kit.apron.log :as log]
+  (:require [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
@@ -8,8 +7,7 @@
             [c3kit.bucket.datomic :as sut]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
-            [speclj.core :refer :all]
-            [datomic.api :as datomic])
+            [speclj.core :refer :all])
   (:import (java.util Date)))
 
 (def config {:impl :datomic :uri "datomic:mem://test"})
@@ -32,6 +30,7 @@
     (spec/kind-in-entity-is-optional config)
     (spec/multi-value-fields config)
     (spec/cas config)
+    ;(spec/type-specs config)
     )
 
   (context "safety"
@@ -217,8 +216,8 @@
 
     (it "find-max-of-all"
       (sut/delete-all @db :bibelot)
-      (let [_ (sut/tx @db {:kind :bibelot :size 1})
-            _ (sut/tx @db {:kind :bibelot :size 2})
+      (let [_  (sut/tx @db {:kind :bibelot :size 1})
+            _  (sut/tx @db {:kind :bibelot :size 2})
             b3 (sut/tx @db {:kind :bibelot :size 3})]
         (should= b3 (sut/find-max-of-all- @db :bibelot :size))
         (should= 3 (sut/find-max-val-of-all- @db :bibelot :size))))
@@ -226,8 +225,8 @@
     (it "find-min-of-all"
       (sut/delete-all @db :bibelot)
       (let [b1 (sut/tx @db {:kind :bibelot :size 1})
-            _ (sut/tx @db {:kind :bibelot :size 2})
-            _ (sut/tx @db {:kind :bibelot :size 3})]
+            _  (sut/tx @db {:kind :bibelot :size 2})
+            _  (sut/tx @db {:kind :bibelot :size 3})]
         (should= b1 (sut/find-min-of-all- @db :bibelot :size))
         (should= 1 (sut/find-min-val-of-all- @db :bibelot :size)))))
 
@@ -312,8 +311,8 @@
         (should= [:unique-value] (-> schema :name :db))))
 
     (it "installed-schema-legend"
-      (let [db (api/create-db config [])
-            _ (sut/transact! db (sut/->db-schema spec/bibelot))
+      (let [db     (api/create-db config [])
+            _      (sut/transact! db (sut/->db-schema spec/bibelot))
             result (migrator/-installed-schema-legend db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :bibelot :name))
         (should= {:type :long} (-> result :bibelot :size))
@@ -321,7 +320,7 @@
 
     (it "install-schema!"
       (let [schema (assoc-in spec/bibelot [:kind :value] :bubble)
-            _ (migrator/-install-schema! @db schema)
+            _      (migrator/-install-schema! @db schema)
             result (migrator/-installed-schema-legend @db {:bubble schema})]
         (should= {:type :string} (-> result :bubble :name))
         (should= {:type :long} (-> result :bubble :size))
@@ -333,20 +332,20 @@
       (should= true (migrator/-schema-exists? @db spec/bibelot)))
 
     (it "add-attribute!"
-      (let [_ (migrator/-add-attribute! @db :gum :name {:type :string})
+      (let [_      (migrator/-add-attribute! @db :gum :name {:type :string})
             result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "add-attribute! - schema attr"
-      (let [_ (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
+      (let [_      (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
             result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "remove-attribute!"
-      (let [_ (migrator/-install-schema! @db spec/bibelot)
-            bibelot (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
-            _ (migrator/-remove-attribute! @db :bibelot :color)
-            reloaded (api/reload- @db bibelot)
+      (let [_          (migrator/-install-schema! @db spec/bibelot)
+            bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
+            _          (migrator/-remove-attribute! @db :bibelot :color)
+            reloaded   (api/reload- @db bibelot)
             new-legend (migrator/-installed-schema-legend @db nil)]
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))))
@@ -358,21 +357,21 @@
         (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
     (it "remove-attribute! - multi"
-      (let [db (api/create-db config [])
-            _ (migrator/-install-schema! db spec/doodad)
-            doodad (api/tx- db {:kind :doodad :names ["bill" "bob"] :numbers [123 456]})
-            _ (migrator/-remove-attribute! db :doodad :numbers)
-            reloaded (api/reload- db doodad)
+      (let [db         (api/create-db config [])
+            _          (migrator/-install-schema! db spec/doodad)
+            doodad     (api/tx- db {:kind :doodad :names ["bill" "bob"] :numbers [123 456]})
+            _          (migrator/-remove-attribute! db :doodad :numbers)
+            reloaded   (api/reload- db doodad)
             new-legend (migrator/-installed-schema-legend db nil)]
         (should= nil (:numbers reloaded))
         (should-not-contain :numbers (:doodad new-legend))))
 
     (it "rename-attribute!"
-      (let [_ (migrator/-install-schema! @db spec/bibelot)
-            bibelot (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
-            _ (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
+      (let [_          (migrator/-install-schema! @db spec/bibelot)
+            bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
+            _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
             new-legend (migrator/-installed-schema-legend @db nil)
-            reloaded (api/reload- @db bibelot)]
+            reloaded   (api/reload- @db bibelot)]
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))
         (should= :string (get-in new-legend [:bibelot :hue :type]))))
@@ -411,7 +410,7 @@
 
     (it "created-at"
       (let [moment (sut/created-at @biby)
-            now (time/now)]
+            now    (time/now)]
         (should-be-a Date moment)
         (should (time/after? moment (-> 1 time/seconds time/ago)))
         (should (time/before? moment now))))
@@ -419,9 +418,9 @@
     (it "updated-at"
       (Thread/sleep 10)
       (let [updated (api/tx @biby :size 4)
-            moment (sut/updated-at updated)
-            _ (Thread/sleep 10)
-            now (time/now)]
+            moment  (sut/updated-at updated)
+            _       (Thread/sleep 10)
+            now     (time/now)]
         (should-be-a Date moment)
         (should (time/after? moment (-> 1 time/seconds time/ago)))
         (should (time/before? moment now))
@@ -429,7 +428,7 @@
 
     (it "with-timestamps"
       (let [updated (api/tx @biby :size 4)
-            result (sut/with-timestamps updated)]
+            result  (sut/with-timestamps updated)]
         (should= (sut/created-at updated) (:db/created-at result))
         (should= (sut/updated-at updated) (:db/updated-at result))))
 

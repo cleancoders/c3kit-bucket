@@ -19,6 +19,9 @@
 (def auto-id {:id {:db {:type "INTEGER PRIMARY KEY AUTOINCREMENT"}}})
 
 (def reserved-word-entity (schema/merge-schemas jdbc-spec/reserved-word-entity auto-id))
+(def bibelot (schema/merge-schemas jdbc-spec/bibelot auto-id))
+(def disorganized (schema/merge-schemas jdbc-spec/disorganized auto-id))
+(def variform (schema/merge-schemas jdbc-spec/variform auto-id))
 
 (def thingy
   (schema/merge-schemas
@@ -26,15 +29,13 @@
     {:id      {:db {:type "INTEGER PRIMARY KEY" :strategy :pre-populated}}
      :truthy? {:db {:column "truthy"}}}))
 
-(def bibelot (schema/merge-schemas jdbc-spec/bibelot auto-id))
-(def disorganized (schema/merge-schemas jdbc-spec/disorganized auto-id))
-
 (declare db)
 
 (with-redefs [spec/bibelot                   bibelot
               spec/thingy                    thingy
               spec/disorganized              disorganized
-              jdbc-spec/reserved-word-entity reserved-word-entity]
+              jdbc-spec/reserved-word-entity reserved-word-entity
+              jdbc-spec/variform             variform]
 
   (describe "SQLite3"
 
@@ -43,7 +44,7 @@
 
     (context "slow"
 
-      (tags :slow)
+      ;(tags :slow)
 
       (spec/crud-specs config)
       (spec/nil-value-specs config)
@@ -54,6 +55,7 @@
       (spec/broken-in-datomic config)
       (spec/cas config)
       (jdbc-spec/reserved-word-specs config)
+      (jdbc-spec/type-specs config)
 
       (context "db specific"
         (helper/with-schemas config [thingy])
@@ -166,7 +168,6 @@
             (jdbc-spec/should-regurgitate-spec @db {:type :string :db {:type "TEXT HIDDEN"}}))
           )
         )
-
       )
     )
   )
