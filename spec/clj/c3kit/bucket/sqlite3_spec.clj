@@ -48,7 +48,7 @@
 
     (context "slow"
 
-      ;(tags :slow)
+      (tags :slow)
 
       (spec/crud-specs config)
       (spec/nil-value-specs config)

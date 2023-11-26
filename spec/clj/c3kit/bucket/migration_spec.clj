@@ -128,7 +128,7 @@
 
       (context "wait-for-unlock!"
 
-        ;(tags :slow)
+        (tags :slow)
 
         (it "fail"
           (sut/-attempt-lock! @config)
