@@ -6,9 +6,22 @@
             [clojure.string :as str]))
 
 (defmethod jdbc/schema->db-type-map :sqlite3 [_]
-  {:long      "INTEGER"
+  {
+   :bigdec    "REAL"
+   :boolean   "INTEGER"
+   :date      "INTEGER"
+   :double    "REAL"
+   :float     "REAL"
+   :instant   "INTEGER"
+   :int       "INTEGER"
+   :keyword   "TEXT"
+   :kw-ref    "TEXT"
+   :long      "INTEGER"
+   :ref       "INTEGER"
+   :string    "TEXT"
    :timestamp "INTEGER"
-   :kw-ref    "TEXT"})
+   :uuid      "TEXT"
+   })
 
 (defmethod jdbc/auto-int-primary-key :sqlite3 [_] "INTEGER PRIMARY KEY AUTOINCREMENT")
 

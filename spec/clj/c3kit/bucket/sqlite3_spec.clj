@@ -29,6 +29,10 @@
     {:id      {:db {:type "INTEGER PRIMARY KEY" :strategy :pre-populated}}
      :truthy? {:db {:column "truthy"}}}))
 
+(defmacro test-type-conversion [from to]
+  `(it ~from
+     (should= ~to (jdbc/->sql-type :sqlite3 ~from))))
+
 (declare db)
 
 (with-redefs [spec/bibelot                   bibelot
@@ -70,6 +74,23 @@
                 thingy (api/tx {:kind :thingy :id 1 :bang now})]
             (should= now (:bang thingy))))
 
+        )
+
+      (context "->sql-type"
+        (test-type-conversion :bigdec "REAL")
+        (test-type-conversion :boolean "INTEGER")
+        (test-type-conversion :date "INTEGER")
+        (test-type-conversion :double "REAL")
+        (test-type-conversion :float "REAL")
+        (test-type-conversion :instant "INTEGER")
+        (test-type-conversion :int "INTEGER")
+        (test-type-conversion :keyword "TEXT")
+        (test-type-conversion :kw-ref "TEXT")
+        (test-type-conversion :long "INTEGER")
+        (test-type-conversion :ref "INTEGER")
+        (test-type-conversion :string "TEXT")
+        (test-type-conversion :timestamp "INTEGER")
+        (test-type-conversion :uuid "TEXT")
         )
 
       (context "migrator"
