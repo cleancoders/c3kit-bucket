@@ -2,15 +2,20 @@
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
+            [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.api-spec :as spec]
             [c3kit.bucket.datomic :as sut]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
-            [speclj.core :refer :all]))
+            [speclj.core :refer :all]
+            [datomic.api :as datomic])
+  (:import (java.util Date)))
 
 (def config {:impl :datomic :uri "datomic:mem://test"})
 (declare db)
+(declare biby)
+(defn sleep [entity] (Thread/sleep 10) entity)
 
 (describe "Datomic"
 
@@ -105,7 +110,7 @@
     (context "attribute->spec"
 
       (it "ignores any without a valueType, which could be just the db"
-        (let [spec (sut/attribute->spec {:db/ident       :doodle})]
+        (let [spec (sut/attribute->spec {:db/ident :doodle})]
           (should= nil spec)))
 
       (it "simple string"
@@ -167,7 +172,7 @@
       )
 
     (it "all-attributes->specs"
-      (let [specs (sut/all-attributes->specs [{:db/ident       :doodle}
+      (let [specs (sut/all-attributes->specs [{:db/ident :doodle}
                                               {:db/ident       :foo/name
                                                :db/valueType   :db.type/string
                                                :db/cardinality :db.cardinality/one}])]
@@ -235,23 +240,23 @@
       (should= [] (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "1")]})))
 
     (context "(populated db)"
-        (before (sut/clear @db)
-          (sut/tx @db {:kind :bibelot :name "hello"})
-          (sut/tx @db {:kind :bibelot :name "world"})
-          (sut/tx @db {:kind :bibelot :name "world" :size 2})
-          (sut/tx @db  {:kind :bibelot :name "hi!" :size 2}))
+      (before (sut/clear @db)
+              (sut/tx @db {:kind :bibelot :name "hello"})
+              (sut/tx @db {:kind :bibelot :name "world"})
+              (sut/tx @db {:kind :bibelot :name "world" :size 2})
+              (sut/tx @db {:kind :bibelot :name "hi!" :size 2}))
 
       (it "returns entity ids & args"
         (sut/tx @db {:kind :thingy :id 123 :name "world"})
         (should= (sort-by first (map (fn [e] (vector (:id e) (:name e))) (api/-find @db :bibelot {})))
-          (sort-by first (sut/find-datalogs- @db '[:find ?e ?v :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})))
+                 (sort-by first (sut/find-datalogs- @db '[:find ?e ?v :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})))
         (should= (sort-by first (map (fn [e] (vector (:id e) (:name e))) (api/-find @db :thingy {})))
-          (sort-by first (sut/find-datalogs- @db '[:find ?e ?v :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]}))))
+                 (sort-by first (sut/find-datalogs- @db '[:find ?e ?v :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]}))))
 
       (it "all"
-          (sut/tx @db {:kind :thingy :id 123 :name "world"})
-          (should= 4 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})))
-          (should= 1 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]}))))
+        (sut/tx @db {:kind :thingy :id 123 :name "world"})
+        (should= 4 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})))
+        (should= 1 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]}))))
 
       (it "some"
         (sut/tx @db {:kind :thingy :id 123 :name "world"})
@@ -262,37 +267,37 @@
         (should= 1 (count (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :thingy/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "w")]}))))
 
       (it ":take option"
-          (let [all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
-            (should= all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 99}))
-            (should= all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 4}))
-            (should= (take 2 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 2}))
-            (should= (take 3 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 3}))))
+        (let [all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
+          (should= all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 99}))
+          (should= all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 4}))
+          (should= (take 2 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 2}))
+          (should= (take 3 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :take 3}))))
 
       (it ":drop option"
-          (let [all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
-            (should= [] (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 99}))
-            (should= [] (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 4}))
-            (should= (drop 2 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 2}))
-            (should= (drop 3 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 3}))))
+        (let [all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
+          (should= [] (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 99}))
+          (should= [] (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 4}))
+          (should= (drop 2 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 2}))
+          (should= (drop 3 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 3}))))
 
       (it "drop and take options (pagination)"
-          (let [all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
-            (should= (take 1 (drop 1 all)) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 1 :take 1}))
-            (should= (take 1 (drop 2 all)) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 2 :take 1}))
-            (should= (take 3 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 0 :take 3}))))
+        (let [all (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")]})]
+          (should= (take 1 (drop 1 all)) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 1 :take 1}))
+          (should= (take 1 (drop 2 all)) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 2 :take 1}))
+          (should= (take 3 all) (sut/find-datalogs- @db '[:find ?e :in $ ?q :where [?e :bibelot/name ?v] [(c3kit.bucket.datomic/query-match*? ?q ?v)]] {:where [(re-pattern "")] :drop 0 :take 3}))))
 
       (it "two attributes"
-          (let [[r :as results]
-                (sut/find-datalogs- @db '[:find ?e
-                             :in $ ?q
-                             :where
-                             [?e :bibelot/name ?name]
-                             [?e :bibelot/size ?size][(c3kit.bucket.datomic/query-match*? ?q ?name ?size)]] {:where [(re-pattern "2")]})
-                r (api/entity- @db (first r))]
-            (should= 2 (count results))
-            (should= "world" (:name r))
-            (should= 2 (:size r))))
-        )
+        (let [[r :as results]
+              (sut/find-datalogs- @db '[:find ?e
+                                        :in $ ?q
+                                        :where
+                                        [?e :bibelot/name ?name]
+                                        [?e :bibelot/size ?size] [(c3kit.bucket.datomic/query-match*? ?q ?name ?size)]] {:where [(re-pattern "2")]})
+              r (api/entity- @db (first r))]
+          (should= 2 (count results))
+          (should= "world" (:name r))
+          (should= 2 (:size r))))
+      )
     )
 
   (describe "migrator"
@@ -307,8 +312,8 @@
         (should= [:unique-value] (-> schema :name :db))))
 
     (it "installed-schema-legend"
-      (let [db     (api/create-db config [])
-            _      (sut/transact! db (sut/->db-schema spec/bibelot))
+      (let [db (api/create-db config [])
+            _ (sut/transact! db (sut/->db-schema spec/bibelot))
             result (migrator/-installed-schema-legend db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :bibelot :name))
         (should= {:type :long} (-> result :bibelot :size))
@@ -316,7 +321,7 @@
 
     (it "install-schema!"
       (let [schema (assoc-in spec/bibelot [:kind :value] :bubble)
-            _      (migrator/-install-schema! @db schema)
+            _ (migrator/-install-schema! @db schema)
             result (migrator/-installed-schema-legend @db {:bubble schema})]
         (should= {:type :string} (-> result :bubble :name))
         (should= {:type :long} (-> result :bubble :size))
@@ -328,20 +333,20 @@
       (should= true (migrator/-schema-exists? @db spec/bibelot)))
 
     (it "add-attribute!"
-      (let [_      (migrator/-add-attribute! @db :gum :name {:type :string})
+      (let [_ (migrator/-add-attribute! @db :gum :name {:type :string})
             result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "add-attribute! - schema attr"
-      (let [_      (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
+      (let [_ (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
             result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "remove-attribute!"
-      (let [_          (migrator/-install-schema! @db spec/bibelot)
-            bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
-            _          (migrator/-remove-attribute! @db :bibelot :color)
-            reloaded   (api/reload- @db bibelot)
+      (let [_ (migrator/-install-schema! @db spec/bibelot)
+            bibelot (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
+            _ (migrator/-remove-attribute! @db :bibelot :color)
+            reloaded (api/reload- @db bibelot)
             new-legend (migrator/-installed-schema-legend @db nil)]
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))))
@@ -353,21 +358,21 @@
         (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
     (it "remove-attribute! - multi"
-      (let [db         (api/create-db config [])
-            _          (migrator/-install-schema! db spec/doodad)
-            doodad     (api/tx- db {:kind :doodad :names ["bill" "bob"] :numbers [123 456]})
-            _          (migrator/-remove-attribute! db :doodad :numbers)
-            reloaded   (api/reload- db doodad)
+      (let [db (api/create-db config [])
+            _ (migrator/-install-schema! db spec/doodad)
+            doodad (api/tx- db {:kind :doodad :names ["bill" "bob"] :numbers [123 456]})
+            _ (migrator/-remove-attribute! db :doodad :numbers)
+            reloaded (api/reload- db doodad)
             new-legend (migrator/-installed-schema-legend db nil)]
         (should= nil (:numbers reloaded))
         (should-not-contain :numbers (:doodad new-legend))))
 
     (it "rename-attribute!"
-      (let [_          (migrator/-install-schema! @db spec/bibelot)
-            bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
-            _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
+      (let [_ (migrator/-install-schema! @db spec/bibelot)
+            bibelot (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
+            _ (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
             new-legend (migrator/-installed-schema-legend @db nil)
-            reloaded   (api/reload- @db bibelot)]
+            reloaded (api/reload- @db bibelot)]
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))
         (should= :string (get-in new-legend [:bibelot :hue :type]))))
@@ -380,5 +385,60 @@
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
         (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size))))
+
     )
+
+  (context "history"
+    (helper/with-schemas config [spec/bibelot #_spec/thingy])
+    (with biby (-> (api/tx :kind :bibelot :name "Biby" :size 1 :color "blue")
+                   sleep
+                   (api/tx :size 2)
+                   sleep
+                   (api/tx :color "green")
+                   sleep
+                   (api/tx :size 3 :color "red")))
+
+    (it "of entity"
+      (let [history (sut/history @biby)]
+        (should= 4 (count history))
+        (doseq [h history]
+          (should (:db/tx h))
+          (should (:db/instant h)))
+        (should= {:name "Biby" :size 1 :color "blue"} (select-keys (nth history 0) [:name :size :color]))
+        (should= {:name "Biby" :size 2 :color "blue"} (select-keys (nth history 1) [:name :size :color]))
+        (should= {:name "Biby" :size 2 :color "green"} (select-keys (nth history 2) [:name :size :color]))
+        (should= {:name "Biby" :size 3 :color "red"} (select-keys (nth history 3) [:name :size :color]))))
+
+    (it "created-at"
+      (let [moment (sut/created-at @biby)
+            now (time/now)]
+        (should-be-a Date moment)
+        (should (time/after? moment (-> 1 time/seconds time/ago)))
+        (should (time/before? moment now))))
+
+    (it "updated-at"
+      (Thread/sleep 10)
+      (let [updated (api/tx @biby :size 4)
+            moment (sut/updated-at updated)
+            _ (Thread/sleep 10)
+            now (time/now)]
+        (should-be-a Date moment)
+        (should (time/after? moment (-> 1 time/seconds time/ago)))
+        (should (time/before? moment now))
+        (should (time/after? moment (sut/created-at updated)))))
+
+    (it "with-timestamps"
+      (let [updated (api/tx @biby :size 4)
+            result (sut/with-timestamps updated)]
+        (should= (sut/created-at updated) (:db/created-at result))
+        (should= (sut/updated-at updated) (:db/updated-at result))))
+
+    ;(it "excises biby"
+    ;  (sut/excise! @biby)
+    ;  @(datomic/sync-index @(.-conn @api/impl) (time/millis-since-epoch (time/from-now (time/hours 1))))
+    ;  (should-be-nil (api/find-by :bibelot :name "Biby"))
+    ;  (should-be-nil (sut/history @biby)))
+
+    )
+
   )
