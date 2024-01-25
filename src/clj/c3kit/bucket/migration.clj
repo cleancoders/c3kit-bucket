@@ -289,7 +289,7 @@
        "\n"
        " Commands:\n"
        "   help:  prints this message\n"
-       "   init:  synchronize the database schema with :full-schema-var\n"
+       "   sync:  synchronize the database schema with :full-schema-var\n"
        "   list:  show available and when they were applied\n"
        " migration-name - e.g. 20220806-first\n"
        "   migrations will be applied UP or DOWN to make the named migration the latest applied\n"
