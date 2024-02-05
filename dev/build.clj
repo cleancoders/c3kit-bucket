@@ -12,6 +12,13 @@
 (def version (str/trim (slurp "VERSION")))
 (def class-dir "target/classes")
 (def jar-file (format "target/%s-%s.jar" lib-name version))
+(def deploy-config (delay {:coordinates       [lib version]
+                           :jar-file          jar-file
+                           :pom-file          (str/join "/" [class-dir "META-INF/maven" group-name lib-name "pom.xml"])
+                           :repository        {"clojars" {:url      "https://clojars.org/repo"
+                                                          :username (System/getenv "CLOJARS_USERNAME")
+                                                          :password (System/getenv "CLOJARS_PASSWORD")}}
+                           :transfer-listener :stdout}))
 
 (defn clean [_]
   (println "cleaning")
@@ -53,13 +60,12 @@
                     (shell/sh "git" "tag" version)
                     (shell/sh "git" "push" "--tags")))))
 
+(defn install [_]
+  (jar nil)
+  (println "installing " (:coordinates @deploy-config))
+  (aether/install @deploy-config))
+
 (defn deploy [_]
   (tag nil)
   (jar nil)
-  (aether/deploy {:coordinates       [lib version]
-                  :jar-file          jar-file
-                  :pom-file          (str/join "/" [class-dir "META-INF/maven" group-name lib-name "pom.xml"])
-                  :repository        {"clojars" {:url      "https://clojars.org/repo"
-                                                 :username (System/getenv "CLOJARS_USERNAME")
-                                                 :password (System/getenv "CLOJARS_PASSWORD")}}
-                  :transfer-listener :stdout}))
+  (aether/deploy @deploy-config))
