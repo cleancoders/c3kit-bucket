@@ -26,13 +26,9 @@
 
 (def pom-template
   [[:licenses
-    ;; TODO [BAC]: Clojars now requires a license in pom.xml
-    ;;  Currently, we do not have any licenses in c3kit,
-    ;;  and the MIT license below may not be what we want.
-    #_[:license
-       [:name "MIT License"]
-       [:url "http://www.opensource.org/licenses/mit-license.php"]]
-    ]])
+    [:license
+     [:name "MIT License"]
+     [:url "https://github.com/cleancoders/c3kit-bucket/blob/master/LICENSE"]]]])
 
 (defn pom [_]
   (println "writing pom.xml")
