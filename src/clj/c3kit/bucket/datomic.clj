@@ -126,6 +126,8 @@
     (:db/id v)
     v))
 
+(defn db-as-of [t] (datomic/as-of @api/impl t))
+
 (defn attributes->entity
   ([attributes id]
    (when (seq attributes)
@@ -611,3 +613,15 @@
   "Remove entity from database history."
   [id-or-e]
   (excise!- @api/impl id-or-e))
+
+(defn q
+  "Raw datomic query and request"
+  [query & args]
+  (apply datomic/q query @api/impl args))
+
+(defn find-entities
+  "Takes a datalog query and returns realized (de-namespaced) entities."
+  [query & args]
+  (q->entities @api/impl (apply q query args)))
+
+(def squuid datomic/squuid)
