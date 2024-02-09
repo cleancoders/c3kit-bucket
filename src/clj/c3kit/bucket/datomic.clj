@@ -126,7 +126,7 @@
     (:db/id v)
     v))
 
-(defn db-as-of [t] (datomic/as-of @api/impl t))
+(defn db-as-of [t] (datomic/as-of (datomic-db @api/impl) t))
 
 (defn attributes->entity
   ([attributes id]
@@ -617,7 +617,7 @@
 (defn q
   "Raw datomic query and request"
   [query & args]
-  (apply datomic/q query @api/impl args))
+  (apply datomic/q query (datomic-db @api/impl) args))
 
 (defn find-entities
   "Takes a datalog query and returns realized (de-namespaced) entities."
