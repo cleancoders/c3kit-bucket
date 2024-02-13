@@ -2,7 +2,6 @@
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
-            [c3kit.bucket.api :as db]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
@@ -118,8 +117,20 @@
 
 (defn partition-name [db] (or (:partition (.-config db)) :db.part/user))
 
-(defn tempid [db] (datomic/tempid (partition-name db)))
-(def tempid? (comp (fnil neg? 0) :idx))
+(defn tempid-
+  "Temporary id with specified instance"
+  [db] (datomic/tempid (partition-name db)))
+
+(defn tempid
+  "Temporary id with default instance"
+  [] (tempid- @api/impl))
+
+(defn tempid?
+  "Takes an id and determines if it is temporary"
+  [id]
+  (if-let [idx (:idx id)]
+    (neg? idx)
+    false))
 
 (defn value-or-id [v]
   (if (and (instance? datomic.query.EntityMap v) (contains? v :db/id))
@@ -223,7 +234,7 @@
 
 (defn tx-entity-form [db entity]
   (let [kind (kind! entity)
-        id (or (:id entity) (tempid db))
+        id (or (:id entity) (tempid- db))
         e (scope-attributes kind (dissoc entity :kind :id))]
     (if (tempid? id)
       (list (list kind id) (insert-form id e))
@@ -450,21 +461,6 @@
 (defmethod migrator/migration-schema :datomic [_]
   (merge-with merge migrator/default-migration-schema {:name {:db [:unique-value]}}))
 
-
-(defn query-match*? [q & vs] (some #(re-find q (.toLowerCase (str %))) vs))
-
-(defn find-datalogs- [db query options]
-  "Perform raw datomic log query on specific instance"
-  (let []
-    (->> (apply datomic/q query (datomic-db db) (:where options))
-         (api/-apply-drop-take options)
-         vec)))
-
-(defn find-datalogs
-  "Perform raw datomic log query on default instance"
-  ([query] (find-datalogs query {}))
-  ([query options] (find-datalogs- @api/impl query options)))
-
 (defn find-max-of-all-
   "Finds the entity with the max attribute for a given kind with specific db instance"
   [db kind attr]
@@ -615,9 +611,19 @@
   (excise!- @api/impl id-or-e))
 
 (defn q
-  "Raw datomic query and request"
+  "Raw datalog query."
   [query & args]
   (apply datomic/q query (datomic-db @api/impl) args))
+
+(defn find-datalog-
+  "Run a datalog query (for full entities) returning the results as entities on specific instance"
+  [db query & args]
+  (q->entities db (apply q query args)))
+
+(defn find-datalog
+  "Run a datalog query (for full entities) returning the results as entities on default instance."
+  [query & args]
+  (find-datalog- @api/impl query args))
 
 (defn find-entities
   "Takes a datalog query and returns realized (de-namespaced) entities."
