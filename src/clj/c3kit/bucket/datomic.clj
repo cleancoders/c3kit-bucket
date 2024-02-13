@@ -615,19 +615,10 @@
   [query & args]
   (apply datomic/q query (datomic-db @api/impl) args))
 
-(defn find-datalog-
-  "Run a datalog query (for full entities) returning the results as entities on specific instance"
-  [db query & args]
-  (q->entities db (apply q query args)))
-
 (defn find-datalog
   "Run a datalog query (for full entities) returning the results as entities on default instance."
   [query & args]
-  (find-datalog- @api/impl query args))
-
-(defn find-entities
-  "Takes a datalog query and returns realized (de-namespaced) entities."
-  [query & args]
   (q->entities @api/impl (apply q query args)))
+
 
 (def squuid datomic/squuid)
