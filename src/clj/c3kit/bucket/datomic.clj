@@ -2,6 +2,8 @@
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
+            [c3kit.apron.schema :as schema]
+            [c3kit.bucket.api :as db]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
@@ -20,10 +22,11 @@
    [:db/add :db.part/db :db.install/partition (name partition-name)]])
 
 (defn spec->attribute [kind attr-name spec]
-  (let [type (:type spec)
-        options (set (:db spec))
-        [type many?] (if (sequential? type) [(first type) true] [type false])
-        type (if (= :kw-ref type) :ref type)
+  (let [spec      (schema/normalize-spec spec)
+        type      (:type spec)
+        options   (set (:db spec))
+        [type many?] (if (= :seq type) [(-> spec :spec :type) true] [type false])
+        type      (if (= :kw-ref type) :ref type)
         attribute {:db/ident       (keyword (name kind) (name attr-name))
                    :db/valueType   (keyword "db.type" (name type))
                    :db/cardinality (if many? :db.cardinality/many :db.cardinality/one)
@@ -36,7 +39,8 @@
           :else attribute)))
 
 (defn ->entity-schema [schema]
-  (let [kind (-> schema :kind :value)]
+  (let [schema (schema/conform-schema! schema)
+        kind   (-> schema :kind :value)]
     (assert kind (str "kind missing: " schema))
     (assert (keyword? kind) (str "kind must be keyword: " kind))
     (for [[attr spec] (seq (dissoc schema :kind :id :*))]
@@ -55,25 +59,25 @@
 
 (defn attribute->spec [attribute]
   (when-let [value-type (:db/valueType attribute)]
-    (let [ident (:db/ident attribute)
+    (let [ident       (:db/ident attribute)
           cardinality (:db/cardinality attribute)
-          index? (:db/index attribute)
-          unique (:db/unique attribute)
-          component? (:db/isComponent attribute)
+          index?      (:db/index attribute)
+          unique      (:db/unique attribute)
+          component?  (:db/isComponent attribute)
           no-history? (:db/noHistory attribute)
-          fulltext? (:db/fulltext attribute)
-          kind (keyword (namespace ident))
-          attr-name (keyword (name ident))
+          fulltext?   (:db/fulltext attribute)
+          kind        (keyword (namespace ident))
+          attr-name   (keyword (name ident))
           schema-type (keyword (name value-type))
           schema-type (if (= :db.cardinality/many cardinality) [schema-type] schema-type)
-          db (remove nil? [(when index? :index)
-                           (when component? :component)
-                           (when no-history? :no-history)
-                           (when fulltext? :fulltext)
-                           (when (= :db.unique/identity unique) :unique-identity)
-                           (when (= :db.unique/value unique) :unique-value)])
-          spec {:type schema-type}
-          spec (if (seq db) (assoc spec :db db) spec)]
+          db          (remove nil? [(when index? :index)
+                                    (when component? :component)
+                                    (when no-history? :no-history)
+                                    (when fulltext? :fulltext)
+                                    (when (= :db.unique/identity unique) :unique-identity)
+                                    (when (= :db.unique/value unique) :unique-value)])
+          spec        {:type schema-type}
+          spec        (if (seq db) (assoc spec :db db) spec)]
       [kind attr-name spec])))
 
 (defn all-attributes->specs [attributes]
@@ -200,20 +204,20 @@
 (defn- cardinality-many-retract-forms [updated original]
   (reduce (fn [form [key val]]
             (if (or (set? val) (sequential? val))
-              (let [id (:db/id updated)
-                    o-val (ccc/map-set id-or-val (get original key))
+              (let [id      (:db/id updated)
+                    o-val   (ccc/map-set id-or-val (get original key))
                     missing (set/difference o-val (set val))]
                 (reduce #(conj %1 [:db/retract id key (id-or-val %2)]) form missing))
               form))
           [] updated))
 
 (defn update-form [db id updated]
-  (let [original (into {} (datomic/entity (datomic/db @(.-conn db)) id))
-        retracted-keys (doall (filter #(nil? (get updated %)) (keys original)))
-        updated (-> (apply dissoc updated retracted-keys)
-                    ccc/remove-nils
-                    (assoc :db/id id))
-        seq-retractions (cardinality-many-retract-forms updated original)
+  (let [original          (into {} (datomic/entity (datomic/db @(.-conn db)) id))
+        retracted-keys    (doall (filter #(nil? (get updated %)) (keys original)))
+        updated           (-> (apply dissoc updated retracted-keys)
+                              ccc/remove-nils
+                              (assoc :db/id id))
+        seq-retractions   (cardinality-many-retract-forms updated original)
         field-retractions (retract-field-forms id original retracted-keys)]
     (concat [updated] seq-retractions field-retractions)))
 
@@ -234,8 +238,8 @@
 
 (defn tx-entity-form [db entity]
   (let [kind (kind! entity)
-        id (or (:id entity) (tempid- db))
-        e (scope-attributes kind (dissoc entity :kind :id))]
+        id   (or (:id entity) (tempid- db))
+        e    (scope-attributes kind (dissoc entity :kind :id))]
     (if (tempid? id)
       (list (list kind id) (insert-form id e))
       (list (list kind id) (update-form db id e)))))
@@ -258,13 +262,13 @@
 (defn tx [db e]
   (let [[[kind id] form] (tx-form db e)
         result @(datomic/transact @(.-conn db) form)
-        id (resolve-id result id)]
+        id     (resolve-id result id)]
     (tx-result db kind id)))
 
 (defn tx* [db entities]
   (let [id-forms (ccc/some-map #(tx-form db %) entities)
         tx-forms (mapcat second id-forms)
-        result @(datomic/transact @(.-conn db) tx-forms)]
+        result   @(datomic/transact @(.-conn db) tx-forms)]
     (map (fn [[kind id]] (tx-result db kind (resolve-id result id))) (map first id-forms))))
 
 
@@ -309,8 +313,8 @@
         :else (list ['?e attr value])))
 
 (defn- where-all-of-kind [db kind]
-  (let [schema (legend/for-kind @(.-legend db) kind)
-        attrs (keys (dissoc schema :id :kind))
+  (let [schema       (legend/for-kind @(.-legend db) kind)
+        attrs        (keys (dissoc schema :id :kind))
         scoped-attrs (map #(scope-attribute kind %) attrs)]
     [(cons 'or (map (fn [a] ['?e a]) scoped-attrs))]))
 
@@ -321,7 +325,7 @@
 
 (defn- where-multi-clause [kind kv-pairs]
   (let [attrs (map #(->attr-kw kind %) (map first kv-pairs))
-        vals (map second kv-pairs)]
+        vals  (map second kv-pairs)]
     (mapcat where-clause attrs vals)))
 
 (defn- build-where-datalog [db kind kv-pairs]
@@ -339,7 +343,7 @@
 
 (defn- do-count [db kind options]
   (if-let [where (build-where-datalog db kind (:where options))]
-    (let [query (concat '[:find (count ?e) :in $ :where] where)
+    (let [query   (concat '[:find (count ?e) :in $ :where] where)
           results (datomic/q query (datomic-db db))]
       (or (ffirst results) 0))
     0))
@@ -387,7 +391,7 @@
 
 (defn- do-add-attribute! [db kind attr spec]
   (let [qualified-attr (keyword (name kind) (name attr))
-        attr-id (schema-attr-id (datomic-db db) qualified-attr)]
+        attr-id        (schema-attr-id (datomic-db db) qualified-attr)]
     (if attr-id
       (log/warn "  add attribute ALREADY EXISTS " qualified-attr)
       (let [attribute (spec->attribute kind attr spec)]
@@ -396,8 +400,8 @@
 
 (defn retract-attribute-values [db kind attr]
   (let [qualified-attr (keyword (name kind) (name attr))
-        ddb (datomic-db db)
-        attr-id (schema-attr-id ddb qualified-attr)]
+        ddb            (datomic-db db)
+        attr-id        (schema-attr-id ddb qualified-attr)]
     (when attr-id
       (log/info "  retracting all values for " qualified-attr)
       (doall (->> (datomic/q '[:find ?e ?v :in $ ?attr :where [?e ?attr ?v]] ddb qualified-attr)
@@ -407,8 +411,8 @@
 
 (defn trash-attribute [db kind attr]
   (let [qualified-attr (keyword (name kind) (name attr))
-        ddb (datomic-db db)
-        attr-id (schema-attr-id ddb qualified-attr)]
+        ddb            (datomic-db db)
+        attr-id        (schema-attr-id ddb qualified-attr)]
     (if attr-id
       (do
         (log/info "  removing " qualified-attr)
@@ -423,9 +427,9 @@
 (defn- do-rename-attribute! [db kind attr new-kind new-attr]
   (let [qualified-old (keyword (name kind) (name attr))
         qualified-new (keyword (name new-kind) (name new-attr))
-        ddb (datomic-db db)
-        old-id (schema-attr-id ddb qualified-old)
-        new-id (schema-attr-id ddb qualified-new)]
+        ddb           (datomic-db db)
+        old-id        (schema-attr-id ddb qualified-old)
+        new-id        (schema-attr-id ddb qualified-new)]
     (cond (some? new-id) (throw (ex-info "rename to existing attribute" {:old qualified-old :new qualified-new}))
           (nil? old-id) (log/warn "  rename FAILED: MISSING " qualified-old)
           :else (do (log/info (str "  renaming " qualified-old " to " qualified-new))
@@ -452,10 +456,10 @@
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :datomic [config schemas]
-  (let [legend (atom (legend/build schemas))
+  (let [legend     (atom (legend/build schemas))
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect (:uri config))
-        db (DatomicDB. db-schemas legend config (atom connection))]
+        db         (DatomicDB. db-schemas legend config (atom connection))]
     db))
 
 (defmethod migrator/migration-schema :datomic [_]
@@ -535,8 +539,8 @@
   "Loads the entity as it existed when the transaction took place, adding :db/tx (transaction id)
    and :db/instant (date) attributes to the entity."
   [datomic-db eid kind txid]
-  (let [tx (datomic/entity datomic-db txid)
-        timestamp (:db/txInstant tx)
+  (let [tx         (datomic/entity datomic-db txid)
+        timestamp  (:db/txInstant tx)
         attributes (datomic/entity (datomic/as-of datomic-db txid) eid)]
     (when (seq attributes)
       (-> attributes
@@ -545,7 +549,7 @@
 (defn history-
   "Same as history but with explicit db instance"
   [impl entity]
-  (let [id (:id entity)
+  (let [id   (:id entity)
         kind (:kind entity)]
     (assert id)
     (assert kind)
@@ -619,6 +623,5 @@
   "Run a datalog query (for full entities) returning the results as entities on default instance."
   [query & args]
   (q->entities @api/impl (apply q query args)))
-
 
 (def squuid datomic/squuid)
