@@ -26,8 +26,7 @@
                                    ;com.cleancoders.c3kit/scaffold {:local/root "../scaffold"}
                                    }
                    :extra-paths   ["dev" "spec/clj" "spec/cljc" "spec/cljs"]}
-           :spec  {:main-opts ["-m" "speclj.main" "-c" ;"-t" "~slow"
-                               ]}
+           :spec  {:main-opts ["-m" "speclj.main" "-c" "-t" "~slow"]}
            :cljs  {:main-opts ["-m" "c3kit.scaffold.cljs"]}
            :antq  {:deps      {com.github.liquidz/antq {:mvn/version "2.8.1201"}}
                    :main-opts ["-m" "antq.core"]}
