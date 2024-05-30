@@ -6,6 +6,7 @@
 .idea
 .nrepl-port
 .specljs-timestamp
+.env
 /checkouts
 /classes
 /lib
