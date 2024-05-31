@@ -2,9 +2,9 @@ name: Bucket Build
 
 on:
   push:
-    branches: [ master ]
+    branches: [ spec-ci ]
   pull_request:
-    branches: [ master ]
+    branches: [ spec-ci ]
 
 env:
   C3_ENV: ci
@@ -13,8 +13,44 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:latest
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        ports:
+          - 1433:1433
+        env:
+          SA_PASSWORD: "Pala2023"
+          ACCEPT_EULA: "Y"
+        options: >-
+          --health-cmd "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Pala2023 -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install SQLite3
+        run: sudo apt-get install -y sqlite3
+
+      - name: Initialize MSSQL Database
+        run: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Pala2023 -Q "CREATE DATABASE bucketTest"
+
+      - name: Initialize PostgreSQL Database
+        run: psql -h localhost -U postgres -c "CREATE USER runner SUPERUSER"
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -33,9 +69,8 @@ jobs:
       - name: Install Clojure CLI
         run: curl -O https://download.clojure.org/install/linux-install-1.11.1.1119.sh && chmod +x linux-install-1.11.1.1119.sh && sudo ./linux-install-1.11.1.1119.sh
 
-      # TODO: -M:test:spec-ci without ~slow filter
       - name: Run Clojure Tests
-        run: clojure -M:test:spec
+        run: clojure -M:test:spec-ci
 
       - name: Run ClojureScript Tests
         run: clojure -M:test:cljs once
