@@ -2,9 +2,9 @@ name: Bucket Build
 
 on:
   push:
-    branches: [ spec-ci ]
+    branches: [ master ]
   pull_request:
-    branches: [ spec-ci ]
+    branches: [ master ]
 
 env:
   C3_ENV: ci
