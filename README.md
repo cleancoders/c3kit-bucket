@@ -6,6 +6,8 @@ A library component of [c3kit - Clean Coders Clojure Kit](https://github.com/cle
 
 _"Most men give advice by the bucket, but take it by the grain."_ - William R. Alger
 
+[![Bucket Build](https://github.com/cleancoders/c3kit-bucket/actions/workflows/test.yml/badge.svg)](https://github.com/cleancoders/c3kit-bucket/actions/workflows/test.yml)
+
 Bucket offers an identical API for dealing with data on both the server side (datomic), and the client side (in memory), in addition to other goodies.
 
  * __bg.clj__ : background task management
