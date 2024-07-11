@@ -276,10 +276,23 @@
 
 (declare where-clause)
 
+(defn attr->sym [attr]
+  (gensym (str "?" (name attr))))
+
 (defn- simple-where-fn [attr value f-sym]
-  (let [attr-sym (gensym (str "?" (name attr)))]
+  (let [attr-sym (attr->sym attr)]
     (list ['?e attr attr-sym]
           [(list f-sym attr-sym value)])))
+
+(defn- like-query->regex [value]
+  (-> (str/replace value "%" ".*")
+      (str/replace "_" ".")
+      re-pattern))
+
+(defn- like-where-fn [attr value]
+  (let [attr-sym (attr->sym attr)]
+    (list ['?e attr attr-sym]
+          [(list 're-matches (like-query->regex value) attr-sym)])))
 
 (defn- or-where-clause [attr values]
   (let [values (set values)]
@@ -304,6 +317,7 @@
     '<= (simple-where-fn attr (second values) '<=)
     '= (or-where-clause attr (rest values))
     'or (or-where-clause attr (rest values))
+    'like (like-where-fn attr (second values))
     (or-where-clause attr values)))
 
 (defn where-clause [attr value]

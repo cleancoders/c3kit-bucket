@@ -96,6 +96,7 @@ Options:
     ['not value]  - (not (= % value))
     ['> value]    - (> % value)
     ['< value]    - (< % value)
+    ['like str]   - (re-matches str %) where '_' = single char wildcard and '%' = multi char wildcard
   :take   - int - returns only this many entities"
   ([kind & opt-args] (-find @impl kind (ccc/->options opt-args))))
 

@@ -628,6 +628,35 @@
               thing2  (sut/tx :kind :thingy :id 124 :truthy? false)
               _thing3 (sut/tx :kind :thingy :id 125 :truthy? nil)]
           (should= [thing2] (sut/find-by :thingy :truthy? false))))
+
+      (it "like fuzzy match with anything before or after"
+        (let [result (sut/find-by :bibelot :name ['like "%orl%"])
+              result-names (map :name result)]
+          (should-contain "world" result-names)
+          (should-not-contain "hi!" result-names)))
+
+      (it "like fuzzy match with anything after"
+        (let [_            (sut/tx {:kind :bibelot :name "hello world"})
+              result       (sut/find-by :bibelot :name ['like "worl%"])
+              result-names (map :name result)]
+          (should-contain "world" result-names)
+          (should-not-contain "hello world" result-names)))
+
+      (it "like fuzzy match with _"
+        (let [_            (sut/tx {:kind :bibelot :name "words"})
+              result       (sut/find-by :bibelot :name ['like "wor__"])
+              result-names (map :name result)]
+          (should-contain "world" result-names)
+          (should-contain "words" result-names)
+          (should-not-contain "hello" result-names)))
+
+      (it "like with exact match"
+        (let [_            (sut/tx {:kind :bibelot :name "words"})
+              result       (sut/find-by :bibelot :name ['like "world"])
+              result-names (map :name result)]
+          (should-contain "world" result-names)
+          (should-not-contain "words" result-names)
+          (should-not-contain "hello" result-names)))
       )
     )
   )
@@ -781,35 +810,6 @@
             (sut/tx {:kind :bibelot :name "hi!" :size 2}))
 
     (context "find-by"
-
-      (it "like fuzzy match with anything before or after"
-        (let [result       (sut/find-by :bibelot :name ['like "%orl%"])
-              result-names (map :name result)]
-          (should-contain "world" result-names)
-          (should-not-contain "hi!" result-names)))
-
-      (it "like fuzzy match with anything after"
-        (let [_            (sut/tx {:kind :bibelot :name "hello world"})
-              result       (sut/find-by :bibelot :name ['like "worl%"])
-              result-names (map :name result)]
-          (should-contain "world" result-names)
-          (should-not-contain "hello world" result-names)))
-
-      (it "like fuzzy match with _"
-        (let [_            (sut/tx {:kind :bibelot :name "words"})
-              result       (sut/find-by :bibelot :name ['like "wor__"])
-              result-names (map :name result)]
-          (should-contain "world" result-names)
-          (should-contain "words" result-names)
-          (should-not-contain "hello" result-names)))
-
-      (it "like with exact match"
-        (let [_            (sut/tx {:kind :bibelot :name "words"})
-              result       (sut/find-by :bibelot :name ['like "world"])
-              result-names (map :name result)]
-          (should-contain "world" result-names)
-          (should-not-contain "words" result-names)
-          (should-not-contain "hello" result-names)))
 
       (it "or with nils"
         (let [b1 (sut/tx :kind :bibelot :name "Bee" :color "red" :size 1)
