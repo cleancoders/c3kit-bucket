@@ -1,5 +1,5 @@
-### 2.1.3 (unreleased)
- * Upgrades deps
+### 2.1.3 
+ * Adds LIKE queries to datomic implementation
 
 ### 2.1.2
  * uses apron 2.1.3, datomic uses new :seq spec format for cardinality
