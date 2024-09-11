@@ -4,21 +4,21 @@
            com.cleancoders.c3kit/apron {:mvn/version "2.1.4"}
            cljsjs/hashids              {:mvn/version "1.0.2-0"}
            jstrutz/hashids             {:mvn/version "1.0.1"}
-           org.clojure/clojure         {:mvn/version "1.11.3"}
+           org.clojure/clojure         {:mvn/version "1.11.4"}
            }
  :aliases {
            :test    {:extra-deps    {
                                      clj-commons/pomegranate           {:mvn/version "1.2.24"}
-                                     com.cleancoders.c3kit/scaffold    {:mvn/version "2.0.3"}
+                                     com.cleancoders.c3kit/scaffold    {:mvn/version "2.0.4"}
                                      com.datomic/datomic-free          {:mvn/version "0.9.5697" :exclusions [com.google.guava/guava]}
                                      com.github.seancorfield/next.jdbc {:mvn/version "1.3.939"}
-                                     com.h2database/h2                 {:mvn/version "2.2.224"}
+                                     com.h2database/h2                 {:mvn/version "2.3.232"}
                                      com.mchange/c3p0                  {:mvn/version "0.10.1"}
                                      com.microsoft.sqlserver/sqljdbc4  {:mvn/version "4.0"}
-                                     io.github.clojure/tools.build     {:mvn/version "0.10.3"}
+                                     io.github.clojure/tools.build     {:mvn/version "0.10.5"}
                                      org.clojure/clojurescript         {:mvn/version "1.11.132"}
-                                     org.postgresql/postgresql         {:mvn/version "42.7.3"}
-                                     org.xerial/sqlite-jdbc            {:mvn/version "3.46.0.0"}
+                                     org.postgresql/postgresql         {:mvn/version "42.7.4"}
+                                     org.xerial/sqlite-jdbc            {:mvn/version "3.46.1.0"}
                                      speclj/speclj                     {:mvn/version "3.4.8"}
                                      }
                      :override-deps {
@@ -29,9 +29,9 @@
            :spec    {:main-opts ["-m" "speclj.main" "-c" "-t" "~slow"]}
            :spec-ci {:main-opts ["-m" "speclj.main" "-c"]}
            :cljs    {:main-opts ["-m" "c3kit.scaffold.cljs"]}
-           :antq    {:deps      {com.github.liquidz/antq {:mvn/version "2.8.1201"}}
+           :antq    {:deps      {com.github.liquidz/antq {:mvn/version "2.9.1227"}}
                      :main-opts ["-m" "antq.core"]}
-           :build   {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.10.3"}
+           :build   {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.10.5"}
                                    clj-commons/pomegranate       {:mvn/version "1.2.24"}}
                      :ns-default  build
                      :extra-paths ["dev"]
