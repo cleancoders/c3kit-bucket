@@ -255,18 +255,20 @@
     (clause-with-operator dialect t-map k v "=")))
 
 (defn- -build-parity-or-clause [not? dialect {:keys [key->type] :as t-map} k v]
-  (let [type       (get key->type k)
-        is-null?   (some nil? v)
-        v          (->> v set (remove nil?))
-        in?        (not (empty? v))
-        field-name (->field-name dialect t-map k)
-        num-vals   (core-count v)]
-    (cons (str "("
-               (when in? (str field-name (when not? " NOT") " IN (" (str/join "," (repeat num-vals (->sql-param dialect type))) ")"))
-               (when (and in? is-null?) (if not? " AND " " OR "))
-               (when is-null? (str field-name " IS" (when not? " NOT") " NULL"))
-               ")")
-          (map (partial ->sql-value dialect type) v))))
+  (if (seq v)
+    (let [type       (get key->type k)
+          is-null?   (some nil? v)
+          v          (->> v set (remove nil?))
+          in?        (seq v)
+          field-name (->field-name dialect t-map k)
+          num-vals   (core-count v)]
+      (cons (str "("
+                 (when in? (str field-name (when not? " NOT") " IN (" (str/join "," (repeat num-vals (->sql-param dialect type))) ")"))
+                 (when (and in? is-null?) (if not? " AND " " OR "))
+                 (when is-null? (str field-name " IS" (when not? " NOT") " NULL"))
+                 ")")
+            (map (partial ->sql-value dialect type) v)))
+    [(str not?)]))
 
 (def -build-or-clause (partial -build-parity-or-clause false))
 (def -build-nor-clause (partial -build-parity-or-clause true))

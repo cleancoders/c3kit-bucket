@@ -39,7 +39,7 @@
 (defn -kvs->kv-pairs [kvs]
   (assert (even? (core/count kvs)) "filter params must come in pairs")
   (let [kv-pairs (partition 2 kvs)]
-    (assert (every? #(keyword? %) (map first kv-pairs)) "filter attributes must be keywords")
+    (assert (every? keyword? (map first kv-pairs)) "filter attributes must be keywords")
     kv-pairs))
 
 (defn -apply-take [options entities]

@@ -47,8 +47,8 @@
 
     (it "without id"
       (should-throw #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core.ExceptionInfo)
-                    "cas may not be applied to new entities."
-                    (sut/cas {:foo "bar"} {:kind :widget})))
+        "cas may not be applied to new entities."
+        (sut/cas {:foo "bar"} {:kind :widget})))
 
     )
 
@@ -560,10 +560,10 @@
           (should-contain "hi!" result-names)))
 
       (it "or"
-        (let [b1 (sut/tx :kind :bibelot :name "Bee" :color "red" :size 1)
-              b2 (sut/tx :kind :bibelot :name "Bee" :color "blue" :size 2)
-              b3 (sut/tx :kind :bibelot :name "Ant" :color "blue" :size 1)
-              b4 (sut/tx :kind :bibelot :color "blue" :size 1)]
+        (let [b1  (sut/tx :kind :bibelot :name "Bee" :color "red" :size 1)
+              b2  (sut/tx :kind :bibelot :name "Bee" :color "blue" :size 2)
+              b3  (sut/tx :kind :bibelot :name "Ant" :color "blue" :size 1)
+              _b4 (sut/tx :kind :bibelot :color "blue" :size 1)]
           (should= [b1 b2 b3] (sut/find-by :bibelot :name ["Bee" "Ant"]))
           (should= [b1 b2 b3] (sut/find-by :bibelot :name #{"Bee" "Ant"}))
           (should= [b3] (sut/find-by :bibelot :name ["BLAH" "Ant"]))
@@ -572,7 +572,8 @@
           ;(should= [b2] (sut/find-by :bibelot :name ["Bee" nil] :size 2))
           ;(should= [b3 b4] (sut/find-by :bibelot :name ["Ant" nil] :size ['not= nil] ))
           (should= [] (sut/find-by :bibelot :name ["BLAH" "BLAH" "BLAH"]))
-          (should= [] (sut/find-by :bibelot :name ["BLAH" "ARG"]))))
+          (should= [] (sut/find-by :bibelot :name ["BLAH" "ARG"]))
+          (should= [] (sut/find-by :bibelot :name []))))
 
       (it "< > string"
         (let [result       (sut/find-by :bibelot :name ['> "g"] :name ['< "i"])
@@ -630,7 +631,7 @@
           (should= [thing2] (sut/find-by :thingy :truthy? false))))
 
       (it "like fuzzy match with anything before or after"
-        (let [result (sut/find-by :bibelot :name ['like "%orl%"])
+        (let [result       (sut/find-by :bibelot :name ['like "%orl%"])
               result-names (map :name result)]
           (should-contain "world" result-names)
           (should-not-contain "hi!" result-names)))
@@ -812,10 +813,10 @@
     (context "find-by"
 
       (it "or with nils"
-        (let [b1 (sut/tx :kind :bibelot :name "Bee" :color "red" :size 1)
-              b2 (sut/tx :kind :bibelot :name "Bee" :color "blue" :size 2)
-              b3 (sut/tx :kind :bibelot :name "Ant" :color "blue" :size 1)
-              b4 (sut/tx :kind :bibelot :color "blue" :size 1)]
+        (let [_b1 (sut/tx :kind :bibelot :name "Bee" :color "red" :size 1)
+              b2  (sut/tx :kind :bibelot :name "Bee" :color "blue" :size 2)
+              b3  (sut/tx :kind :bibelot :name "Ant" :color "blue" :size 1)
+              b4  (sut/tx :kind :bibelot :color "blue" :size 1)]
           (should= [b4] (sut/find-by :bibelot :name [nil]))
           (should= [b3 b4] (sut/find-by :bibelot :name ["BLAH" nil "Ant"] :size ['not= nil]))
           (should= [b2] (sut/find-by :bibelot :name ["Bee" nil] :size 2))
@@ -835,6 +836,11 @@
           (should-contain "hi!" result-names)
           (should-not-contain "hello" result-names)
           (should-not-contain "world" result-names)))
+
+      (it "not= with nothing"
+        (let [result (sut/find-by :bibelot :name ['not=])
+              all    (sut/find :bibelot)]
+          (should= (set all) (set result))))
 
       (it "not="
         (let [result       (sut/find-by :bibelot :name ['not= "hi!"])
