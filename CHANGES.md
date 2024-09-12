@@ -1,6 +1,10 @@
 ### 2.1.6
 * Bumps Apron
 
+### 2.1.4
+ * Upgrades dependencies
+ * Supports empty "in" clauses for JDBC
+
 ### 2.1.3 
  * Adds LIKE queries to datomic implementation
 
