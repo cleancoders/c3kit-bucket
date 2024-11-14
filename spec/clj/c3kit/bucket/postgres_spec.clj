@@ -1,6 +1,6 @@
 (ns c3kit.bucket.postgres-spec
   (:require [c3kit.bucket.api :as api]
-            [c3kit.bucket.api-spec :as spec]
+            [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.jdbc :as jdbc]
             [c3kit.bucket.jdbc-spec :as jdbc-spec]
             [c3kit.bucket.migrator :as migrator]

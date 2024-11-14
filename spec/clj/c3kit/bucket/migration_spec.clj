@@ -2,7 +2,7 @@
   (:require [c3kit.apron.log :as log]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as db]
-            [c3kit.bucket.api-spec :as spec]
+            [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.migration :as sut]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helperc]

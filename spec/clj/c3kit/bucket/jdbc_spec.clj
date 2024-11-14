@@ -4,7 +4,7 @@
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
-            [c3kit.bucket.api-spec :as spec]
+            [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.h2 :as h2]
             [c3kit.bucket.jdbc :as jdbc]
             [c3kit.bucket.jdbc :as sut]
