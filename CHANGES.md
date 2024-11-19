@@ -1,3 +1,6 @@
+### 2.1.6
+* Bumps Apron
+
 ### 2.1.3 
  * Adds LIKE queries to datomic implementation
 
