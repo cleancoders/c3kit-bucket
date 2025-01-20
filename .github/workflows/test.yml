@@ -29,14 +29,14 @@ jobs:
 
       mssql:
         #        image: mcr.microsoft.com/mssql/server:2019-latest
-        image: mcr.microsoft.com/mssql/server:2019-CU27-ubuntu-20.04
+        image: mcr.microsoft.com/mssql/server:2019-CU30-ubuntu-20.04
         ports:
           - 1433:1433
         env:
           SA_PASSWORD: "Pala2023"
           ACCEPT_EULA: "Y"
         options: >-
-          --health-cmd "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Pala2023 -Q 'SELECT 1'"
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Pala2023 -Q 'SELECT 1'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -48,7 +48,7 @@ jobs:
         run: sudo apt-get install -y sqlite3
 
       - name: Initialize MSSQL Database
-        run: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Pala2023 -Q "CREATE DATABASE bucketTest"
+        run: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Pala2023 -Q "CREATE DATABASE bucketTest"
 
       - name: Initialize PostgreSQL Database
         run: psql -h localhost -U postgres -c "CREATE USER runner SUPERUSER"
