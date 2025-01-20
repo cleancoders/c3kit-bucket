@@ -29,7 +29,7 @@ jobs:
 
       mssql:
         #        image: mcr.microsoft.com/mssql/server:2019-latest
-        image: mcr.microsoft.com/mssql/server:2019-latest
+        image: mcr.microsoft.com/mssql/server:2019-CU27-ubuntu-20.04
         ports:
           - 1433:1433
         env:
