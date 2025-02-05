@@ -14,6 +14,7 @@
 
 (def client (atom nil))
 (def connection (atom nil))
+(def main-db (atom nil))
 
 ;; ---- schema -----
 
@@ -56,7 +57,7 @@
   [schema]
   (cond
     (:kind schema) (->entity-schema schema)
-    (:enum schema) (->enum-schema schema)s
+    (:enum schema) (->enum-schema schema)
     :else (throw (ex-info "Invalid schema" schema))))
 
 (defn attribute->spec [attribute]
@@ -99,7 +100,8 @@
    (transact! @api/impl transaction))
   ([db transaction]
    (prn "connection: " @connection)
-   (prn "transaction: " transaction)
+   (prn "transaction: " )
+   (clojure.pprint/pprint transaction)
    ;(assert (instance? Connection connection))
    (datomic/transact @connection {:tx-data transaction})))
 
@@ -146,10 +148,25 @@
 
 (defn db-as-of [t] (datomic/as-of (datomic-db @api/impl) t))
 
+#_(defn attributes->entity [kind attributes id]
+  (prn "attributes id kind: " attributes id kind)
+  (prn "{:id id :kind (keyword kind)}: " {:id id :kind (keyword kind)})
+  (reduce-kv
+   (fn [m k v]
+     (prn "m k v: " m k v)
+     (assoc m (keyword (name k))
+              (if (set? v)
+                (ccc/map-set value-or-id v)
+                (value-or-id v))))
+   {:id id :kind (keyword kind)}
+   attributes))
+
 (defn attributes->entity
   ([attributes id]
+   (prn "DATOMIC attributes: " )
+   (clojure.pprint/pprint attributes)
    (when (seq attributes)
-     (let [kind (namespace (ffirst attributes))]
+     (let [kind (namespace (-> attributes second first))]
        (attributes->entity attributes id kind))))
   ([attributes id kind]
    (reduce-kv
@@ -161,29 +178,26 @@
     {:id id :kind (keyword kind)}
     attributes)))
 
-(defn- id->entity [ddb id]
-  (when-let [attributes [] #_(seq (datomic/entity ddb id))]
-    (attributes->entity attributes id)))
+(defn- id->entity [ddb kind id]
+  (let [attributes (delay (seq (datomic/pull ddb '[*] id)))]
+    (when (and (pos? id) @attributes)
+      (attributes->entity @attributes id kind))))
 
 (defn- entity
   "ids are always longs in datomic.
   kind (optional) will ensure the kind matches or return nil."
-  ([db id]
-   (cond
-     (number? id) (id->entity (datomic-db db) id)
-     (nil? id) nil
-     (string? id) (when-not (str/blank? id) (entity db (Long/parseLong id)))
-     (map? id) (entity db (:id id))
-     :else (throw (UnsupportedOperationException. (str "Unhandled datomic id: " (pr-str id))))))
-  ([db kind id]
-   (when-let [e (entity db id)]
-     (when (or (nil? kind) (= kind (:kind e)))
-       e))))
+  [db kind id]
+  (cond
+    (number? id) (id->entity (datomic-db db) kind id)
+    (nil? id) nil
+    (string? id) (when-not (str/blank? id) (entity db kind (Long/parseLong id)))
+    (map? id) (entity db kind (:id id))
+    :else (throw (UnsupportedOperationException. (str "Unhandled datomic id: " (pr-str id))))))
 
 (defn reload
   "Returns a freshly loaded entity"
   [db e]
-  (when-let [id (:id e)] (entity db id)))
+  (when-let [id (:id e)] (entity db (:kind e) id)))
 
 (defn- q->entities [db result]
   (let [ddb (datomic-db db)]
@@ -219,7 +233,7 @@
         retracted-keys    (doall (filter #(nil? (get updated %)) (keys original)))
         updated           (-> (apply dissoc updated retracted-keys)
                               ccc/remove-nils
-                              (assoc :db/id id))
+                              #_(assoc :db/id id))
         seq-retractions   (cardinality-many-retract-forms updated original)
         field-retractions (retract-field-forms id original retracted-keys)]
     (concat [updated] seq-retractions field-retractions)))
@@ -253,28 +267,27 @@
       (tx-entity-form db entity)))
 
 (defn resolve-id [result id]
-  (if (tempid? id)
-    id
-    #_(datomic/resolve-tempid (:db-after result) (:tempids result) id)
-    id))
+  (-> result :tx-data last .e))
 
 (defn- tx-result [db kind id]
-  (if-let [e (entity db id)]
+  (if-let [e (entity db kind id)]
     e
     (api/soft-delete kind id)))
 
 (defn tx [db e]
   (let [[[kind id] form] (tx-form db e)
-        x (prn "form: " form)
         result (transact! @connection form)
-        x (prn "result: " result)
         id     (resolve-id result id)]
     (tx-result db kind id)))
 
 (defn tx* [db entities]
   (let [id-forms (ccc/some-map #(tx-form db %) entities)
         tx-forms (mapcat second id-forms)
-        result   (datomic/transact @(.-conn db) tx-forms)]
+        x (println "TX FORMS")
+        x (clojure.pprint/pprint tx-forms)
+        result   (transact! @connection tx-forms)]
+    (prn "&&&&RESULT: " )
+    (clojure.pprint/pprint result)
     (map (fn [[kind id]] (tx-result db kind (resolve-id result id))) (map first id-forms))))
 
 
@@ -481,6 +494,7 @@
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect config)
         db         (DatomicDB. db-schemas legend config (atom connection))]
+    (reset! main-db db)
     db))
 
 (defmethod migrator/migration-schema :datomic-cloud [_]
