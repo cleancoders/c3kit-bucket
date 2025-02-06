@@ -1,5 +1,8 @@
+### 2.1.7
+ * Remove `log/warn!` side effect from cljs spec-helper
+
 ### 2.1.6
-* Bumps Apron
+ * Bumps Apron
 
 ### 2.1.4
  * Upgrades dependencies
