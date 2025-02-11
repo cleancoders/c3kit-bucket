@@ -1,5 +1,6 @@
 (ns c3kit.bucket.datomic-cloud
-  (:require [c3kit.apron.corec :as ccc]
+  (:require [c3kit.apron.app :as app]
+            [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as schema]
@@ -7,14 +8,12 @@
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [clojure.string :as str]
-            [datomic.client.api :as datomic])
+            [c3kit.bucket.datomic :as dd]
+            [datomic.client.api :as datomic]
+            [datomic.api :as d])
   )
 
 #_(datomic/history @api/impl my-entity)
-
-(def client (atom nil))
-(def connection (atom nil))
-(def main-db (atom nil))
 
 ;; ---- schema -----
 
@@ -33,7 +32,7 @@
         attribute {:db/ident       (keyword (name kind) (name attr-name))
                    :db/valueType   (keyword "db.type" (name type))
                    :db/cardinality (if many? :db.cardinality/many :db.cardinality/one)
-                   ;:db/index       (if (:index options) true false)
+                   :db/id       (if (:id options) true false)
                    :db/isComponent (if (:component options) true false)
                    :db/noHistory   (if (:no-history options) true false)
                    :db/fulltext    (if (:fulltext options) true false)}]
@@ -88,7 +87,11 @@
 
 ;; ^^^^^ schema ^^^^^
 
+(def client (atom nil))
+(def connection (atom nil))
+
 (defn connect [config]
+  (reset! client (datomic/client config))
   (datomic/create-database @client config)
   (reset! connection (datomic/connect @client config)))
 
@@ -128,18 +131,14 @@
 
 (defn tempid-
   "Temporary id with specified instance"
-  [db] (rand-int 1000000))
-
+  [db] (d/tempid (partition-name db)))
 (defn tempid
   "Temporary id with default instance"
   [] (tempid- @api/impl))
 
 (defn tempid?
   "Takes an id and determines if it is temporary"
-  [id]
-  (if-let [idx (:idx id)]
-    (neg? idx)
-    false))
+  [id] (neg? id))
 
 (defn value-or-id [v]
   (if (and (instance? datomic.query.EntityMap v) (contains? v :db/id))
@@ -148,56 +147,45 @@
 
 (defn db-as-of [t] (datomic/as-of (datomic-db @api/impl) t))
 
-#_(defn attributes->entity [kind attributes id]
-  (prn "attributes id kind: " attributes id kind)
-  (prn "{:id id :kind (keyword kind)}: " {:id id :kind (keyword kind)})
-  (reduce-kv
-   (fn [m k v]
-     (prn "m k v: " m k v)
-     (assoc m (keyword (name k))
-              (if (set? v)
-                (ccc/map-set value-or-id v)
-                (value-or-id v))))
-   {:id id :kind (keyword kind)}
-   attributes))
-
 (defn attributes->entity
-  ([attributes id]
-   (prn "DATOMIC attributes: " )
+  ([attributes]
+   (prn "DATOMIC attributes 1: " )
    (clojure.pprint/pprint attributes)
-   (when (seq attributes)
-     (let [kind (namespace (-> attributes second first))]
-       (attributes->entity attributes id kind))))
-  ([attributes id kind]
-   (reduce-kv
-    (fn [m k v]
-      (assoc m (keyword (name k))
-               (if (set? v)
-                 (ccc/map-set value-or-id v)
-                 (value-or-id v))))
-    {:id id :kind (keyword kind)}
-    attributes)))
+   (when-let [kind (->> attributes keys (remove #(contains? #{:db/id :id} %)) first)]
+     (attributes->entity attributes (namespace kind))))
+  ([attributes kind]
+   (prn "DATOMIC attributes 2: " )
+   (clojure.pprint/pprint attributes)
+   (-> attributes
+       (update-keys (comp keyword name))
+       (assoc :kind (keyword kind)))))
 
-(defn- id->entity [ddb kind id]
-  (let [attributes (delay (seq (datomic/pull ddb '[*] id)))]
-    (when (and (pos? id) @attributes)
-      (attributes->entity @attributes id kind))))
+(defn pull [ddb id] (datomic/pull ddb '[:db/id] id))
+
+(defn- id->entity [ddb id]
+  (when-let [attributes (pull ddb id)]
+    (prn "attributes: " attributes)
+    (attributes->entity attributes)))
 
 (defn- entity
   "ids are always longs in datomic.
   kind (optional) will ensure the kind matches or return nil."
-  [db kind id]
-  (cond
-    (number? id) (id->entity (datomic-db db) kind id)
-    (nil? id) nil
-    (string? id) (when-not (str/blank? id) (entity db kind (Long/parseLong id)))
-    (map? id) (entity db kind (:id id))
-    :else (throw (UnsupportedOperationException. (str "Unhandled datomic id: " (pr-str id))))))
+  ([db id]
+   (cond
+     (number? id) (id->entity (datomic-db db) id)
+     (nil? id) nil
+     (string? id) (when-not (str/blank? id) (entity db (Long/parseLong id)))
+     (map? id) (entity db (:id id))
+     :else (throw (UnsupportedOperationException. (str "Unhandled datomic id: " (pr-str id))))))
+  ([db kind id]
+   (when-let [e (entity db id)]
+     (when (or (nil? kind) (= kind (:kind e)))
+       e))))
 
 (defn reload
   "Returns a freshly loaded entity"
   [db e]
-  (when-let [id (:id e)] (entity db (:kind e) id)))
+  (when-let [id (:id e)] (entity db id)))
 
 (defn- q->entities [db result]
   (let [ddb (datomic-db db)]
@@ -229,11 +217,11 @@
           [] updated))
 
 (defn update-form [db id updated]
-  (let [original          (into {} [] #_(datomic/entity (datomic/db @(.-conn db)) id))
+  (let [original          (dissoc (pull (datomic-db db) id) :db/id)
         retracted-keys    (doall (filter #(nil? (get updated %)) (keys original)))
         updated           (-> (apply dissoc updated retracted-keys)
                               ccc/remove-nils
-                              #_(assoc :db/id id))
+                              (assoc :db/id id))
         seq-retractions   (cardinality-many-retract-forms updated original)
         field-retractions (retract-field-forms id original retracted-keys)]
     (concat [updated] seq-retractions field-retractions)))
@@ -266,8 +254,9 @@
       (maybe-cas-form entity)
       (tx-entity-form db entity)))
 
-(defn resolve-id [result id]
-  (-> result :tx-data last .e))
+(defn resolve-id [result] (-> result :tx-data last .e))
+(defn resolve-ids* [result]
+  (->> result :tx-data rest (partition-by #(.e %)) (map first) (map #(.e %))))
 
 (defn- tx-result [db kind id]
   (if-let [e (entity db kind id)]
@@ -276,19 +265,17 @@
 
 (defn tx [db e]
   (let [[[kind id] form] (tx-form db e)
-        result (transact! @connection form)
-        id     (resolve-id result id)]
+        result (datomic/transact @(.-conn db) {:tx-data form})
+        id     (resolve-id result)]
     (tx-result db kind id)))
 
 (defn tx* [db entities]
   (let [id-forms (ccc/some-map #(tx-form db %) entities)
         tx-forms (mapcat second id-forms)
-        x (println "TX FORMS")
-        x (clojure.pprint/pprint tx-forms)
-        result   (transact! @connection tx-forms)]
-    (prn "&&&&RESULT: " )
-    (clojure.pprint/pprint result)
-    (map (fn [[kind id]] (tx-result db kind (resolve-id result id))) (map first id-forms))))
+        result   (datomic/transact @(.-conn db) {:tx-data tx-forms})
+        ids (resolve-ids* result)]
+    (clojure.pprint/pprint (:tx-data result))
+    (map (fn [[kind] id] (tx-result db kind id)) (map first id-forms) ids)))
 
 
 (defn- ->attr-kw [kind attr] (keyword (name kind) (name attr)))
@@ -410,7 +397,7 @@
   ([db]
    (let [ddb (datomic-db db)]
      (->> (installed-schema-idents db)
-          (map #(->> % #_(datomic/entity ddb) (into {})))
+          (map #(->> % (d/entity ddb) (into {})))
           (map attribute->spec)
           (reduce (fn [result [kind attr spec]] (assoc-in result [kind attr] spec)) {})))))
 
@@ -489,12 +476,10 @@
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :datomic-cloud [config schemas]
-  (reset! client (datomic/client config))
   (let [legend     (atom (legend/build schemas))
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect config)
         db         (DatomicDB. db-schemas legend config (atom connection))]
-    (reset! main-db db)
     db))
 
 (defmethod migrator/migration-schema :datomic-cloud [_]
@@ -574,12 +559,12 @@
   "Loads the entity as it existed when the transaction took place, adding :db/tx (transaction id)
    and :db/instant (date) attributes to the entity."
   [datomic-db eid kind txid]
-  (let [tx         txid #_(datomic/entity datomic-db txid)
+  (let [tx         (d/entity datomic-db txid)
         timestamp  (:db/txInstant tx)
-        attributes [txid] #_(datomic/entity (datomic/as-of datomic-db txid) eid)]
+        attributes (d/entity (datomic/as-of datomic-db txid) eid)]
     (when (seq attributes)
       (-> attributes
-          (attributes->entity eid kind)
+          (attributes->entity kind)
           (assoc :db/tx txid :db/instant timestamp)))))
 (defn history-
   "Same as history but with explicit db instance"
@@ -659,3 +644,4 @@
   [query & args]
   (q->entities @api/impl (apply q query args)))
 
+(def squuid d/squuid)
