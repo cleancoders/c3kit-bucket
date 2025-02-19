@@ -520,7 +520,7 @@
           (should= [thing2 thing3] (reverse (sort-by :bang (sut/find-by :thingy :bang ['< (-> 2 minutes ago)]))))
           (should= [thing2 thing3] (reverse (sort-by :bang (sut/find-by :thingy :bang ['<= (:bang thing2)]))))
           (should= [thing1] (sut/find-by :thingy :bang ['> (-> 2 minutes ago)]))
-          (should= [thing1 thing2] (sort-by :id (sut/find-by :thingy :bang ['>= (:bang thing2)])))
+          (should= [thing1 thing2] (reverse (sort-by :bang (sut/find-by :thingy :bang ['>= (:bang thing2)]))))
           (should= [thing2] (sut/find-by :thingy :bang ['< (-> 2 minutes ago)] :bang ['> (-> 4 minutes ago)]))))
 
       (it "compare against entity with nil value"

@@ -7,8 +7,7 @@
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [clojure.string :as str]
-            [datomic.client.api :as datomic]
-            [datomic.api :as d])
+            [datomic.client.api :as datomic])
   (:import (datomic.dev_local.impl DurableConnection)))
 
 ;; ---- schema -----
@@ -582,5 +581,3 @@
   "Run a datalog query (for full entities) returning the results as entities on default instance."
   [query & args]
   (q->entities @api/impl (apply q query args)))
-
-(def squuid d/squuid)
