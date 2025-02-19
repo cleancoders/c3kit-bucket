@@ -8,7 +8,7 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [datomic.client.api :as datomic])
-  (:import (datomic.dev_local.impl DurableConnection)))
+  )
 
 ;; ---- schema -----
 
@@ -95,7 +95,7 @@
   ([transaction]
    (transact! @api/impl transaction))
   ([db transaction]
-   (assert (instance? DurableConnection @(.-conn db)))
+   ;(assert (instance? DurableConnection @(.-conn db)))
    (datomic/transact @(.-conn db) {:tx-data transaction})))
 
 (defn install-schema! [db]
