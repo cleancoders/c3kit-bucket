@@ -8,7 +8,8 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [datomic.client.api :as datomic]
-            [datomic.api :as d]))
+            [datomic.api :as d])
+  (:import (datomic.dev_local.impl DurableConnection)))
 
 ;; ---- schema -----
 
@@ -83,7 +84,6 @@
 ;; ^^^^^ schema ^^^^^
 
 (def client (atom nil))
-(def connection (atom nil))
 
 (defn connect [config]
   (datomic/create-database @client config)
@@ -96,7 +96,7 @@
   ([transaction]
    (transact! @api/impl transaction))
   ([db transaction]
-   ;(assert (instance? Connection connection))
+   (assert (instance? DurableConnection @(.-conn db)))
    (datomic/transact @(.-conn db) {:tx-data transaction})))
 
 (defn install-schema! [db]
@@ -122,10 +122,10 @@
 
 (defn tempid-
   "Temporary id with specified instance"
-  [db] (d/tempid (partition-name db)))
+  [db] (str (rand-int 100000)))
 (defn tempid
   "Temporary id with default instance"
-  [] (tempid- @api/impl))
+  [] (* -1 (rand-int 100000)))
 
 (defn tempid?
   "Takes an id and determines if it is temporary"
@@ -182,7 +182,7 @@
 (defn- id-or-val [thing] (or (:db/id thing) thing))
 
 (defn insert-form [id entity]
-  (list (-> entity ccc/remove-nils (assoc :db/id id))))
+  (list (-> entity ccc/remove-nils (assoc :db/id (str id)))))
 
 (defn- ->retract-field-form [id original form key]
   (let [o-val (get original key)]
@@ -231,7 +231,7 @@
 
 (defn tx-entity-form [db {:keys [id] :as e}]
   (let [kind (kind! e)
-        id   (or id (* -1 (rand-int 100001)))
+        id   (or id (tempid))
         e    (scope-attributes kind (dissoc e :kind :id))]
     (if (empty? (dissoc (entity db kind id) :id))
       (list (list kind id) (insert-form id e))
@@ -346,7 +346,6 @@
   (if-let [where (seq (build-where-datalog db kind (:where options)))]
     (let [query (concat '[:find ?e :in $ :where] where)]
       (->> (datomic/q query (datomic-db db))
-           (sort-by first)
            (api/-apply-drop-take options)
            (q->entities db)))
     []))
@@ -467,7 +466,7 @@
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :datomic-cloud [config schemas]
-         (reset! client (datomic/client config))
+  (reset! client (datomic/client config))
   (let [legend     (atom (legend/build schemas))
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect config)
@@ -476,58 +475,6 @@
 
 (defmethod migrator/migration-schema :datomic-cloud [_]
   (merge-with merge migrator/default-migration-schema {:name {:db [:unique-value]}}))
-
-(defn find-max-of-all-
-  "Finds the entity with the max attribute for a given kind with specific db instance"
-  [db kind attr]
-  (->> (datomic/q
-        '[:find (max ?e) :in $ ?attribute
-          :where [?e ?attribute]]
-        (datomic-db db)
-        (->attr-kw kind attr))
-       (q->entities db)
-       first))
-
-(defn find-max-of-all
-  "Finds the entity with the max attribute for a given kind with default db instance"
-  [kind attr]
-  (find-max-of-all- @api/impl kind attr))
-
-(defn find-max-val-of-all-
-  "Finds the max value of a kind/attr with specific db instance"
-  [db kind attr]
-  (-> (find-max-of-all- db kind attr) (get attr)))
-
-(defn find-max-val-of-all
-  "Finds the max value of a kind/attr with default db instance"
-  [kind attr]
-  (-> (find-max-of-all- @api/impl kind attr) (get attr)))
-
-(defn find-min-of-all-
-  "Finds the entity with the min attribute for a given kind with specific db instance"
-  [db kind attr]
-  (->> (datomic/q
-        '[:find (min ?e) :in $ ?attribute
-          :where [?e ?attribute]]
-        (datomic-db db)
-        (->attr-kw kind attr))
-       (q->entities db)
-       first))
-
-(defn find-min-of-all
-  "Finds the entity with the min attribute for a given kind with default db instance"
-  [kind attr]
-  (find-min-of-all- @api/impl kind attr))
-
-(defn find-min-val-of-all-
-  "Finds the min value of a kind/attr with specific db instance"
-  [db kind attr]
-  (-> (find-min-of-all- db kind attr) (get attr)))
-
-(defn find-min-val-of-all
-  "Finds the min value of a kind/attr with default db instance"
-  [kind attr]
-  (-> (find-min-of-all- @api/impl kind attr) (get attr)))
 
 (defn tx-ids-
   "Same as td-ids but with explicit db instance."

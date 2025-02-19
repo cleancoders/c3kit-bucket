@@ -204,26 +204,6 @@
 
     )
 
-  (context "min & max"
-    (with db (api/create-db config [spec/bibelot spec/thingy]))
-
-    (it "find-max-of-all"
-      (sut/delete-all @db :bibelot)
-      (let [_  (sut/tx @db {:kind :bibelot :size 1})
-            _  (sut/tx @db {:kind :bibelot :size 2})
-            b3 (sut/tx @db {:kind :bibelot :size 3})]
-        (should= b3 (sut/find-max-of-all- @db :bibelot :size))
-        (should= 3 (sut/find-max-val-of-all- @db :bibelot :size))))
-
-    (it "find-min-of-all"
-      (sut/delete-all @db :bibelot)
-      (let [b1 (sut/tx @db {:kind :bibelot :size 1})
-            _  (sut/tx @db {:kind :bibelot :size 2})
-            _  (sut/tx @db {:kind :bibelot :size 3})]
-        (should= b1 (sut/find-min-of-all- @db :bibelot :size))
-        (should= 1 (sut/find-min-val-of-all- @db :bibelot :size))))
-    )
-
   (context "migrator"
 
     (with db (api/create-db config []))
