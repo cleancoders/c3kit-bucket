@@ -517,8 +517,8 @@
         (let [thing1 (sut/tx :kind :thingy :id 123 :bang (-> 1 minutes ago))
               thing2 (sut/tx :kind :thingy :id 456 :bang (-> 3 minutes ago))
               thing3 (sut/tx :kind :thingy :id 789 :bang (-> 5 minutes ago))]
-          (should= [thing2 thing3] (sort-by :id (sut/find-by :thingy :bang ['< (-> 2 minutes ago)])))
-          (should= [thing2 thing3] (sort-by :id (sut/find-by :thingy :bang ['<= (:bang thing2)])))
+          (should= [thing2 thing3] (reverse (sort-by :bang (sut/find-by :thingy :bang ['< (-> 2 minutes ago)]))))
+          (should= [thing2 thing3] (reverse (sort-by :bang (sut/find-by :thingy :bang ['<= (:bang thing2)]))))
           (should= [thing1] (sut/find-by :thingy :bang ['> (-> 2 minutes ago)]))
           (should= [thing1 thing2] (sort-by :id (sut/find-by :thingy :bang ['>= (:bang thing2)])))
           (should= [thing2] (sut/find-by :thingy :bang ['< (-> 2 minutes ago)] :bang ['> (-> 4 minutes ago)]))))
