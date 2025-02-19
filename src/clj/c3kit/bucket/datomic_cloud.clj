@@ -86,11 +86,10 @@
 (def connection (atom nil))
 
 (defn connect [config]
-  (reset! client (datomic/client config))
   (datomic/create-database @client config)
-  (reset! connection (datomic/connect @client config)))
+  (datomic/connect @client config))
 
-(defn datomic-db [impl] (datomic/db @connection))
+(defn datomic-db [impl] (datomic/db @(.-conn impl)))
 
 (defn transact!
   "transact a datomic form. Returns a future, so don't forget to deref it if you need it to execute."
@@ -468,6 +467,7 @@
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :datomic-cloud [config schemas]
+         (reset! client (datomic/client config))
   (let [legend     (atom (legend/build schemas))
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect config)
