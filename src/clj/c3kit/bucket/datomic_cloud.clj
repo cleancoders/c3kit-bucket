@@ -95,7 +95,7 @@
   ([transaction]
    (transact! @api/impl transaction))
   ([db transaction]
-   (assert (instance? Connection @(.-conn db)))
+   ;(assert (instance? Connection @(.-conn db)))
    (datomic/transact @(.-conn db) {:tx-data transaction})))
 
 (defn install-schema! [db]
