@@ -118,9 +118,7 @@
 
 (defn partition-name [db] (or (:partition (.-config db)) :db.part/user))
 
-(defn tempid-
-  "Temporary id with specified instance"
-  [db] (str (rand-int 100000)))
+
 (defn tempid
   "Temporary id with default instance"
   [] (* -1 (rand-int 100000)))
@@ -128,11 +126,6 @@
 (defn tempid?
   "Takes an id and determines if it is temporary"
   [id] (neg? id))
-
-(defn value-or-id [v]
-  (if (and (instance? datomic.query.EntityMap v) (contains? v :db/id))
-    (:db/id v)
-    v))
 
 (defn db-as-of [t] (datomic/as-of (datomic-db @api/impl) t))
 
