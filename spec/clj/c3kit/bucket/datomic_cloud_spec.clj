@@ -1,5 +1,6 @@
 (ns c3kit.bucket.datomic-cloud-spec
-  (:require [c3kit.apron.log :as log]
+  (:require [c3kit.apron.env :as env]
+            [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
@@ -10,7 +11,7 @@
             [speclj.core :refer :all])
   (:import (java.util Date)))
 
-(def config {:impl :datomic-cloud :server-type :datomic-local :system "dev" :db-name "cloud" :storage-dir "/Users/maniginam/projects/cleancoders/c3kit/bucket/target/datomic/stg"})
+(def config {:impl :datomic-cloud :server-type :datomic-local :system "dev" :db-name "spec"})
 (declare db)
 (declare biby)
 (defn sleep [entity] (Thread/sleep 10) entity)

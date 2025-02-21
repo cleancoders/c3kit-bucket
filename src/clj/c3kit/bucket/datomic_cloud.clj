@@ -7,8 +7,7 @@
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [clojure.string :as str]
-            [datomic.client.api :as datomic])
-  (:import (datomic.client.api.protocols Connection)))
+            [datomic.client.api :as datomic]))
 
 ;; ---- schema -----
 
@@ -95,7 +94,7 @@
   ([transaction]
    (transact! @api/impl transaction))
   ([db transaction]
-   (assert (instance? Connection @(.-conn db)))
+   (assert @(.-conn db))
    (datomic/transact @(.-conn db) {:tx-data transaction})))
 
 (defn install-schema! [db]
