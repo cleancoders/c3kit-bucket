@@ -7,9 +7,7 @@
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [clojure.string :as str]
-            [datomic.client.api :as datomic])
-  (:import (com.amazonaws.auth ContainerCredentialsProvider)
-           (com.amazonaws.auth.profile ProfileCredentialsProvider)))
+            [datomic.client.api :as datomic]))
 
 ;; ---- schema -----
 
@@ -462,16 +460,9 @@
   (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
-(defmulti new-creds-provider :creds-provider-type)
-(defmethod new-creds-provider :default [{:keys [profile-name]}]
-  (ProfileCredentialsProvider. profile-name))
-
-(defmethod new-creds-provider :container [_]
-  (ContainerCredentialsProvider.))
-
 (defmethod api/-create-impl :datomic-cloud [config schemas]
   (reset! client (datomic/client config))
-  (let [config (assoc config :creds-provider (new-creds-provider config))
+  (let [config     config
         legend     (atom (legend/build schemas))
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect config)
