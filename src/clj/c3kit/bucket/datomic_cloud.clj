@@ -7,7 +7,9 @@
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [clojure.string :as str]
-            [datomic.client.api :as datomic]))
+            [datomic.client.api :as datomic])
+  (:import (com.amazonaws.auth ContainerCredentialsProvider)
+           (com.amazonaws.auth.profile ProfileCredentialsProvider)))
 
 ;; ---- schema -----
 
@@ -129,13 +131,17 @@
 
 (defn db-as-of [t] (datomic/as-of (datomic-db @api/impl) t))
 
+(defn update-refs [entity]
+  (update-vals entity (fn [v] (:db/id v v))))
+
 (defn attributes->entity
   ([attributes]
-   (when-let [kind (->> attributes keys (remove #(contains? #{:db/id :id} %)) first)]
+   (when-let [kind (->> attributes keys (remove #(contains? #{:db/id} %)) first)]
      (attributes->entity attributes (namespace kind))))
   ([attributes kind]
    (-> attributes
        (update-keys (comp keyword name))
+       update-refs
        (assoc :kind (keyword kind)))))
 
 (defn pull-entity [ddb id] (datomic/pull ddb '[:db/id] id))
@@ -456,9 +462,17 @@
   (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 
+(defmulti new-creds-provider :creds-provider-type)
+(defmethod new-creds-provider :default [{:keys [profile-name]}]
+  (ProfileCredentialsProvider. profile-name))
+
+(defmethod new-creds-provider :container [_]
+  (ContainerCredentialsProvider.))
+
 (defmethod api/-create-impl :datomic-cloud [config schemas]
   (reset! client (datomic/client config))
-  (let [legend     (atom (legend/build schemas))
+  (let [config (assoc config :creds-provider (new-creds-provider config))
+        legend     (atom (legend/build schemas))
         db-schemas (->> (flatten schemas) (mapcat ->db-schema))
         connection (connect config)
         db         (DatomicDB. db-schemas legend config (atom connection))]

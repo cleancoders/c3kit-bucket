@@ -11,7 +11,13 @@
             [speclj.core :refer :all])
   (:import (java.util Date)))
 
-(def config {:impl :datomic-cloud :server-type :datomic-local :system "dev" :db-name "spec"})
+(def config {:impl :datomic-cloud
+             :server-type :datomic-local
+             :creds-profile "sandbox"
+             :system "cleancoders-poker-sandbox"
+             :db-name "spec"
+             :endpoint "https://d13mjr7yek.execute-api.us-west-2.amazonaws.com/"
+             :region "us-west-2"})
 (declare db)
 (declare biby)
 (defn sleep [entity] (Thread/sleep 10) entity)
@@ -31,6 +37,16 @@
     (spec/kind-in-entity-is-optional config)
     (spec/multi-value-fields config)
     (spec/cas config)
+    )
+
+  (context "ref attribute"
+    (helper/with-schemas config [spec/bibelot (assoc spec/thingy :fuzz {:type :ref}) spec/disorganized])
+
+    (it "saves just the id"
+      (let [bibelot (api/tx {:kind :bibelot :name "bibby"})
+            thingy (api/tx {:kind :thingy :id 123 :name "thingy" :fuzz (:id bibelot)})]
+        (should= (:id bibelot) (:fuzz thingy))
+        (should (api/entity (:fuzz thingy)))))
     )
 
   (context "safety"
