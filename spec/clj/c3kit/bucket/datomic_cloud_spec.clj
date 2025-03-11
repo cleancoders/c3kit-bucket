@@ -13,6 +13,7 @@
 
 (def config {:impl :datomic-cloud
              :server-type :datomic-local
+             :storage-dir :mem
              :creds-profile "sandbox"
              :system "cleancoders-poker-sandbox"
              :db-name "spec"
