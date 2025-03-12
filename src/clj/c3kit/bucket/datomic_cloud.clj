@@ -142,7 +142,7 @@
        update-refs
        (assoc :kind (keyword kind)))))
 
-(defn pull-entity [ddb id] (datomic/pull ddb '[:db/id] id))
+(defn pull-entity [ddb id] (datomic/pull ddb '[*] id))
 
 (defn- id->entity [ddb id]
   (when-let [attributes (pull-entity ddb id)]
