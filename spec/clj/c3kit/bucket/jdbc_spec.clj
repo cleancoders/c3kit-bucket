@@ -16,7 +16,7 @@
 (def reserved-word-entity
   {:kind  (assoc (s/kind :reserved-word-entity) :db {:name "select"}) ;; select is a reserved word
    :id    {:type :int :db {:type "serial PRIMARY KEY"}}
-   :where {:type :int}}) ;; where is a reserved word
+   :where {:type :int}})                                    ;; where is a reserved word
 
 (def json-entity
   {:kind  (assoc (s/kind :json-entity) :db {:name "json_entity"})
@@ -78,12 +78,12 @@
       (helper/with-impl ~config [(-> variform
                                      (assoc-in [:variant :type] ~type)
                                      (assoc-in [:id :db :type] (jdbc/auto-int-primary-key (:dialect ~config))))]
-        (let [expected# ~expected
-              variform# (api/tx {:kind :variform :variant ~value})]
-          (should= expected# (:variant variform#))
-          (should= expected# (:variant (api/reload variform#)))
-          (should= (api/soft-delete variform#) (api/delete variform#))
-          (should-be-nil (api/reload variform#)))))))
+                        (let [expected# ~expected
+                              variform# (api/tx {:kind :variform :variant ~value})]
+                          (should= expected# (:variant variform#))
+                          (should= expected# (:variant (api/reload variform#)))
+                          (should= (api/soft-delete variform#) (api/delete variform#))
+                          (should-be-nil (api/reload variform#)))))))
 
 (defn type-specs [config]
   (context "data types"
@@ -329,6 +329,12 @@
           (should= red (first (sut/find-sql- @api/impl :bibelot "SELECT * from bibelot WHERE color='red'")))
           (should= red (first (sut/find-sql- @api/impl :bibelot ["SELECT * from bibelot WHERE color=?" "red"])))
           (should= green (first (sut/find-sql :bibelot "SELECT * from bibelot WHERE color='green'")))))
+
+      (it "reduce-sql"
+        (let [red    (api/tx- @api/impl {:kind :bibelot :name "one" :color "red"})
+              _green (api/tx- @api/impl {:kind :bibelot :name "two" :color "green"})
+              items  (sut/reduce-sql- @api/impl :bibelot conj [] "SELECT * from bibelot WHERE color='red'")]
+          (should= [red] items)))
 
       (it "tries to update a deleted entity with db-generated ids"
         (let [saved (api/tx {:kind :bibelot :name "thingy"})]
