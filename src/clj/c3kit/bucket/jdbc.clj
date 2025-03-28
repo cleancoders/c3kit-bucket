@@ -450,16 +450,17 @@
 
 (defn reduce-sql- [db kind f init sql]
   (let [t-map      (key-map db kind)
-        connection (jdbc/get-connection (.-ds db))]
+        connection (jdbc/get-connection (.-ds db))
+        command    (maybe-str->command sql)]
     (.setHoldability connection ResultSet/CLOSE_CURSORS_AT_COMMIT)
     (core-reduce
       (fn [a b] (f a (ccc/remove-nils (assoc b :kind kind))))
       init
-      (jdbc/plan connection sql {:builder-fn  (:builder-fn t-map)
-                                 :fetch-size  1000
-                                 :concurrency :read-only
-                                 :cursors     :close
-                                 :result-type :forward-only}))))
+      (jdbc/plan connection command {:builder-fn  (:builder-fn t-map)
+                                     :fetch-size  1000
+                                     :concurrency :read-only
+                                     :cursors     :close
+                                     :result-type :forward-only}))))
 
 (defn reduce [db kind f init options]
   (let [t-map (key-map db kind)
