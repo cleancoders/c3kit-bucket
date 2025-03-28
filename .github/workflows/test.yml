@@ -74,7 +74,10 @@ jobs:
             ${{ runner.os }}-deps-
 
       - name: Install Clojure CLI
-        run: curl -O https://download.clojure.org/install/linux-install-1.11.1.1119.sh && chmod +x linux-install-1.11.1.1119.sh && sudo ./linux-install-1.11.1.1119.sh
+        run: |
+          curl -L -O https://github.com/clojure/brew-install/releases/latest/download/linux-install.sh
+          chmod +x linux-install.sh
+          sudo ./linux-install.sh
 
       - name: Run Clojure Tests
         run: clojure -M:test:spec-ci
