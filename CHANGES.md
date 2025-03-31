@@ -1,3 +1,6 @@
+### 2.1.15
+ * Adds `reduce-sql-` to jdbc for added control over query reductions
+
 ### 2.1.7
  * Remove `log/warn!` side effect from cljs spec-helper
 
