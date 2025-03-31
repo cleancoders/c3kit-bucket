@@ -448,19 +448,21 @@
         sql     (str/join " " ["SELECT COUNT(*) FROM" table where-sql])]
     (first (vals (execute-one-conn! (.-ds db) (cons sql args))))))
 
-(defn reduce-sql- [db kind f init sql]
+(defn reduce-sql- [db kind f init sql & {:as options}]
   (let [t-map      (key-map db kind)
         connection (jdbc/get-connection (.-ds db))
-        command    (maybe-str->command sql)]
+        command    (maybe-str->command sql)
+        opts       (merge {:builder-fn  (:builder-fn t-map)
+                           :fetch-size  1000
+                           :concurrency :read-only
+                           :cursors     :close
+                           :result-type :forward-only}
+                          options)]
     (.setHoldability connection ResultSet/CLOSE_CURSORS_AT_COMMIT)
     (core-reduce
       (fn [a b] (f a (ccc/remove-nils (assoc b :kind kind))))
       init
-      (jdbc/plan connection command {:builder-fn  (:builder-fn t-map)
-                                     :fetch-size  1000
-                                     :concurrency :read-only
-                                     :cursors     :close
-                                     :result-type :forward-only}))))
+      (jdbc/plan connection command opts))))
 
 (defn reduce [db kind f init options]
   (let [t-map (key-map db kind)
