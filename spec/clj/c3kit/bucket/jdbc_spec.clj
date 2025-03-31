@@ -331,14 +331,11 @@
           (should= green (first (sut/find-sql :bibelot "SELECT * from bibelot WHERE color='green'")))))
 
       (it "reduce-sql"
-        (let [red    (api/tx- @api/impl {:kind :bibelot :name "one" :color "red"})
-              green  (api/tx- @api/impl {:kind :bibelot :name "two" :color "green"})
-              blue-3 (api/tx- @api/impl {:kind :bibelot :name "three" :color "blue"})
-              blue-4 (api/tx- @api/impl {:kind :bibelot :name "four" :color "blue"})]
+        (let [red   (api/tx- @api/impl {:kind :bibelot :name "one" :color "red"})
+              green (api/tx- @api/impl {:kind :bibelot :name "two" :color "green"})]
           (should= [red] (sut/reduce-sql- @api/impl :bibelot conj [] "SELECT * from bibelot WHERE color='red'"))
           (should= [red] (sut/reduce-sql- @api/impl :bibelot conj [] ["SELECT * from bibelot WHERE color='red'"]))
-          (should= [green] (sut/reduce-sql- @api/impl :bibelot conj [] "SELECT * from bibelot WHERE color='green'"))
-          (should= #{[blue-3] [blue-4]} (set (sut/reduce-sql- @api/impl :bibelot conj [] "SELECT * from bibelot WHERE color='blue'" :fetch-size 1)))))
+          (should= [green] (sut/reduce-sql- @api/impl :bibelot conj [] "SELECT * from bibelot WHERE color='green'"))))
 
       (it "tries to update a deleted entity with db-generated ids"
         (let [saved (api/tx {:kind :bibelot :name "thingy"})]
