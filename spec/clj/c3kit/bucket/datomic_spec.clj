@@ -3,6 +3,7 @@
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
+            [c3kit.bucket.datomic-common :as common-api]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.datomic :as sut]
             [c3kit.bucket.migrator :as migrator]
@@ -35,8 +36,8 @@
   (context "safety"
     (around [it] (with-redefs [api/*safety* true] (it)))
 
-    (it "clear" (should-throw AssertionError (sut/clear config)))
-    (it "delete-all" (should-throw AssertionError (sut/delete-all config :foo))))
+    (it "clear" (should-throw AssertionError (common-api/clear config)))
+    (it "delete-all" (should-throw AssertionError (common-api/delete-all config :foo))))
 
   (context "unique behavior"
 
@@ -44,7 +45,7 @@
 
     (it "one kv with nil value"
       (log/capture-logs
-        (should= [] (api/find- @db :bibelot :where {:name nil})))
+       (should= [] (api/find- @db :bibelot :where {:name nil})))
       (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str)))
 
     )
@@ -54,133 +55,134 @@
     (context "spec->attribute"
 
       (it "simple string"
-        (let [attribute (sut/spec->attribute :foo :name {:type :string})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :string} true)]
           (should= :foo/name (:db/ident attribute))
           (should= :db.type/string (:db/valueType attribute))
           (should= :db.cardinality/one (:db/cardinality attribute))))
 
       (it "long"
-        (let [attribute (sut/spec->attribute :foo :names {:type :long})]
+        (let [attribute (common-api/spec->attribute :foo :names {:type :long} true)]
           (should= :db.type/long (:db/valueType attribute))))
 
       (it "keyword-ref"
-        (let [attribute (sut/spec->attribute :foo :temper {:type :kw-ref})]
+        (let [attribute (common-api/spec->attribute :foo :temper {:type :kw-ref} true)]
           (should= :db.type/ref (:db/valueType attribute))))
 
       (it "many strings"
-        (let [attribute (sut/spec->attribute :foo :names {:type [:string]})]
+        (let [attribute (common-api/spec->attribute :foo :names {:type [:string]} true)]
           (should= :db.type/string (:db/valueType attribute))
           (should= :db.cardinality/many (:db/cardinality attribute))))
 
       (it "indexed"
-        (let [attribute (sut/spec->attribute :foo :names {:type :string})]
+        (let [attribute (common-api/spec->attribute :foo :names {:type :string} true)]
           (should= false (:db/index attribute)))
-        (let [attribute (sut/spec->attribute :foo :names {:type :string :db [:index]})]
+        (let [attribute (common-api/spec->attribute :foo :names {:type :string :db [:index]} true)]
           (should= true (:db/index attribute))))
 
       (it "uniqueness"
-        (let [attribute (sut/spec->attribute :foo :name {:type :string :db []})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :string :db []} true)]
           (should= nil (:db/unique attribute)))
-        (let [attribute (sut/spec->attribute :foo :name {:type :string :db [:unique-value]})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :string :db [:unique-value]} true)]
           (should= :db.unique/value (:db/unique attribute)))
-        (let [attribute (sut/spec->attribute :foo :name {:type :string :db [:unique-identity]})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :string :db [:unique-identity]} true)]
           (should= :db.unique/identity (:db/unique attribute))))
 
       (it "component"
-        (let [attribute (sut/spec->attribute :foo :name {:type :ref :db []})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :ref :db []} true)]
           (should= false (:db/isComponent attribute)))
-        (let [attribute (sut/spec->attribute :foo :name {:type :ref :db [:component]})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :ref :db [:component]} true)]
           (should= true (:db/isComponent attribute))))
 
       (it "history"
-        (let [attribute (sut/spec->attribute :foo :name {:type :ref :db []})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :ref :db []} true)]
           (should= false (:db/noHistory attribute)))
-        (let [attribute (sut/spec->attribute :foo :name {:type :ref :db [:no-history]})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :ref :db [:no-history]} true)]
           (should= true (:db/noHistory attribute))))
 
       (it "fulltext"
-        (let [attribute (sut/spec->attribute :foo :name {:type :string :db []})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :string :db []} true)]
           (should= false (:db/fulltext attribute)))
-        (let [attribute (sut/spec->attribute :foo :name {:type :string :db [:fulltext]})]
+        (let [attribute (common-api/spec->attribute :foo :name {:type :string :db [:fulltext]} true)]
           (should= true (:db/fulltext attribute))))
       )
 
     (context "attribute->spec"
 
       (it "ignores any without a valueType, which could be just the db"
-        (let [spec (sut/attribute->spec {:db/ident :doodle})]
+        (let [spec (common-api/attribute->spec {:db/ident :doodle})]
           (should= nil spec)))
 
       (it "simple string"
-        (let [spec (sut/attribute->spec {:db/ident       :foo/name
-                                         :db/valueType   :db.type/string
-                                         :db/cardinality :db.cardinality/one})]
+        (let [spec (common-api/attribute->spec {:db/ident       :foo/name
+                                                :db/valueType   :db.type/string
+                                                :db/cardinality :db.cardinality/one})]
           (should= [:foo :name {:type :string}] spec)))
 
       (it "long"
-        (let [spec (sut/attribute->spec {:db/ident     :foo/size
-                                         :db/valueType :db.type/long})]
+        (let [spec (common-api/attribute->spec {:db/ident     :foo/size
+                                                :db/valueType :db.type/long})]
           (should= [:foo :size {:type :long}] spec)))
 
       (it "ref"
-        (let [spec (sut/attribute->spec {:db/ident     :foo/bar
-                                         :db/valueType :db.type/ref})]
+        (let [spec (common-api/attribute->spec {:db/ident     :foo/bar
+                                                :db/valueType :db.type/ref})]
           (should= [:foo :bar {:type :ref}] spec)))
 
       (it "many strings"
-        (let [spec (sut/attribute->spec {:db/ident       :foo/bar
-                                         :db/valueType   :db.type/string
-                                         :db/cardinality :db.cardinality/many})]
+        (let [spec (common-api/attribute->spec {:db/ident       :foo/bar
+                                                :db/valueType   :db.type/string
+                                                :db/cardinality :db.cardinality/many})]
           (should= [:foo :bar {:type [:string]}] spec)))
 
       (it "index"
-        (let [spec (sut/attribute->spec {:db/ident     :foo/bar
-                                         :db/valueType :db.type/string
-                                         :db/index     true})]
+        (let [spec (common-api/attribute->spec {:db/ident     :foo/bar
+                                                :db/valueType :db.type/string
+                                                :db/index     true})]
           (should= [:foo :bar {:type :string :db [:index]}] spec)))
 
       (it "unique"
-        (let [spec (sut/attribute->spec {:db/ident     :foo/bar
-                                         :db/valueType :db.type/string
-                                         :db/unique    :db.unique/identity})]
+        (let [spec (common-api/attribute->spec {:db/ident     :foo/bar
+                                                :db/valueType :db.type/string
+                                                :db/unique    :db.unique/identity})]
           (should= [:foo :bar {:type :string :db [:unique-identity]}] spec))
-        (let [spec (sut/attribute->spec {:db/ident     :foo/bar
-                                         :db/valueType :db.type/string
-                                         :db/unique    :db.unique/value})]
+        (let [spec (common-api/attribute->spec {:db/ident     :foo/bar
+                                                :db/valueType :db.type/string
+                                                :db/unique    :db.unique/value})]
           (should= [:foo :bar {:type :string :db [:unique-value]}] spec)))
 
       (it "component"
-        (let [spec (sut/attribute->spec {:db/ident       :foo/bar
-                                         :db/valueType   :db.type/string
-                                         :db/isComponent true})]
+        (let [spec (common-api/attribute->spec {:db/ident       :foo/bar
+                                                :db/valueType   :db.type/string
+                                                :db/isComponent true})]
           (should= [:foo :bar {:type :string :db [:component]}] spec)))
 
       (it "history"
-        (let [spec (sut/attribute->spec {:db/ident     :foo/bar
-                                         :db/valueType :db.type/string
-                                         :db/noHistory true})]
+        (let [spec (common-api/attribute->spec {:db/ident     :foo/bar
+                                                :db/valueType :db.type/string
+                                                :db/noHistory true})]
           (should= [:foo :bar {:type :string :db [:no-history]}] spec)))
 
       (it "fulltext"
-        (let [spec (sut/attribute->spec {:db/ident     :foo/bar
-                                         :db/valueType :db.type/string
-                                         :db/fulltext  true})]
+        (let [spec (common-api/attribute->spec {:db/ident     :foo/bar
+                                                :db/valueType :db.type/string
+                                                :db/fulltext  true})]
           (should= [:foo :bar {:type :string :db [:fulltext]}] spec)))
 
       )
 
     (it "all-attributes->specs"
-      (let [specs (sut/all-attributes->specs [{:db/ident :doodle}
-                                              {:db/ident       :foo/name
-                                               :db/valueType   :db.type/string
-                                               :db/cardinality :db.cardinality/one}])]
+      (let [specs (common-api/all-attributes->specs [{:db/ident :doodle}
+                                                     {:db/ident       :foo/name
+                                                      :db/valueType   :db.type/string
+                                                      :db/cardinality :db.cardinality/one}])]
         (should= [[:foo :name {:type :string}]] specs)))
 
     (it "entity"
-      (let [schema (sut/->entity-schema {:kind (s/kind :bar)
-                                         :id   s/id
-                                         :fizz {:type :string}
-                                         :bang {:type :long}})]
+      (let [schema (common-api/->entity-schema {:kind (s/kind :bar)
+                                                :id   s/id
+                                                :fizz {:type :string}
+                                                :bang {:type :long}}
+                                               true)]
         (should= 2 (count schema))
         (should= :bar/fizz (:db/ident (first schema)))
         (should= :db.type/string (:db/valueType (first schema)))
@@ -188,7 +190,7 @@
         (should= :db.type/long (:db/valueType (second schema)))))
 
     (it "enum schema"
-      (let [schema (sut/->enum-schema {:enum :thing :values [:foo :bar]})]
+      (let [schema (common-api/->enum-schema {:enum :thing :values [:foo :bar]})]
         (should= 2 (count schema))
         (should-contain {:db/ident :thing/foo} schema)
         (should-contain {:db/ident :thing/bar} schema)))
@@ -198,15 +200,15 @@
 
     (it "default"
       (let [db (api/create-db (dissoc config :partition) nil)]
-        (should= :db.part/user (sut/partition-name db))))
+        (should= :db.part/user (common-api/partition-name db))))
 
     (it "in config"
       (let [db (api/create-db (assoc config :partition :test) nil)]
-        (should= :test (sut/partition-name db))))
+        (should= :test (common-api/partition-name db))))
 
     (it "schema"
-      (should= [{:db/id "test", :db/ident :test} [:db/add :db.part/db :db.install/partition "test"]] (sut/partition-schema :test))
-      (should= [{:db/id "newbie", :db/ident :newbie} [:db/add :db.part/db :db.install/partition "newbie"]] (sut/partition-schema :newbie)))
+      (should= [{:db/id "test", :db/ident :test} [:db/add :db.part/db :db.install/partition "test"]] (common-api/partition-schema :test))
+      (should= [{:db/id "newbie", :db/ident :newbie} [:db/add :db.part/db :db.install/partition "newbie"]] (common-api/partition-schema :newbie)))
 
     )
 
@@ -214,18 +216,18 @@
     (with db (api/create-db config [spec/bibelot spec/thingy]))
 
     (it "find-max-of-all"
-      (sut/delete-all @db :bibelot)
-      (let [_ (sut/tx @db {:kind :bibelot :size 1})
-            _ (sut/tx @db {:kind :bibelot :size 2})
-            b3 (sut/tx @db {:kind :bibelot :size 3})]
+      (api/delete-all- @db :bibelot)
+      (let [_  (api/tx- @db {:kind :bibelot :size 1})
+            _  (api/tx- @db {:kind :bibelot :size 2})
+            b3 (api/tx- @db {:kind :bibelot :size 3})]
         (should= b3 (sut/find-max-of-all- @db :bibelot :size))
         (should= 3 (sut/find-max-val-of-all- @db :bibelot :size))))
 
     (it "find-min-of-all"
-      (sut/delete-all @db :bibelot)
-      (let [b1 (sut/tx @db {:kind :bibelot :size 1})
-            _ (sut/tx @db {:kind :bibelot :size 2})
-            _ (sut/tx @db {:kind :bibelot :size 3})]
+      (api/delete-all- @db :bibelot)
+      (let [b1 (api/tx- @db {:kind :bibelot :size 1})
+            _  (api/tx- @db {:kind :bibelot :size 2})
+            _  (api/tx- @db {:kind :bibelot :size 3})]
         (should= b1 (sut/find-min-of-all- @db :bibelot :size))
         (should= 1 (sut/find-min-val-of-all- @db :bibelot :size))))
     )
@@ -242,8 +244,8 @@
         (should= [:unique-value] (-> schema :name :db))))
 
     (it "installed-schema-legend"
-      (let [db (api/create-db config [])
-            _ (sut/transact! db (sut/->db-schema spec/bibelot))
+      (let [db     (api/create-db config [])
+            _      (common-api/transact! db (common-api/->db-schema spec/bibelot true))
             result (migrator/-installed-schema-legend db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :bibelot :name))
         (should= {:type :long} (-> result :bibelot :size))
@@ -251,7 +253,7 @@
 
     (it "install-schema!"
       (let [schema (assoc-in spec/bibelot [:kind :value] :bubble)
-            _ (migrator/-install-schema! @db schema)
+            _      (migrator/-install-schema! @db schema)
             result (migrator/-installed-schema-legend @db {:bubble schema})]
         (should= {:type :string} (-> result :bubble :name))
         (should= {:type :long} (-> result :bubble :size))
@@ -263,20 +265,20 @@
       (should= true (migrator/-schema-exists? @db spec/bibelot)))
 
     (it "add-attribute!"
-      (let [_ (migrator/-add-attribute! @db :gum :name {:type :string})
+      (let [_      (migrator/-add-attribute! @db :gum :name {:type :string})
             result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "add-attribute! - schema attr"
-      (let [_ (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
+      (let [_      (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
             result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "remove-attribute!"
-      (let [_ (migrator/-install-schema! @db spec/bibelot)
-            bibelot (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
-            _ (migrator/-remove-attribute! @db :bibelot :color)
-            reloaded (api/reload- @db bibelot)
+      (let [_          (migrator/-install-schema! @db spec/bibelot)
+            bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
+            _          (migrator/-remove-attribute! @db :bibelot :color)
+            reloaded   (api/reload- @db bibelot)
             new-legend (migrator/-installed-schema-legend @db nil)]
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))))
@@ -284,25 +286,25 @@
     (it "remove-attribute! that doesn't exist"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-        (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
-        (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
+       (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
+       (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
     (it "remove-attribute! - multi"
-      (let [db (api/create-db config [])
-            _ (migrator/-install-schema! db spec/doodad)
-            doodad (api/tx- db {:kind :doodad :names ["bill" "bob"] :numbers [123 456]})
-            _ (migrator/-remove-attribute! db :doodad :numbers)
-            reloaded (api/reload- db doodad)
+      (let [db         (api/create-db config [])
+            _          (migrator/-install-schema! db spec/doodad)
+            doodad     (api/tx- db {:kind :doodad :names ["bill" "bob"] :numbers [123 456]})
+            _          (migrator/-remove-attribute! db :doodad :numbers)
+            reloaded   (api/reload- db doodad)
             new-legend (migrator/-installed-schema-legend db nil)]
         (should= nil (:numbers reloaded))
         (should-not-contain :numbers (:doodad new-legend))))
 
     (it "rename-attribute!"
-      (let [_ (migrator/-install-schema! @db spec/bibelot)
-            bibelot (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
-            _ (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
+      (let [_          (migrator/-install-schema! @db spec/bibelot)
+            bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
+            _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
             new-legend (migrator/-installed-schema-legend @db nil)
-            reloaded (api/reload- @db bibelot)]
+            reloaded   (api/reload- @db bibelot)]
         (should= nil (:color reloaded))
         (should-not-contain :color (:bibelot new-legend))
         (should= :string (get-in new-legend [:bibelot :hue :type]))))
@@ -314,7 +316,7 @@
     (it "rename-attribute! - existing missing"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-        (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size)))))
+       (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size)))))
 
 
   (context "history"
@@ -340,7 +342,7 @@
 
     (it "created-at"
       (let [moment (sut/created-at @biby)
-            now (time/now)]
+            now    (time/now)]
         (should-be-a Date moment)
         (should (time/after? moment (-> 1 time/seconds time/ago)))
         (should (time/before? moment now))))
@@ -348,9 +350,9 @@
     (it "updated-at"
       (Thread/sleep 10)
       (let [updated (api/tx @biby :size 4)
-            moment (sut/updated-at updated)
-            _ (Thread/sleep 10)
-            now (time/now)]
+            moment  (sut/updated-at updated)
+            _       (Thread/sleep 10)
+            now     (time/now)]
         (should-be-a Date moment)
         (should (time/after? moment (-> 1 time/seconds time/ago)))
         (should (time/before? moment now))
@@ -358,7 +360,7 @@
 
     (it "with-timestamps"
       (let [updated (api/tx @biby :size 4)
-            result (sut/with-timestamps updated)]
+            result  (sut/with-timestamps updated)]
         (should= (sut/created-at updated) (:db/created-at result))
         (should= (sut/updated-at updated) (:db/updated-at result))))
 

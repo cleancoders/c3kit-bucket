@@ -7,3 +7,6 @@
       ;(m/rename :session/update-at :session/updated-at)
       ;(m/remove :session/key)
       )
+
+
+m/remove

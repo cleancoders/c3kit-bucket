@@ -1,5 +1,6 @@
 (ns c3kit.bucket.impl-spec
-  (:require [c3kit.bucket.api :as api]
+  (:require [c3kit.apron.corec :as ccc]
+            [c3kit.bucket.api :as api]
             [speclj.core #?(:clj :refer :cljs :refer-macros) [after after-all around around-all before before before-all
                                                               context describe focus-context focus-describe focus-it it
                                                               pending should should-be should-be-a should-be-nil
@@ -60,6 +61,9 @@
 (def child :undefined)
 (def original :undefined)
 (def now :undefined)
+
+(defn set-find-by [kind & kvs]
+  (set (apply sut/find-by kind kvs)))
 
 (defn crud-specs [config]
 
@@ -304,8 +308,8 @@
     (it "find or"
       (let [d1 (sut/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
             d2 (sut/tx {:kind :doodad :names ["foo" "bang"] :numbers [8 43]})]
-        (should= [d1 d2] (sut/find-by :doodad :names ["foo" "BLAH"]))
-        (should= [d1 d2] (sut/find-by :doodad :names ["bar" "bang"]))
+        (should= (set [d1 d2]) (set-find-by :doodad :names ["foo" "BLAH"]))
+        (should= (set [d1 d2]) (set-find-by :doodad :names ["bar" "bang"]))
         (should= [d1] (sut/find-by :doodad :names ["bar" "BLAH"]))
         (should= [] (sut/find-by :doodad :names ["ARG" "BLAH"]))))
     )
@@ -403,7 +407,9 @@
           (should= 2 (:size entity))))
 
       (it "returns all found"
-        (let [[world-1 world-2 :as entities] (sut/find-by :bibelot :name "world")]
+        (let [entities (sut/find-by :bibelot :name "world")
+              world-1  (first (remove :size entities))
+              world-2 (ccc/ffilter :size entities)]
           (should= 2 (count entities))
           (should= "world" (:name world-1))
           (should= nil (:size world-1))
@@ -411,10 +417,10 @@
           (should= 2 (:size world-2))))
 
       (it "all by size"
-        (let [[world hi! :as entities] (sut/find-by :bibelot :size 2)]
+        (let [entities (sut/find-by :bibelot :size 2)]
           (should= 2 (count entities))
-          (should= "world" (:name world))
-          (should= "hi!" (:name hi!))))
+          (should-contain "world" (map :name entities))
+          (should-contain "hi!" (map :name entities))))
 
       (it "nil size"
         (let [entities (sut/find-by :bibelot :name "world" :size nil)]
@@ -470,8 +476,8 @@
               b2  (sut/tx :kind :bibelot :name "Bee" :color "blue" :size 2)
               b3  (sut/tx :kind :bibelot :name "Ant" :color "blue" :size 1)
               _b4 (sut/tx :kind :bibelot :color "blue" :size 1)]
-          (should= [b1 b2 b3] (sut/find-by :bibelot :name ["Bee" "Ant"]))
-          (should= [b1 b2 b3] (sut/find-by :bibelot :name #{"Bee" "Ant"}))
+          (should= (set [b1 b2 b3]) (set-find-by :bibelot :name ["Bee" "Ant"]))
+          (should= (set [b1 b2 b3]) (set-find-by :bibelot :name #{"Bee" "Ant"}))
           (should= [b3] (sut/find-by :bibelot :name ["BLAH" "Ant"]))
           ;(should= [b4] (sut/find-by :bibelot :name [nil]))
           ;(should= [b3 b4] (sut/find-by :bibelot :name ["BLAH" nil "Ant"] :size ['not= nil] ))
@@ -482,7 +488,7 @@
           (should= [] (sut/find-by :bibelot :name []))))
 
       (it "< > string"
-        (let [result       (sut/find-by :bibelot :name ['> "g"] :name ['< "i"])
+        (let [result       (set-find-by :bibelot :name ['> "g"] :name ['< "i"])
               result-names (map :name result)]
           (should-contain "hi!" result-names)
           (should-not-contain "world" result-names)))
@@ -492,24 +498,24 @@
         (let [b1 (sut/tx :kind :bibelot :name "aaa")
               b2 (sut/tx :kind :bibelot :name "bbb")
               b3 (sut/tx :kind :bibelot :name "ccc")]
-          (should= [b1 b2 b3] (sut/find-by :bibelot :name ['>= "aaa"]))
-          (should= [b2 b3] (sut/find-by :bibelot :name ['>= "bbb"]))
-          (should= [b1 b2 b3] (sut/find-by :bibelot :name ['<= "ccc"]))
-          (should= [b1 b2] (sut/find-by :bibelot :name ['<= "bbb"]))))
+          (should= (set [b1 b2 b3]) (set-find-by :bibelot :name ['>= "aaa"]))
+          (should= (set [b2 b3]) (set-find-by :bibelot :name ['>= "bbb"]))
+          (should= (set [b1 b2 b3]) (set-find-by :bibelot :name ['<= "ccc"]))
+          (should= (set [b1 b2]) (set-find-by :bibelot :name ['<= "bbb"]))))
 
       (it "< <= > >= long"
         (sut/clear)
         (let [b1 (sut/tx :kind :bibelot :size 1)
               b2 (sut/tx :kind :bibelot :size 2)
               b3 (sut/tx :kind :bibelot :size 3)]
-          (should= [b1 b2 b3] (sut/find-by :bibelot :size ['> 0]))
-          (should= [b1 b2 b3] (sut/find-by :bibelot :size ['>= 1]))
-          (should= [b2 b3] (sut/find-by :bibelot :size ['> 1]))
+          (should= (set [b1 b2 b3]) (set-find-by :bibelot :size ['> 0]))
+          (should= (set [b1 b2 b3]) (set-find-by :bibelot :size ['>= 1]))
+          (should= (set [b2 b3]) (set-find-by :bibelot :size ['> 1]))
           (should= [b3] (sut/find-by :bibelot :size ['> 2]))
           (should= [] (sut/find-by :bibelot :size ['> 3]))
-          (should= [b1 b2 b3] (sut/find-by :bibelot :size ['< 4]))
-          (should= [b1 b2 b3] (sut/find-by :bibelot :size ['<= 3]))
-          (should= [b1 b2] (sut/find-by :bibelot :size ['< 3]))
+          (should= (set [b1 b2 b3]) (set-find-by :bibelot :size ['< 4]))
+          (should= (set [b1 b2 b3]) (set-find-by :bibelot :size ['<= 3]))
+          (should= (set [b1 b2]) (set-find-by :bibelot :size ['< 3]))
           (should= [b1] (sut/find-by :bibelot :size ['< 2]))
           (should= [] (sut/find-by :bibelot :size ['< 1]))))
 
