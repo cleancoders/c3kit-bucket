@@ -83,10 +83,29 @@
   (history [this])
   (do-find [this db kind options])
   (tx [this db e])
-  (tx* [this db entities]))
+  (tx* [this db entities])
+  (d-entity [this ddb eid]))
 
 (defn datomic-db [impl]
   (db (.-api impl)))
+
+(defn entity-
+  ([db id id->entity attributes->entity]
+   (cond
+     (number? id) (id->entity db id attributes->entity)
+     (nil? id) nil
+     (string? id) (when-not (str/blank? id) (entity- db (Long/parseLong id) id->entity attributes->entity))
+     (map? id) (entity- db (:id id) id->entity attributes->entity)
+     :else (throw (UnsupportedOperationException. (str "Unhandled datomic id: " (pr-str id))))))
+  ([db kind id _id->entity _attributes->entity]
+   (when-let [e (entity- db id _id->entity _attributes->entity)]
+     (when (or (nil? kind) (= kind (:kind e)))
+       e))))
+
+(defn reload
+  "Returns a freshly loaded entity"
+  [db e id->entity attributes->entity]
+  (when-let [id (:id e)] (entity- db id id->entity attributes->entity)))
 
 (defn transact!
   "transact a datomic form. Returns a future, so don't forget to deref it if you need it to execute."
@@ -290,3 +309,77 @@
           (nil? old-id) (log/warn "  rename FAILED: MISSING " qualified-old)
           :else (do (log/info (str "  renaming " qualified-old " to " qualified-new))
                     (transact! db [{:db/id old-id :db/ident qualified-new}])))))
+
+(defn do-install-schema! [db schema]
+  (let [kind (-> schema :kind :value)]
+    (log/info (str "  installing schema " kind))
+    (transact! db (->db-schema schema false))))
+
+(defn tx-ids-
+  "Same as td-ids but with explicit db instance."
+  [impl eid]
+  (let [api (.-api impl)]
+    (->> (q api '[:find ?tx :in $ ?e :where [?e _ _ ?tx _]] (history api) [eid])
+         (sort-by first)
+         (map first))))
+
+(defn entity-as-of-tx
+  "Loads the entity as it existed when the transaction took place, adding :db/tx (transaction id)
+   and :db/instant (date) attributes to the entity."
+  [impl eid kind txid attributes->entity]
+  (let [tx         (d-entity (.-api impl) (datomic-db impl) txid)
+        timestamp  (:db/txInstant tx)
+        attributes (d-entity (.-api impl) (as-of (.-api impl) txid) eid)]
+    (when (seq attributes)
+      (-> attributes
+          (attributes->entity kind)
+          (assoc :db/tx txid :db/instant timestamp)))))
+
+(defn history-
+  "Same as history but with explicit db instance"
+  [impl entity attributes->entity]
+  (let [id   (:id entity)
+        kind (:kind entity)]
+    (assert id)
+    (assert kind)
+    (reduce #(conj %1 (entity-as-of-tx impl id kind %2 attributes->entity)) [] (tx-ids- impl (:id entity)))))
+
+(defn ->eid
+  "Returns the entity id"
+  [id-or-entity]
+  (if (number? id-or-entity) id-or-entity (:id id-or-entity)))
+
+(defn created-at-
+  "Same as created-at but with explicit db"
+  [impl id-or-entity]
+  (let [eid (->eid id-or-entity)
+        api (.-api impl)]
+    (ffirst (q
+             api
+             '[:find (min ?inst)
+               :in $ ?e
+               :where [?e _ _ ?tx]
+               [?tx :db/txInstant ?inst]] (history api) [eid]))))
+
+(defn updated-at-
+  "Same as updated-at but with explicit db"
+  [impl id-or-entity]
+  (let [eid (->eid id-or-entity)
+        api (.-api impl)]
+    (ffirst (q
+             api
+             '[:find (max ?inst)
+               :in $ ?e
+               :where [?e _ _ ?tx]
+               [?tx :db/txInstant ?inst]] (history api) [eid]))))
+
+(defn with-timestamps-
+  "Same as with-timestamps but with explicit db"
+  [impl entity]
+  (assoc entity :db/created-at (created-at- impl entity) :db/updated-at (updated-at- impl entity)))
+
+(defn excise!-
+  "Same as excise! but with explicit db"
+  [impl id-or-e]
+  (let [id (if-let [id? (:id id-or-e)] id? id-or-e)]
+    (transact! impl [{:db/excise id}])))

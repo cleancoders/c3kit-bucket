@@ -5,7 +5,6 @@
             [c3kit.bucket.api :as api]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
-            [clojure.string :as str]
             [datomic.api :as datomic]
             [c3kit.bucket.datomic-common :as common-api]))
 
@@ -50,33 +49,25 @@
     {:id id :kind (keyword kind)}
     attributes)))
 
-(defn- id->entity [ddb id]
-  (when-let [attributes (seq (datomic/entity ddb id))]
+(defn- id->entity [db id attributes->entity]
+  (when-let [attributes (seq (common-api/d-entity (.-api db) (common-api/datomic-db db) id))]
     (attributes->entity attributes id)))
 
 (defn- entity
   "ids are always longs in datomic.
   kind (optional) will ensure the kind matches or return nil."
   ([db id]
-   (cond
-     (number? id) (id->entity (common-api/datomic-db db) id)
-     (nil? id) nil
-     (string? id) (when-not (str/blank? id) (entity db (Long/parseLong id)))
-     (map? id) (entity db (:id id))
-     :else (throw (UnsupportedOperationException. (str "Unhandled datomic id: " (pr-str id))))))
+   (common-api/entity- db id id->entity attributes->entity))
   ([db kind id]
-   (when-let [e (entity db id)]
-     (when (or (nil? kind) (= kind (:kind e)))
-       e))))
+   (common-api/entity- db kind id id->entity attributes->entity)))
 
 (defn reload
   "Returns a freshly loaded entity"
   [db e]
-  (when-let [id (:id e)] (entity db id)))
+  (common-api/reload db e id->entity attributes->entity))
 
 (defn- q->entities [db result]
-  (let [ddb (common-api/datomic-db db)]
-    (map #(id->entity ddb (first %)) result)))
+  (map #(id->entity db (first %) attributes->entity) result))
 
 (defn insert-form [id entity]
   (list (-> entity ccc/remove-nils (assoc :db/id id))))
@@ -100,7 +91,7 @@
           [] updated))
 
 (defn update-form [db id updated]
-  (let [original          (into {} (datomic/entity (common-api/datomic-db db) id))
+  (let [original          (into {} (common-api/d-entity (.-api db) (common-api/datomic-db db) id))
         retracted-keys    (doall (filter #(nil? (get updated %)) (keys original)))
         updated           (-> (apply dissoc updated retracted-keys)
                               ccc/remove-nils
@@ -152,15 +143,12 @@
     (log/info (str "  installing schema " kind))
     (common-api/transact! db (common-api/->db-schema schema true))))
 
-(defn- schema-attr-id [db datomic-db key]
-  (first (map first (common-api/q (.-api db) '[:find ?e :in $ ?ident :where [?e :db/ident ?ident]] datomic-db [key]))))
-
 (defn installed-schema-legend
   ([] (installed-schema-legend @api/impl))
   ([db]
    (let [ddb (common-api/datomic-db db)]
      (->> (common-api/installed-schema-idents db)
-          (map #(->> % (datomic/entity ddb) (into {})))
+          (map #(->> % (common-api/d-entity (.-api db) ddb) (into {})))
           (map common-api/attribute->spec)
           (reduce (fn [result [kind attr spec]] (assoc-in result [kind attr] spec)) {})))))
 
@@ -173,12 +161,12 @@
   (-entity [this kind id] (entity this kind id))
   (-find [this kind options] (common-api/do-find api this kind options))
   (-reduce [this kind f init options] (reduce f init (common-api/do-find api this kind options)))
-  (-tx [this entity]   (common-api/tx api this entity))
+  (-tx [this entity] (common-api/tx api this entity))
   (-tx* [this entities] (common-api/tx* api this entities))
   migrator/Migrator
   (-schema-exists? [this schema] (common-api/schema-exists? this schema))
   (-installed-schema-legend [this _expected-legend] (installed-schema-legend this))
-  (-install-schema! [this schema] (do-install-schema! this schema))
+  (-install-schema! [this schema] (common-api/do-install-schema! this schema))
   (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))
   (-add-attribute! [this kind attr spec] (common-api/do-add-attribute! this kind attr spec true))
   (-remove-attribute! [this kind attr] (common-api/do-remove-attribute! this kind attr))
@@ -202,7 +190,8 @@
     (datomic/history (datomic/db @conn)))
   (do-find [this db kind options] (do-find db kind options))
   (tx [this db e] (tx db e))
-  (tx* [this db entities] (tx* db entities)))
+  (tx* [this db entities] (tx* db entities))
+  (d-entity [this ddb eid] (datomic/entity ddb eid)))
 
 (defmethod api/-create-impl :datomic [config schemas]
   (let [legend     (atom (legend/build schemas))
@@ -269,43 +258,10 @@
   [kind attr]
   (-> (find-min-of-all- @api/impl kind attr) (get attr)))
 
-(defn tx-ids-
-  "Same as td-ids but with explicit db instance."
-  [impl eid]
-  (let [api (.-api impl)]
-    (->> (common-api/q api '[:find ?tx :in $ ?e :where [?e _ _ ?tx _]] (common-api/history api) [eid])
-         (sort-by first)
-         (map first))))
-
-(defn tx-ids
-  "Returns a sorted list of all the transaction ids in which the entity was updated."
-  [eid]
-  (tx-ids- @api/impl eid))
-
-(defn entity-as-of-tx
-  "Loads the entity as it existed when the transaction took place, adding :db/tx (transaction id)
-   and :db/instant (date) attributes to the entity."
-  [datomic-db eid kind txid]
-  (let [tx         (datomic/entity datomic-db txid)
-        timestamp  (:db/txInstant tx)
-        attributes (datomic/entity (datomic/as-of datomic-db txid) eid)]
-    (when (seq attributes)
-      (-> attributes
-          (attributes->entity eid kind)
-          (assoc :db/tx txid :db/instant timestamp)))))
-(defn history-
-  "Same as history but with explicit db instance"
-  [impl entity]
-  (let [id   (:id entity)
-        kind (:kind entity)]
-    (assert id)
-    (assert kind)
-    (reduce #(conj %1 (entity-as-of-tx (common-api/datomic-db impl) id kind %2)) [] (tx-ids- impl (:id entity)))))
-
 (defn history
   "Returns a list of every version of the entity form creation to current state,
   with :db/tx and :db/instant attributes."
-  [entity] (history- @api/impl entity))
+  [entity] (common-api/history- @api/impl entity attributes->entity))
 
 (defn ->eid
   "Returns the entity id"
