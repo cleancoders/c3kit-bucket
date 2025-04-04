@@ -11,9 +11,6 @@
   (datomic/create-database client config)
   (datomic/connect client config))
 
-(defn install-schema! [db]
-  (common-api/transact! db (.-db-schema db)))
-
 (defn tempid
   "Temporary id with default instance"
   [] (* -1 (rand-int 100000)))
@@ -180,8 +177,7 @@
   (do-find [this db kind options] (do-find db kind options))
   (tx [this db e] (tx db e))
   (tx* [this db entities] (tx* db entities))
-  (d-entity [this ddb eid] (pull-entity ddb eid))
-  )
+  (d-entity [this ddb eid] (pull-entity ddb eid)))
 
 (defmethod api/-create-impl :datomic-cloud [config schemas]
   (let [datomic-client (datomic/client config)
