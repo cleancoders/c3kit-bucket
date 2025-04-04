@@ -1,5 +1,6 @@
 (ns c3kit.bucket.datomic-cloud-spec
   (:require [c3kit.apron.log :as log]
+            [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.datomic-common :as common-api]
@@ -18,6 +19,15 @@
              :db-name       "spec"
              :endpoint      "https://d13mjr7yek.execute-api.us-west-2.amazonaws.com/"
              :region        "us-west-2"})
+
+(def bibelot
+  {:kind  (s/kind :bibelot)
+   :id    {:type :long}
+   :name  {:type :string}
+   :size  {:type :long}
+   :color {:type :string}})
+
+
 (declare db)
 (declare biby)
 (defn sleep [entity] (Thread/sleep 10) entity)
@@ -64,6 +74,16 @@
        (should= [] (api/find- @db :bibelot :where {:name nil})))
       (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str)))
 
+    )
+
+  (context "find-datalog"
+    (helper/with-schemas config [bibelot])
+
+    (it "returns proper entity"
+      (api/tx {:kind :bibelot :name "bibby"})
+      (let [results (sut/find-datalog '[:find (pull ?e [*]) :in $ :where [?e :bibelot/name]])]
+        (should= 1 (count results))
+        (should= "bibby" (:name (first results)))))
     )
 
   (context "migrator"

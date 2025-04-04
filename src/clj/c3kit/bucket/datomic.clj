@@ -326,7 +326,7 @@
 (defn q
   "Raw datalog query."
   [query & args]
-  (apply common-api/q query (common-api/datomic-db @api/impl) args))
+  (apply datomic/q query (common-api/datomic-db @api/impl) args))
 
 (defn find-datalog
   "Run a datalog query (for full entities) returning the results as entities on default instance."

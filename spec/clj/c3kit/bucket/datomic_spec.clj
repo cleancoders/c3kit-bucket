@@ -49,6 +49,16 @@
 
     )
 
+  (context "find-datalog"
+    (helper/with-schemas config [spec/bibelot])
+
+    (it "returns proper entity"
+      (api/tx {:kind :bibelot :name "bibby"})
+      (let [results (sut/find-datalog '[:find ?e :in $ :where [?e :bibelot/name]])]
+        (should= 1 (count results))
+        (should= "bibby" (:name (first results)))))
+    )
+
   (context "min & max"
     (with db (api/create-db config [spec/bibelot spec/thingy]))
 
