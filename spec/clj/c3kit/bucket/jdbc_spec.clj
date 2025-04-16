@@ -59,7 +59,7 @@
     {:id      {:db {:type "int primary key"} :strategy :pre-populated}
      :foo     {:db {:type "varchar(255)"}}
      :name    {:db {:type "varchar(255)"}}
-     :spell   {:db {:type "varchar(255)" :cast "text"}}
+     :spell   {:db {:cast "spell_type"}}
      :truthy? {:db {:column "truthy"}}}))
 
 (def variform
@@ -244,11 +244,6 @@
           (should= "json_entity" (:table compiled))
           (should= {:id "id" :stuff "stuff"} (:key->col compiled))
           (should= {"id" :id "stuff" :stuff} (:col->key compiled))))
-
-      (it "cast types"
-        (let [compiled (sut/compile-mapping thingy)
-              key->type (:key->type compiled)]
-          (should= "text" (:spell key->type))))
       )
 
     (context "api"
@@ -348,6 +343,11 @@
           (api/delete saved)
           (should-be-nil (api/tx saved))))
 
+      (it "casts parameters to a predefined sql type"
+        (jdbc/execute! "create type If not exists spell_type as enum (1, 2, 3)")
+        (jdbc/execute! "ALTER TABLE thingy ALTER COLUMN spell TYPE spell_type")
+        (let [saved (api/tx {:kind :thingy :id 123 :spell 1})]
+          (should= saved (api/ffind-by :thingy :spell 1))))
       )
 
     (context "schema"

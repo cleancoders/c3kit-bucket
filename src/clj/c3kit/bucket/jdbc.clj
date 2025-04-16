@@ -140,12 +140,11 @@
        (str/starts-with? db-type "json")))
 
 (defn spec->db-type [spec]
-  (let [type      (:type spec)
-        db-type   (-> spec :db :type)
-        cast-type (-> spec :db :cast)]
-    (or (when (json? type db-type) :json)
-        cast-type
-        type)))
+  (let [type    (:type spec)
+        db-type (-> spec :db :type)]
+    (if (json? type db-type)
+      :json
+      type)))
 
 (defn time? [type] (#{:instant :date :timestamp} type))
 
@@ -172,13 +171,22 @@
     :ref (schema/->int value)
     value))
 
-(defn ->sql-param [dialect type]
-  (let [type-map (schema->db-type-map dialect)]
-    (if-let [db-type (get type-map type)]
-      (str "CAST(? AS " db-type ")")
-      "?")))
+(defn- dialect-type [dialect type]
+  (-> (schema->db-type-map dialect)
+      (get type)))
+
+(defn ->sql-param [dialect type cast-type]
+  (if-let [db-type (or cast-type (dialect-type dialect type))]
+    (str "CAST(? AS " db-type ")")
+    "?"))
 
 (defn -add-type [result [key spec]] (assoc result key (spec->db-type spec)))
+
+(defn- -add-cast [result [key spec]]
+  (if-let [cast (-> spec :db :cast)]
+    (assoc result key cast)
+    result))
+
 (defn- get-full-key-name [k]
   (if-let [ns (namespace k)] (str ns "." (name k)) (name k)))
 
@@ -211,17 +219,19 @@
     (->MapResultSetOptionalBuilder rs rs-meta cols key->type)))
 
 (defn compile-mapping [schema]
-  (let [k->c (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column)
-                                                       (-> s :db :name)
-                                                       (get-full-key-name k)))) {} (dissoc schema :kind))
-        c->k (core-reduce (fn [m [k c]] (assoc m c k)) {} k->c)
-        k->t (core-reduce -add-type {} (dissoc schema :kind))]
+  (let [k->c    (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column)
+                                                          (-> s :db :name)
+                                                          (get-full-key-name k)))) {} (dissoc schema :kind))
+        c->k    (core-reduce (fn [m [k c]] (assoc m c k)) {} k->c)
+        k->t    (core-reduce -add-type {} (dissoc schema :kind))
+        k->cast (core-reduce -add-cast {} (dissoc schema :kind))]
     {:table       (table-name schema)
      :id-type     (get-in schema [:id :type])
      :id-strategy (get-in schema [:id :strategy] :db-generated)
      :key->col    k->c
      :col->key    c->k
      :key->type   k->t
+     :key->cast   k->cast
      :builder-fn  (partial col->key-builder {:col->key c->k :key->type k->t})
      }))
 
@@ -235,24 +245,27 @@
        (swap! mappings assoc kind m)
        m))))
 
-(defn ->sql-args [dialect key->col key->type entity k]
+(defn ->sql-args [dialect key->col key->type key->cast entity k]
   (let [v    (get entity k)
-        type (get key->type k)]
+        type (get key->type k)
+        cast (get key->cast k)]
     {:column (get key->col k)
-     :param  (->sql-param dialect type)
+     :param  (->sql-param dialect type cast)
      :value  (->sql-value dialect type v)}))
 
 (defn build-fetch-sql [dialect t-map id]
-  (let [{:keys [table key->col key->type]} t-map
-        column (:id key->col)
-        type   (:id key->type)
-        param  (->sql-param dialect type)
-        value  (->sql-value dialect type id)]
+  (let [{:keys [table key->col key->type key->cast]} t-map
+        column    (:id key->col)
+        type      (:id key->type)
+        cast-type (:id key->cast)
+        param     (->sql-param dialect type cast-type)
+        value     (->sql-value dialect type id)]
     [(str "SELECT * FROM " (->safe-name dialect table) " WHERE " column " = " param) value]))
 
-(defn clause-with-operator [dialect {:keys [key->type] :as t-map} k v operator]
-  (let [type (get key->type k)]
-    [(str (->field-name dialect t-map k) " " operator " " (->sql-param dialect type))
+(defn clause-with-operator [dialect {:keys [key->type key->cast] :as t-map} k v operator]
+  (let [type      (get key->type k)
+        cast-type (get key->cast k)]
+    [(str (->field-name dialect t-map k) " " operator " " (->sql-param dialect type cast-type))
      (->sql-value dialect type v)]))
 
 (defn- -equality-clause [dialect t-map k v]
@@ -260,15 +273,16 @@
     [(str (->field-name dialect t-map k) " IS NULL")]
     (clause-with-operator dialect t-map k v "=")))
 
-(defn- -build-seq-or-clause [not? dialect {:keys [key->type] :as t-map} k v]
+(defn- -build-seq-or-clause [not? dialect {:keys [key->type key->cast] :as t-map} k v]
   (let [type       (get key->type k)
+        cast-type  (get key->cast k)
         is-null?   (some nil? v)
         v          (->> v set (remove nil?))
         in?        (seq v)
         field-name (->field-name dialect t-map k)
         num-vals   (core-count v)]
     (cons (str "("
-               (when in? (str field-name (when not? " NOT") " IN (" (str/join "," (repeat num-vals (->sql-param dialect type))) ")"))
+               (when in? (str field-name (when not? " NOT") " IN (" (str/join "," (repeat num-vals (->sql-param dialect type cast-type))) ")"))
                (when (and in? is-null?) (if not? " AND " " OR "))
                (when is-null? (str field-name " IS" (when not? " NOT") " NULL"))
                ")")
@@ -336,8 +350,8 @@
 (defn build-update-sql
   ([dialect t-map entity] (build-update-sql dialect t-map entity {}))
   ([dialect t-map entity cas]
-   (let [{:keys [table key->col key->type]} t-map
-         ->sql-args (partial ->sql-args dialect key->col key->type entity)
+   (let [{:keys [table key->col key->type key->cast]} t-map
+         ->sql-args (partial ->sql-args dialect key->col key->type key->cast entity)
          used-keys  (disj (set/intersection (set (keys entity)) (set (keys key->col))) :id)
          sql-args   (map ->sql-args used-keys)
          set-sql    (str/join ", " (map arg->set-sql sql-args))
@@ -350,9 +364,9 @@
 (defmulti build-insert-sql (fn [dialect _t-map _entity] dialect))
 
 (defmethod build-insert-sql :default [dialect t-map entity]
-  (let [{:keys [table key->col key->type]} t-map
+  (let [{:keys [table key->col key->type key->cast]} t-map
         used-key->col (select-keys key->col (keys entity))
-        ->sql-args    (partial ->sql-args dialect used-key->col key->type entity)
+        ->sql-args    (partial ->sql-args dialect used-key->col key->type key->cast entity)
         sql-args      (->> used-key->col keys (map ->sql-args))
         cols          (->> (map :column sql-args) (map #(str \" % \")))
         table         (->safe-name dialect table)]
@@ -361,8 +375,8 @@
           (map :value sql-args))))
 
 (defn- build-delete-sql [dialect t-map entity]
-  (let [{:keys [table key->col key->type]} t-map
-        {:keys [column param value]} (->sql-args dialect key->col key->type entity :id)
+  (let [{:keys [table key->col key->type key->cast]} t-map
+        {:keys [column param value]} (->sql-args dialect key->col key->type key->cast entity :id)
         table (->safe-name dialect table)]
     [(str "DELETE FROM " table " WHERE " column " = " param) value]))
 

@@ -15,12 +15,12 @@
    :instant "timestamp without time zone"})
 
 (defmethod jdbc/build-upsert-sql :postgres [dialect t-map {:keys [id] :as entity}]
-  (let [{:keys [table key->col key->type]} t-map
+  (let [{:keys [table key->col key->type key->cast]} t-map
         id-col   (:id key->col)
         key->col (select-keys key->col (keys entity))
         sql-args (->> (if id key->col (dissoc key->col :id))
                       keys
-                      (map (partial jdbc/->sql-args dialect key->col key->type entity)))
+                      (map (partial jdbc/->sql-args dialect key->col key->type key->cast entity)))
         cols     (map :column sql-args)
         cols     (map #(str "\"" % "\"") cols)]
     (cons (str "INSERT INTO " table " (" (str/join ", " cols) ") "
