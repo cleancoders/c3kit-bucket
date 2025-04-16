@@ -1,4 +1,4 @@
-### 2.1.17
+### 2.1.18
  * Adds `:cast` attribute to jdbc to override the db cast type when building queries
 
 ### 2.1.15
