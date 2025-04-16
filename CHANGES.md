@@ -1,6 +1,11 @@
 ### 2.1.18
  * Adds `:cast` attribute to jdbc to override the db cast type when building queries
 
+
+### 2.1.17
+* Refactors `do-find-` `q->entities` in Datomic Cloud to not make separate pull request for each entity id it finds
+* Refactors shared code between Datomic and Datomic Cloud into Datomic Common
+
 ### 2.1.15
  * Adds `reduce-sql-` to jdbc for added control over query reductions
 
