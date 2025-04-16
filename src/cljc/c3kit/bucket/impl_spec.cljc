@@ -32,7 +32,7 @@
    :foo     {:type :string}
    :bar     {:type :long}
    :fizz    {:type :long}
-   :spell   {:type :int}
+   :spell   {:type :long}
    :truthy? {:type :boolean}
    :bang    {:type :instant}
    :name    {:type :string}})
