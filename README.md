@@ -28,6 +28,16 @@ Bucket offers an identical API for dealing with data on both the server side (da
     clj -M:test:cljs once
     clj -M:test:cljs            # auto runner
 
+### PostgreSQL
+
+Run the commands to set up postgresql:
+
+```
+$ sudo -u postgres createuser $(whoami)
+$ sudo -u postgres createdb test
+$ sudo -u postgres psql -d test -c "GRANT ALL ON SCHEMA public TO PUBLIC;"
+```
+
 # Deployment
 
 In order to deploy to c3kit you must be a member of the Clojars group `com.cleancoders.c3kit`.

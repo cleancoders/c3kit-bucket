@@ -1,3 +1,6 @@
+### 2.1.17
+ * Adds `:cast` attribute to jdbc to override the db cast type when building queries
+
 ### 2.1.15
  * Adds `reduce-sql-` to jdbc for added control over query reductions
 

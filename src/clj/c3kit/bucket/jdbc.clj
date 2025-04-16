@@ -134,12 +134,18 @@
            (not (namespace k))
            (str (->safe-name dialect table) \.)))
 
+(defn- json? [type db-type]
+  (and (= :string type)
+       db-type
+       (str/starts-with? db-type "json")))
+
 (defn spec->db-type [spec]
-  (let [type    (:type spec)
-        db-type (-> spec :db :type)]
-    (if (and (= :string type) db-type (str/starts-with? db-type "json"))
-      :json
-      type)))
+  (let [type      (:type spec)
+        db-type   (-> spec :db :type)
+        cast-type (-> spec :db :cast)]
+    (or (when (json? type db-type) :json)
+        cast-type
+        type)))
 
 (defn time? [type] (#{:instant :date :timestamp} type))
 

@@ -59,6 +59,7 @@
     {:id      {:db {:type "int primary key"} :strategy :pre-populated}
      :foo     {:db {:type "varchar(255)"}}
      :name    {:db {:type "varchar(255)"}}
+     :spell   {:db {:type "varchar(255)" :cast "text"}}
      :truthy? {:db {:column "truthy"}}}))
 
 (def variform
@@ -243,6 +244,11 @@
           (should= "json_entity" (:table compiled))
           (should= {:id "id" :stuff "stuff"} (:key->col compiled))
           (should= {"id" :id "stuff" :stuff} (:col->key compiled))))
+
+      (it "cast types"
+        (let [compiled (sut/compile-mapping thingy)
+              key->type (:key->type compiled)]
+          (should= "text" (:spell key->type))))
       )
 
     (context "api"
