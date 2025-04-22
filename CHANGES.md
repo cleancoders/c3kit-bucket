@@ -1,6 +1,8 @@
+### 2.2.0
+ * Apron and Scaffold 2.2.0
+
 ### 2.1.18
  * Adds `:cast` attribute to jdbc to override the db cast type when building queries
-
 
 ### 2.1.17
 * Refactors `do-find-` `q->entities` in Datomic Cloud to not make separate pull request for each entity id it finds

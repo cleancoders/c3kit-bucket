@@ -1,7 +1,7 @@
 {
  :paths   ["src/clj" "src/cljc" "src/cljs"]
  :deps    {
-           com.cleancoders.c3kit/apron {:mvn/version "2.1.5"}
+           com.cleancoders.c3kit/apron {:mvn/version "2.2.0"}
            cljsjs/hashids              {:mvn/version "1.0.2-0"}
            jstrutz/hashids             {:mvn/version "1.0.1"}
            org.clojure/clojure         {:mvn/version "1.12.0"}
@@ -9,7 +9,7 @@
  :aliases {
            :test    {:extra-deps    {
                                      clj-commons/pomegranate           {:mvn/version "1.2.24"}
-                                     com.cleancoders.c3kit/scaffold    {:mvn/version "2.0.5"}
+                                     com.cleancoders.c3kit/scaffold    {:mvn/version "2.2.0"}
                                      com.datomic/datomic-free          {:mvn/version "0.9.5697" :exclusions [com.google.guava/guava]}
                                      com.datomic/client-cloud          {:mvn/version "1.0.131"}
                                      com.datomic/local                 {:mvn/version "1.0.291"}
