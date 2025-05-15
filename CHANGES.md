@@ -1,3 +1,6 @@
+### NEXT
+ * :uuid types in JDBC can take strings
+
 ### 2.2.0
  * Apron and Scaffold 2.2.0
 

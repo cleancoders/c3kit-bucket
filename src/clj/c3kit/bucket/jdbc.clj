@@ -169,6 +169,7 @@
     :keyword (str value)
     :kw-ref (str value)
     :ref (schema/->int value)
+    :uuid (schema/->uuid value)
     value))
 
 (defn- dialect-type [dialect type]

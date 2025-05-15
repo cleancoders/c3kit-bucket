@@ -4,8 +4,8 @@
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
-            [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.h2 :as h2]
+            [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.jdbc :as jdbc]
             [c3kit.bucket.jdbc :as sut]
             [c3kit.bucket.migrator :as migrator]
@@ -110,6 +110,18 @@
 
     (test-type config :string "blah")
     (test-type config :uuid (random-uuid))
+
+    (it "uuid vs string"
+      (helper/with-impl
+        config [(-> variform
+                    (assoc-in [:variant :type] :uuid)
+                    (assoc-in [:id :db :type] (jdbc/auto-int-primary-key (:dialect config))))]
+        (let [uuid     (random-uuid)
+              str-uuid (str uuid)
+              entity   (api/tx {:kind :variform :variant str-uuid})]
+          (should= uuid (:variant entity))
+          (should= entity (api/ffind-by :variform :variant str-uuid)))))
+
 
     (test-type config :boolean true)
     (test-type config :boolean false)
@@ -245,6 +257,7 @@
           (should= {:id "id" :stuff "stuff"} (:key->col compiled))
           (should= {"id" :id "stuff" :stuff} (:col->key compiled))))
       )
+
 
     (context "api"
 
