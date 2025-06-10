@@ -298,6 +298,11 @@
 (def -build-or-clause (partial -build-parity-or-clause false))
 (def -build-nor-clause (partial -build-parity-or-clause true))
 
+(defn- ilike-operator [dialect]
+  (if (contains? #{:mssql :sqlite3} dialect)
+    "LIKE"
+    "ILIKE"))
+
 (defn -clause [dialect t-map k v]
   (condp = (first v)
     '= (-build-or-clause dialect t-map k (rest v))
@@ -307,7 +312,7 @@
     '>= (clause-with-operator dialect t-map k (second v) ">=")
     '<= (clause-with-operator dialect t-map k (second v) "<=")
     'like (clause-with-operator dialect t-map k (second v) "LIKE")
-    'ilike (clause-with-operator dialect t-map k (second v) (if (= :mssql dialect) "LIKE" "ILIKE"))
+    'ilike (clause-with-operator dialect t-map k (second v) (ilike-operator dialect))
     (-build-or-clause dialect t-map k v)))
 
 (defn -build-or-clause-by-column [->sql ks v]
@@ -438,7 +443,7 @@
 (defn tx* [db entities]
   (binding [in-transaction? true]
     (jdbc/with-transaction [tx (.-ds db)]
-                           (doall (map #(do-tx db tx %) entities)))))
+      (doall (map #(do-tx db tx %) entities)))))
 
 (defn -seq->sql [& sql-bits]
   (->> (flatten sql-bits)
@@ -450,9 +455,9 @@
   (let [[where-sql & args] (-build-where dialect t-map where)
         table (->safe-name dialect (:table t-map))
         sql   (-seq->sql "SELECT * FROM" table
-                         where-sql
-                         (when take (str "LIMIT " take))
-                         (when drop (str "OFFSET " drop)))]
+                where-sql
+                (when take (str "LIMIT " take))
+                (when drop (str "OFFSET " drop)))]
     (cons sql args)))
 
 (defn- do-find [db kind options]
@@ -600,7 +605,7 @@
     (let [config                    (set/rename-keys config {:min-pool-size :minPoolSize :max-pool-size :maxPoolSize})
           ^ComboPooledDataSource ds (connection/->pool ComboPooledDataSource config)]
       (log/info "\tConnection Pooling: " {:min (.getMinPoolSize ds) :max (.getMaxPoolSize ds)})
-      (.close (jdbc/get-connection ds))                     ;; initialize and validate pool says the docs
+      (.close (jdbc/get-connection ds)) ;; initialize and validate pool says the docs
       ds)
     (jdbc/get-datasource config)))
 
