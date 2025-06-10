@@ -178,9 +178,19 @@
       re-pattern))
 
 (defn- like-where-fn [attr value]
-  (let [attr-sym (attr->sym attr)]
+  (let [attr-sym (attr->sym attr)
+        regex    (like-query->regex value)]
     (list ['?e attr attr-sym]
-          [(list 're-matches (like-query->regex value) attr-sym)])))
+          [(list 're-matches regex attr-sym)])))
+
+(defn- ilike-where-fn [attr value]
+  (let [attr-sym  (attr->sym attr)
+        upper-sym (gensym "?u")
+        regex     (-> value str/upper-case like-query->regex)]
+    (list
+      ['?e attr attr-sym]
+      [(list '.toUpperCase attr-sym) upper-sym]
+      [(list 're-matches regex upper-sym)])))
 
 (defn- or-where-clause [attr values]
   (let [values (set values)]
@@ -201,6 +211,7 @@
     '= (or-where-clause attr (rest values))
     'or (or-where-clause attr (rest values))
     'like (like-where-fn attr (second values))
+    'ilike (ilike-where-fn attr (second values))
     (or-where-clause attr values)))
 
 (defn where-clause [attr value]
@@ -355,11 +366,11 @@
   (let [eid (->eid id-or-entity)
         api (.-api impl)]
     (ffirst (q
-             api
-             '[:find (min ?inst)
-               :in $ ?e
-               :where [?e _ _ ?tx]
-               [?tx :db/txInstant ?inst]] (history api) [eid]))))
+              api
+              '[:find (min ?inst)
+                :in $ ?e
+                :where [?e _ _ ?tx]
+                [?tx :db/txInstant ?inst]] (history api) [eid]))))
 
 (defn updated-at-
   "Same as updated-at but with explicit db"
@@ -367,11 +378,11 @@
   (let [eid (->eid id-or-entity)
         api (.-api impl)]
     (ffirst (q
-             api
-             '[:find (max ?inst)
-               :in $ ?e
-               :where [?e _ _ ?tx]
-               [?tx :db/txInstant ?inst]] (history api) [eid]))))
+              api
+              '[:find (max ?inst)
+                :in $ ?e
+                :where [?e _ _ ?tx]
+                [?tx :db/txInstant ?inst]] (history api) [eid]))))
 
 (defn with-timestamps-
   "Same as with-timestamps but with explicit db"

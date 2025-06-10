@@ -410,7 +410,7 @@
       (it "returns all found"
         (let [entities (sut/find-by :bibelot :name "world")
               world-1  (first (remove :size entities))
-              world-2 (ccc/ffilter :size entities)]
+              world-2  (ccc/ffilter :size entities)]
           (should= 2 (count entities))
           (should= "world" (:name world-1))
           (should= nil (:size world-1))
@@ -545,6 +545,12 @@
 
       (it "like fuzzy match with anything before or after"
         (let [result       (sut/find-by :bibelot :name ['like "%orl%"])
+              result-names (map :name result)]
+          (should-contain "world" result-names)
+          (should-not-contain "hi!" result-names)))
+
+      (it "case-insensitive fuzzy match"
+        (let [result       (sut/find-by :bibelot :name ['ilike "%OrL%"])
               result-names (map :name result)]
           (should-contain "world" result-names)
           (should-not-contain "hi!" result-names)))
