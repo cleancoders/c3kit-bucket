@@ -1,5 +1,6 @@
-### NEXT
+### 2.2.1
  * :uuid types in JDBC can take strings
+ * Implement case-insensitive "like" query for datomic and SQLite3
 
 ### 2.2.0
  * Apron and Scaffold 2.2.0
