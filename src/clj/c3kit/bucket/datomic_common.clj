@@ -189,7 +189,7 @@
         regex     (-> value str/upper-case like-query->regex)]
     (list
       ['?e attr attr-sym]
-      [(list '.toUpperCase attr-sym) upper-sym]
+      [(list 'clojure.string/upper-case attr-sym) upper-sym]
       [(list 're-matches regex upper-sym)])))
 
 (defn- or-where-clause [attr values]

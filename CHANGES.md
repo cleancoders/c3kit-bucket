@@ -1,3 +1,6 @@
+### 2.2.2
+ * Fixes warning in datomic introduced in 2.2.1 when using "like" queries
+
 ### 2.2.1
  * :uuid types in JDBC can take strings
  * Implement case-insensitive "like" query for datomic and SQLite3
