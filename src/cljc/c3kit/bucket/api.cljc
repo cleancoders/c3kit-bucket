@@ -93,7 +93,7 @@ Options:
     value         - (= % value)
     nil           - (nil? %)
     [values]      - (some #(= % value) values)
-    ['not value]  - (not (= % value))
+    ['not= value] - (not (= % value))
     ['> value]    - (> % value)
     ['< value]    - (< % value)
     ['like str]   - (re-matches str %) where '_' = single char wildcard and '%' = multi char wildcard
