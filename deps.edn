@@ -5,6 +5,9 @@
            cljsjs/hashids              {:mvn/version "1.0.2-0"}
            jstrutz/hashids             {:mvn/version "1.0.1"}
            org.clojure/clojure         {:mvn/version "1.12.1"}
+           reagent/reagent             {:mvn/version "1.2.0"}
+           cljsjs/react                {:mvn/version "17.0.2-0"} ; A new major version of cljsjs is available, but reagent.dom/render is not yet compatible with it.
+           cljsjs/react-dom            {:mvn/version "17.0.2-0"}
            }
  :aliases {
            :test    {:extra-deps    {
