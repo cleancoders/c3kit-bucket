@@ -173,9 +173,9 @@ Useful when processing many entities without loading them all at the same time.
 (defn tx*
   "Transact multiple entities, synchronously in a transaction.  If any error occurs, none of the changes persist."
   ([entities] (tx* @impl entities))
-  ([db entities] (->> entities
-                      (remove nil?)
-                      (-tx* db))))
+  ([db entities]
+   (when-let [entities (seq (remove nil? entities))]
+     (-tx* db entities))))
 
 (defn delete-
   "delete with explicit db"
@@ -289,16 +289,16 @@ Requires the *safety* be turned off."
 
 #?(:clj
    (defn -start-service
-     ([app] (-start-service app  (load-config)))
+     ([app] (-start-service app (load-config)))
      ([app config]
       (log/info "Starting bucket service:" (:impl config))
       (let [schemas-var (:full-schema config)
-           _           (when-not schemas-var (throw (ex-info ":full-schema missing from bucket config" config)))
-           schemas     (util/var-value schemas-var)
-           impl        (create-db config schemas)]
-       (assoc app :bucket/impl impl
-                  :bucket/config config
-                  :bucket/schemas schemas)))))
+            _           (when-not schemas-var (throw (ex-info ":full-schema missing from bucket config" config)))
+            schemas     (util/var-value schemas-var)
+            impl        (create-db config schemas)]
+        (assoc app :bucket/impl impl
+                   :bucket/config config
+                   :bucket/schemas schemas)))))
 
 #?(:clj
    (defn -stop-service [app]

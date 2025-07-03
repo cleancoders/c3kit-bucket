@@ -69,6 +69,7 @@
 (defn crud-specs [config]
 
   (context "CRUD"
+    (with-stubs)
 
     (helper/with-schemas config [bibelot thingy disorganized])
 
@@ -83,6 +84,15 @@
     (it "tx nil entities"
       (should-not-throw (sut/tx nil))
       (should-not-throw (sut/tx* [nil])))
+
+    (it "tx empty collections"
+      (with-redefs [sut/-tx* (stub :-tx*)]
+        (sut/tx* nil)
+        (sut/tx* [])
+        (sut/tx* [nil])
+        (sut/tx* [nil nil])
+        (should-not-have-invoked :-tx*))
+      (should-be-nil (sut/tx* [nil nil])))
 
     (it "creates one"
       (let [saved (sut/tx {:kind :bibelot :name "thingy"})]
