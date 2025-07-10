@@ -408,6 +408,8 @@
               b4     (sut/ffind-by :bibelot :name "hi!")
               thingy (sut/tx {:kind :thingy :id 123 :foo "bar"})]
           (should= [] (sut/find-by :bibelot :id []))
+          (should= [] (sut/find-by :bibelot :id nil))
+          (should= [] (sut/find-by :bibelot :id [nil]))
           (should= [b1] (sut/find-by :bibelot :id (:id b1)))
           (should= [b1] (sut/find-by :bibelot :id [(:id b1)]))
           (should= #{b1 b2} (set (sut/find-by :bibelot :id (map :id [b1 b2]))))
@@ -420,6 +422,8 @@
               b2 (sut/ffind-by :bibelot :name "world" :size nil)
               b3 (sut/ffind-by :bibelot :name "world" :size 2)
               b4 (sut/ffind-by :bibelot :name "hi!")]
+          (should= [] (sut/find-by :bibelot :name "hello" :id nil))
+          (should= [] (sut/find-by :bibelot :name "hello" :id [nil]))
           (should= [b1] (sut/find-by :bibelot :name "hello" :id (:id b1)))
           (should= [b2] (sut/find-by :bibelot :name "world" :id (:id b2)))
           (should= [b3] (sut/find-by :bibelot :name "world" :id ['not= (:id b2)]))
@@ -531,10 +535,12 @@
               b2 (sut/ffind-by :bibelot :name "world" :size nil)
               b3 (sut/ffind-by :bibelot :name "world" :size 2)
               b4 (sut/ffind-by :bibelot :name "hi!" :size 2)]
+          (should= #{b3 b4} (set (sut/find-by :bibelot :size 2 :id ['not= nil])))
           (should= #{b3 b4} (set (sut/find-by :bibelot :size 2 :id ['not=])))
           (should= #{b3 b4} (set (sut/find-by :bibelot :size 2 :name ['not=])))
           (should= #{b2 b3} (set (sut/find-by :bibelot :size ['not=] :name "world")))
           (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :id ['not=])))
+          (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :id ['not= nil])))
           (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :size ['not=])))
           (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :name ['not=])))
           (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :name ['not=] :id ['not=])))
