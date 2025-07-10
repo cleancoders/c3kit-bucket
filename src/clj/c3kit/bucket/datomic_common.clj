@@ -195,24 +195,30 @@
       [(list 'clojure.string/upper-case attr-sym) upper-sym]
       [(list 're-matches regex upper-sym)])))
 
+(defn- with-clause
+  ([clauses kind attr value]
+   (with-clause clauses (->attr-kw kind attr) value))
+  ([clauses attr value]
+   (if-let [clause (where-clause attr value)]
+     (concat clauses clause)
+     (reduced nil))))
+
 (defn- or-where-clause [attr values]
-  (when (seq values)
-    (let [values (set values)]
-      (list (cons 'or (mapcat #(where-clause attr %) values))))))
+  (when-let [clauses (reduce #(with-clause %1 attr %2) nil values)]
+    (list (cons 'or clauses))))
 
 (defn- attr=-clause [attr value]
-  (cond (nil? value) [(list 'missing? '$ '?e attr)]
-        (= :db/id attr) [(list '= '?e value)]
-        :else ['?e attr value]))
+  (cond (= :db/id attr) (when value (list [(list '= '?e value)]))
+        (nil? value) (list [(list 'missing? '$ '?e attr)])
+        :else (list ['?e attr value])))
 
 (defn- attr-not=-clause [attr value]
-  (cond (nil? value) ['?e attr]
-        (= :db/id attr) [(list 'not= '?e value)]
+  (cond (= :db/id attr) (when value [(list 'not= '?e value)])
+        (nil? value) ['?e attr]
         :else (list 'not ['?e attr value])))
 
 (defn- not=-where-clause [attr values]
-  (for [value values]
-    (attr-not=-clause attr value)))
+  (keep (partial attr-not=-clause attr) values))
 
 (defn- seq-where-clause [attr values]
   (condp = (first values)
@@ -230,7 +236,7 @@
 (defn where-clause [attr value]
   (cond (set? value) (or-where-clause attr value)
         (sequential? value) (seq-where-clause attr value)
-        :else (list (attr=-clause attr value))))
+        :else (attr=-clause attr value)))
 
 (defn- where-all-of-kind [db kind]
   (let [schema       (legend/for-kind @(.-legend db) kind)
@@ -252,13 +258,11 @@
              (clause-or-all-of-kind db kind attr))))
 
 (defn- where-multi-clause [db kind kv-pairs]
-  (letfn [(with-clause [clauses [k v]]
-            (if-let [clause (where-clause (->attr-kw kind k) v)]
-              (concat clauses clause)
-              (reduced nil)))]
-    (when-let [clauses (reduce with-clause nil kv-pairs)]
-      (or (seq clauses)
-          (where-all-of-kind db kind)))))
+  (when-let [clauses (reduce
+                       (fn [clauses [k v]] (with-clause clauses kind k v))
+                       nil kv-pairs)]
+    (or (seq clauses)
+        (where-all-of-kind db kind))))
 
 (defn build-where-datalog [db kind kv-pairs]
   (cond (nil? (seq kv-pairs)) (where-all-of-kind db kind)

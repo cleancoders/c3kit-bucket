@@ -1,3 +1,6 @@
+### 2.3.1
+ * FIX: `nil` values passed in to Datomic's `find-by :id` now works
+
 ### 2.3.0
  * Datomic implementations may now search by the `:id` attribute
    * `(find-by :thing :id 123)`
