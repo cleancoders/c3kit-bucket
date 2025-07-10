@@ -1,3 +1,20 @@
+### 2.3.0
+ * Datomic implementations may now search by the `:id` attribute
+   * `(find-by :thing :id 123)`
+   * `(find-by :thing :id [123 456])`
+   * `(find-by :thing :id ['not= 123 456])`
+ * `tx*` is now a no-op when provided with an empty seq
+ * FIX: Updates `not` to `not=` in `c3kit.bucket.api/find` docstring
+ * FIX: Providing an empty seq to "in" queries now yields no results
+   * `(find-by :thing :name [])`
+   * `(find-by :thing :name ['=])`
+   * `(find-by :thing :size 2 :name [])`
+   * `(find-by :thing :size [] :name [])`
+* FIX: Providing an empty seq to "not in" queries now ignores those fields
+    * `(find-by :thing :name ['not=])` - returns all results
+    * `(find-by :thing :size ['not=] :name ['not=])` - returns all results
+    * `(find-by :thing :size 2 :name ['not=])` - returns all results with `:size 2`
+
 ### 2.2.2
  * Fixes warning in datomic introduced in 2.2.1 when using "like" queries
 

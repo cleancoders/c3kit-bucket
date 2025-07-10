@@ -1,23 +1,13 @@
 (ns c3kit.bucket.impl-spec
   (:require [c3kit.apron.corec :as ccc]
-            [c3kit.bucket.api :as api]
-            [speclj.core #?(:clj :refer :cljs :refer-macros) [after after-all around around-all before before before-all
-                                                              context describe focus-context focus-describe focus-it it
-                                                              pending should should-be should-be-a should-be-nil
-                                                              should-be-same should-contain should-end-with should-fail
-                                                              should-have-invoked should-invoke should-not should-not
-                                                              should-not-be should-not-be-a should-not-be-nil
-                                                              should-not-be-same should-not-contain should-not-end-with
-                                                              should-not-have-invoked should-not-invoke
-                                                              should-not-start-with should-not-throw should-not=
-                                                              should-not== should-start-with should-throw should<
-                                                              should<= should= should== should> should>= stub tags
-                                                              with with-all with-stubs xit redefs-around]]
-            [c3kit.bucket.api :as sut #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
+            [speclj.core #?(:clj :refer :cljs :refer-macros) [before context it should-be-nil should-contain
+                                                              should-not-be-nil should-not-contain should-not-have-invoked
+                                                              should-not-throw should-throw should= stub with with-stubs]]
+            [c3kit.bucket.api :as sut]
             [c3kit.bucket.spec-helperc :as helper]
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
-            [c3kit.apron.time :as time :refer [ago minutes]]))
+            [c3kit.apron.time :as time]))
 
 (def bibelot
   {:kind  (s/kind :bibelot)
@@ -405,11 +395,38 @@
           (should= (take 1 (drop 2 all)) (sut/find :bibelot {:drop 2 :take 1}))
           (should= (take 3 all) (sut/find :bibelot {:drop 0 :take 3}))))
 
-      (it ":name"
+      (it "by :name"
         (let [[entity :as entities] (sut/find-by :bibelot :name "hello")]
           (should= 1 (count entities))
           (should= "hello" (:name entity))
-          (should= nil (:size entity))))
+          (should-not-contain :size entity)))
+
+      (it "by :id"
+        (let [b1     (sut/ffind-by :bibelot :name "hello")
+              b2     (sut/ffind-by :bibelot :name "world" :size nil)
+              b3     (sut/ffind-by :bibelot :name "world" :size 2)
+              b4     (sut/ffind-by :bibelot :name "hi!")
+              thingy (sut/tx {:kind :thingy :id 123 :foo "bar"})]
+          (should= [] (sut/find-by :bibelot :id []))
+          (should= [b1] (sut/find-by :bibelot :id (:id b1)))
+          (should= [b1] (sut/find-by :bibelot :id [(:id b1)]))
+          (should= #{b1 b2} (set (sut/find-by :bibelot :id (map :id [b1 b2]))))
+          (should= #{b2 b3 b4} (set (sut/find-by :bibelot :id ['not= (:id b1)])))
+          (should= #{b2 b4} (set (sut/find-by :bibelot :id ['not= (:id b1) (:id b3)])))
+          (should= [] (sut/find-by :bibelot :id (:id thingy)))))
+
+      (it "by :id and other attributes"
+        (let [b1 (sut/ffind-by :bibelot :name "hello")
+              b2 (sut/ffind-by :bibelot :name "world" :size nil)
+              b3 (sut/ffind-by :bibelot :name "world" :size 2)
+              b4 (sut/ffind-by :bibelot :name "hi!")]
+          (should= [b1] (sut/find-by :bibelot :name "hello" :id (:id b1)))
+          (should= [b2] (sut/find-by :bibelot :name "world" :id (:id b2)))
+          (should= [b3] (sut/find-by :bibelot :name "world" :id ['not= (:id b2)]))
+          (should= [] (sut/find-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
+          (should= [b3] (sut/find-by :bibelot :size 2 :id (:id b3)))
+          (should= #{b2 b3} (set (sut/find-by :bibelot :name "world" :id [(:id b2) (:id b3)])))
+          (should= #{b3 b4} (set (sut/find-by :bibelot :size 2 :id [(:id b3) (:id b4)])))))
 
       (it "two attributes"
         (let [[entity :as entities] (sut/find-by :bibelot :name "world" :size 2)]
@@ -498,6 +515,31 @@
           (should= [] (sut/find-by :bibelot :name ["BLAH" "ARG"]))
           (should= [] (sut/find-by :bibelot :name []))))
 
+      (it "returns nothing for empty seq"
+        (should= [] (sut/find-by :bibelot :id []))
+        (should= [] (sut/find-by :bibelot :name []))
+        (should= [] (sut/find-by :bibelot :size []))
+        (should= [] (sut/find-by :bibelot :size [] :id []))
+        (should= [] (sut/find-by :bibelot :size [] :name []))
+        (should= [] (sut/find-by :bibelot :size 2 :name []))
+        (should= [] (sut/find-by :bibelot :size [] :id (:id (sut/ffind :bibelot))))
+        (should= [] (sut/find-by :bibelot :size [] :name "hello"))
+        (should= [] (sut/find-by :bibelot :size nil :name [])))
+
+      (it "not= to nothing returns everything"
+        (let [b1 (sut/ffind-by :bibelot :name "hello")
+              b2 (sut/ffind-by :bibelot :name "world" :size nil)
+              b3 (sut/ffind-by :bibelot :name "world" :size 2)
+              b4 (sut/ffind-by :bibelot :name "hi!" :size 2)]
+          (should= #{b3 b4} (set (sut/find-by :bibelot :size 2 :id ['not=])))
+          (should= #{b3 b4} (set (sut/find-by :bibelot :size 2 :name ['not=])))
+          (should= #{b2 b3} (set (sut/find-by :bibelot :size ['not=] :name "world")))
+          (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :id ['not=])))
+          (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :size ['not=])))
+          (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :name ['not=])))
+          (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :name ['not=] :id ['not=])))
+          (should= #{b1 b2 b3 b4} (set (sut/find-by :bibelot :name ['not=] :size ['not=])))))
+
       (it "< > string"
         (let [result       (set-find-by :bibelot :name ['> "g"] :name ['< "i"])
               result-names (map :name result)]
@@ -531,14 +573,14 @@
           (should= [] (sut/find-by :bibelot :size ['< 1]))))
 
       (it "< <= > >= date"
-        (let [thing1 (sut/tx :kind :thingy :id 123 :bang (-> 1 minutes ago))
-              thing2 (sut/tx :kind :thingy :id 456 :bang (-> 3 minutes ago))
-              thing3 (sut/tx :kind :thingy :id 789 :bang (-> 5 minutes ago))]
-          (should= [thing2 thing3] (reverse (sort-by :bang (sut/find-by :thingy :bang ['< (-> 2 minutes ago)]))))
+        (let [thing1 (sut/tx :kind :thingy :id 123 :bang (-> 1 time/minutes time/ago))
+              thing2 (sut/tx :kind :thingy :id 456 :bang (-> 3 time/minutes time/ago))
+              thing3 (sut/tx :kind :thingy :id 789 :bang (-> 5 time/minutes time/ago))]
+          (should= [thing2 thing3] (reverse (sort-by :bang (sut/find-by :thingy :bang ['< (-> 2 time/minutes time/ago)]))))
           (should= [thing2 thing3] (reverse (sort-by :bang (sut/find-by :thingy :bang ['<= (:bang thing2)]))))
-          (should= [thing1] (sut/find-by :thingy :bang ['> (-> 2 minutes ago)]))
+          (should= [thing1] (sut/find-by :thingy :bang ['> (-> 2 time/minutes time/ago)]))
           (should= [thing1 thing2] (reverse (sort-by :bang (sut/find-by :thingy :bang ['>= (:bang thing2)]))))
-          (should= [thing2] (sut/find-by :thingy :bang ['< (-> 2 minutes ago)] :bang ['> (-> 4 minutes ago)]))))
+          (should= [thing2] (sut/find-by :thingy :bang ['< (-> 2 time/minutes time/ago)] :bang ['> (-> 4 time/minutes time/ago)]))))
 
       (it "compare against entity with nil value"
         (sut/clear)
@@ -640,6 +682,19 @@
 
       (it "count-by: two attributes"
         (should= 1 (sut/count-by :bibelot :name "world" :size 2)))
+
+      (it "by :id and other attributes"
+        (let [b1 (sut/ffind-by :bibelot :name "hello")
+              b2 (sut/ffind-by :bibelot :name "world" :size nil)
+              b3 (sut/ffind-by :bibelot :name "world" :size 2)
+              b4 (sut/ffind-by :bibelot :name "hi!")]
+          (should= 1 (sut/count-by :bibelot :name "hello" :id (:id b1)))
+          (should= 1 (sut/count-by :bibelot :name "world" :id (:id b2)))
+          (should= 1 (sut/count-by :bibelot :name "world" :id ['not= (:id b2)]))
+          (should= 0 (sut/count-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
+          (should= 1 (sut/count-by :bibelot :size 2 :id (:id b3)))
+          (should= 2 (sut/count-by :bibelot :name "world" :id [(:id b2) (:id b3)]))
+          (should= 2 (sut/count-by :bibelot :size 2 :id [(:id b3) (:id b4)]))))
       )
     )
   )

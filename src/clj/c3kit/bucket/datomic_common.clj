@@ -160,7 +160,10 @@
       (maybe-cas-form entity)
       (tx-entity-form db entity)))
 
-(defn ->attr-kw [kind attr] (keyword (name kind) (name attr)))
+(defn ->attr-kw [kind attr]
+  (if (= :id attr)
+    :db/id
+    (keyword (name kind) (name attr))))
 
 (declare where-clause)
 
@@ -193,16 +196,26 @@
       [(list 're-matches regex upper-sym)])))
 
 (defn- or-where-clause [attr values]
-  (let [values (set values)]
-    (when (seq values)
+  (when (seq values)
+    (let [values (set values)]
       (list (cons 'or (mapcat #(where-clause attr %) values))))))
 
+(defn- attr=-clause [attr value]
+  (cond (nil? value) [(list 'missing? '$ '?e attr)]
+        (= :db/id attr) [(list '= '?e value)]
+        :else ['?e attr value]))
+
+(defn- attr-not=-clause [attr value]
+  (cond (nil? value) ['?e attr]
+        (= :db/id attr) [(list 'not= '?e value)]
+        :else (list 'not ['?e attr value])))
+
 (defn- not=-where-clause [attr values]
-  (map #(if (nil? %) ['?e attr] (list 'not ['?e attr %])) values))
+  (for [value values]
+    (attr-not=-clause attr value)))
 
 (defn- seq-where-clause [attr values]
   (condp = (first values)
-    ;'not (not-where-clause attr (rest values))
     'not= (not=-where-clause attr (rest values))
     '> (simple-where-fn attr (second values) '>)
     '< (simple-where-fn attr (second values) '<)
@@ -215,10 +228,9 @@
     (or-where-clause attr values)))
 
 (defn where-clause [attr value]
-  (cond (nil? value) (list [(list 'missing? '$ '?e attr)])
-        (set? value) (or-where-clause attr value)
+  (cond (set? value) (or-where-clause attr value)
         (sequential? value) (seq-where-clause attr value)
-        :else (list ['?e attr value])))
+        :else (list (attr=-clause attr value))))
 
 (defn- where-all-of-kind [db kind]
   (let [schema       (legend/for-kind @(.-legend db) kind)
@@ -226,20 +238,32 @@
         scoped-attrs (map #(scope-attribute kind %) attrs)]
     [(cons 'or (map (fn [a] ['?e a]) scoped-attrs))]))
 
-(defn- where-single-clause [kind [attr value]]
-  (if (nil? value)
-    (do (log/warn (str "search for nil value (" kind " " attr "), returning no results.")) nil)
-    (where-clause (->attr-kw kind attr) value)))
+(defn- clause-or-all-of-kind [db kind attr clause]
+  (cond
+    (= :id attr) (concat (where-all-of-kind db kind) clause)
+    (seq clause) clause
+    :else (where-all-of-kind db kind)))
 
-(defn- where-multi-clause [kind kv-pairs]
-  (let [attrs (map #(->attr-kw kind %) (map first kv-pairs))
-        vals  (map second kv-pairs)]
-    (mapcat where-clause attrs vals)))
+(defn- where-single-clause [db kind [attr value]]
+  (if (nil? value)
+    (do (log/warn (str "search for nil value (" kind " " attr "), returning no results."))
+        nil)
+    (some->> (where-clause (->attr-kw kind attr) value)
+             (clause-or-all-of-kind db kind attr))))
+
+(defn- where-multi-clause [db kind kv-pairs]
+  (letfn [(with-clause [clauses [k v]]
+            (if-let [clause (where-clause (->attr-kw kind k) v)]
+              (concat clauses clause)
+              (reduced nil)))]
+    (when-let [clauses (reduce with-clause nil kv-pairs)]
+      (or (seq clauses)
+          (where-all-of-kind db kind)))))
 
 (defn build-where-datalog [db kind kv-pairs]
   (cond (nil? (seq kv-pairs)) (where-all-of-kind db kind)
-        (= 1 (count kv-pairs)) (where-single-clause kind (first kv-pairs))
-        :else (where-multi-clause kind kv-pairs)))
+        (= 1 (count kv-pairs)) (where-single-clause db kind (first kv-pairs))
+        :else (where-multi-clause db kind kv-pairs)))
 
 (def reserved-attr-namespaces #{"db" "db.alter" "db.attr" "db.bootstrap" "db.cardinality" "db.entity" "db.excise"
                                 "db.fn" "db.install" "db.lang" "db.part" "db.sys" "db.type" "db.unique" "fressian"

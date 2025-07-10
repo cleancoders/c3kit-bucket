@@ -3,9 +3,9 @@
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
+            [c3kit.bucket.datomic-cloud :as sut]
             [c3kit.bucket.datomic-common :as common-api]
             [c3kit.bucket.impl-spec :as spec]
-            [c3kit.bucket.datomic-cloud :as sut]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all])
@@ -57,6 +57,34 @@
             thingy  (api/tx {:kind :thingy :id 123 :name "thingy" :fuzz (:id bibelot)})]
         (should= (:id bibelot) (:fuzz thingy))
         (should (api/entity (:fuzz thingy)))))
+
+    #_(focus-it "testin stuff"
+      (let [bibelot (api/tx {:kind :bibelot :name "bibby"})
+            thingy  (api/tx {:kind :thingy :id 123 :name "thingy" :fuzz (:id bibelot)})]
+        ;(should= thingy (api/entity (:id thingy)))
+        (should= 1 (sut/q
+                     (concat
+                       '[:find ?e
+                         :where
+                         (or [?e :thingy/name]
+                             [?e :thingy/fuzz])
+                         ]
+                       [
+                        [(list '= '?e (:id thingy))]
+                        ;[(list 'contains? #{(:id thingy)} '?e)]
+                        ]
+                       )
+                     ;'[:find ?e
+                     ;  :in $ ?q
+                     ;  :where
+                     ;  [?e :thingy/name "thingy"]
+                     ;  [(contains? ?q ?e)]
+                     ;  ;[?t _ _ ?id]
+                     ;  ;[(= ?q ?e)]
+                     ;  ]
+                     ;#{(:id thingy)}
+                     ))
+        ))
     )
 
   (context "safety"
@@ -71,7 +99,7 @@
 
     (it "one kv with nil value"
       (log/capture-logs
-       (should= [] (api/find- @db :bibelot :where {:name nil})))
+        (should= [] (api/find- @db :bibelot :where {:name nil})))
       (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str)))
 
     )
@@ -139,8 +167,8 @@
     (it "remove-attribute! that doesn't exist"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-       (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
-       (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
+        (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
+        (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
     (it "remove-attribute! - multi"                         ;
       (let [db         (api/create-db config [])
@@ -169,7 +197,7 @@
     (it "rename-attribute! - existing missing"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-       (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size)))))
+        (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size)))))
 
   (context "history"
     (helper/with-schemas config [spec/bibelot spec/thingy])

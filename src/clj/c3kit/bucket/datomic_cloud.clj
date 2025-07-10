@@ -2,10 +2,10 @@
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.bucket.api :as api]
+            [c3kit.bucket.datomic-common :as common-api]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
-            [datomic.client.api :as datomic]
-            [c3kit.bucket.datomic-common :as common-api]))
+            [datomic.client.api :as datomic]))
 
 (defn connect [config client]
   (datomic/create-database client config)
@@ -37,7 +37,7 @@
 (defn pull-entity [ddb id] (datomic/pull ddb '[*] id))
 
 (defn- id->entity [db id attributes->entity]
-  (when-let [attributes (common-api/d-entity (.-api db)  (common-api/datomic-db db) id)]
+  (when-let [attributes (common-api/d-entity (.-api db) (common-api/datomic-db db) id)]
     (attributes->entity attributes)))
 
 (defn- entity
@@ -118,17 +118,17 @@
         tx-forms (mapcat second id-forms)
         result   (common-api/transact (.-api db) tx-forms)
         ids      (resolve-ids* result)]
-    (map (fn [[kind] id] (tx-result db kind id)) (map first id-forms) ids)))
+    (map #(tx-result db (ffirst %1) %2) id-forms ids)))
 
 (defn q->cloud-entities [results]
-  (map attributes->entity (map first results)))
+  (map (comp attributes->entity first) results))
 
 (defn do-find [db kind options]
   (if-let [where (seq (common-api/build-where-datalog db kind (:where options)))]
     (let [query (concat '[:find (pull ?e [*]) :in $ :where] where)]
       (->> (common-api/q (.-api db) query)
            (api/-apply-drop-take options)
-           (q->cloud-entities)))
+           q->cloud-entities))
     []))
 
 (defn installed-schema-legend
