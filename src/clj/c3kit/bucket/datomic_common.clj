@@ -208,9 +208,9 @@
     (list (cons 'or clauses))))
 
 (defn- attr=-clause [attr value]
-  (cond (= :db/id attr) (when value (list [(list '= '?e value)]))
-        (nil? value) (list [(list 'missing? '$ '?e attr)])
-        :else (list ['?e attr value])))
+  (cond (= :db/id attr) [(list '= '?e value)]
+        (nil? value) [(list 'missing? '$ '?e attr)]
+        :else ['?e attr value]))
 
 (defn- attr-not=-clause [attr value]
   (cond (= :db/id attr) (when value [(list 'not= '?e value)])
@@ -236,7 +236,7 @@
 (defn where-clause [attr value]
   (cond (set? value) (or-where-clause attr value)
         (sequential? value) (seq-where-clause attr value)
-        :else (attr=-clause attr value)))
+        :else (list (attr=-clause attr value))))
 
 (defn- where-all-of-kind [db kind]
   (let [schema       (legend/for-kind @(.-legend db) kind)
