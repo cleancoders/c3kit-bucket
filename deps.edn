@@ -13,6 +13,7 @@
            :test    {:extra-deps    {
                                      clj-commons/pomegranate           {:mvn/version "1.2.25"}
                                      com.cleancoders.c3kit/scaffold    {:mvn/version "2.2.0"}
+                                     com.cleancoders.c3kit/wire        {:mvn/version "2.5.3"}
                                      com.datomic/datomic-free          {:mvn/version "0.9.5697" :exclusions [com.google.guava/guava]}
                                      com.datomic/client-cloud          {:mvn/version "1.0.131"}
                                      com.datomic/local                 {:mvn/version "1.0.291"}

@@ -23,7 +23,6 @@
        (map? id) @(r/cursor (.-store db) [kind (api/-coerced-id @(.-legend db) kind (:id id))])
        :else @(r/cursor (.-store db) [kind (api/-coerced-id @(.-legend db) kind id)])))))
 
-; TODO [ARR] - Cache cursors to ensure we aren't creating new cursors with every lookup
 (defn- do-find [db kind options]
   (memory/ensure-schema! @(.-legend db) kind)
   (let [es (or (vals @(r/cursor (.-store db) [kind])) [])]
@@ -72,14 +71,15 @@
           2 {:id 2}}
   }
 
- (defn find-in
-   ([k & kvs] (apply find-in k [] kvs))
-   ([k v & kvs]
-    (let [options (api/-kvs->kv-pairs kvs)
-          kvs-keys (keys options)
-          cursor (r/cursor test [k (concat v kvs-keys [:id :kind])])]
-      (->> (ccc/find-by @cursor {:where options})
-           (api/-apply-drop-take options)))))
+ (select-keys {} [:asdf :asdf :asdf])
+
+ (defn select-find-by [kind values & kvs]
+   (let [options  (api/-kvs->kv-pairs kvs)
+         kvs-keys (keys options)
+         cursor   (r/cursor test [k (concat v kvs-keys [:id :kind])])]
+     (->> (ccc/find-by @cursor {:where options})
+          (api/-apply-drop-take options))))
+
 
  (find-in :story [:foo :bar])
  (find-in :story [:title] :foo 123 :bar 543)
