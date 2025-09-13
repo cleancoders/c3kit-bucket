@@ -51,21 +51,18 @@
         keys  (last query)]
     (map #(select-keys % keys) vals)))
 
-(defn select-find-by [kind values & kvs]
-  (let [kvs        (cond-> kvs (coll? (first kvs)) first)
-        options    (api/-kvs->kv-pairs kvs)
-        kvs-as-map (ccc/->options kvs)
-        kvs-keys   (keys kvs-as-map)
-        cursor     (r/cursor slice-db [kind (set (concat values kvs-keys [:id :kind]))])]
-    (->> (ccc/find-by @cursor kvs-as-map)
-         (api/-apply-drop-take options))))
+(defn select-find-by
+  "Takes a keyseq as the second argument, similar to clojure.core/select-keys. Used for selecting attributes
+  beyond the attributes used in the search query. Components will re-render if the selected attributes change
+  but ignore changes to other attributes. Only returns the selected attributes of the entity."
+  ([kind keyseq & kvs]
+   (let [kvs        (cond-> kvs (coll? (first kvs)) first)
+         options    (api/-kvs->kv-pairs kvs)
+         kvs-as-map (ccc/->options kvs)
+         kvs-keys   (keys kvs-as-map)
+         cursor     (r/cursor slice-db [kind (set (concat keyseq kvs-keys [:id :kind]))])]
+     (->> (ccc/find-by @cursor kvs-as-map)
+          (api/-apply-drop-take options)))))
 
 (defn find-by [kind & kvs]
   (select-find-by kind [] kvs))
-
-
-; ---- thoughts ----
-;
-; possible for db/ffind to only cause state changes when that one entity changes? Maybe not.
-; it seems like the kind is as specific as we can get with do-find
-;
