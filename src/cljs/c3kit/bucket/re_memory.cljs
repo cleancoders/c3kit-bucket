@@ -24,7 +24,7 @@
        :else @(r/cursor (.-store db) [kind (api/-coerced-id @(.-legend db) kind id)])))))
 
 (defn- do-find [db kind options]
-  (memory/ensure-schema! @(.-legend db) kind)
+  (legend/for-kind @(.-legend db) kind)
   (let [es (or (vals @(r/cursor (.-store db) [kind])) [])]
     (->> (ccc/find-by es (:where options))
          (api/-apply-drop-take options))))
@@ -45,51 +45,27 @@
   (let [store (or (:store config) (r/atom {}))]
     (ReMemoryDB. (atom (legend/build schemas)) store)))
 
+(defn- slice-db [query]
+  (let [slice (get @(.-store @api/impl) (first query))
+        vals  (vals slice)
+        keys  (last query)]
+    (map #(select-keys % keys) vals)))
+
+(defn select-find-by [kind values & kvs]
+  (let [kvs        (cond-> kvs (coll? (first kvs)) first)
+        options    (api/-kvs->kv-pairs kvs)
+        kvs-as-map (ccc/->options kvs)
+        kvs-keys   (keys kvs-as-map)
+        cursor     (r/cursor slice-db [kind (set (concat values kvs-keys [:id :kind]))])]
+    (->> (ccc/find-by @cursor kvs-as-map)
+         (api/-apply-drop-take options))))
+
+(defn find-by [kind & kvs]
+  (select-find-by kind [] kvs))
+
 
 ; ---- thoughts ----
 ;
 ; possible for db/ffind to only cause state changes when that one entity changes? Maybe not.
 ; it seems like the kind is as specific as we can get with do-find
 ;
-; do-find creates a new cursor everytime. Is there a way we could create cursors per kind ahead of time and use those?
-;
-; db/find-in will create a reaction, which needs to be in a with-let or form-2 or form-3 components. can we log a
-; warning if it's being used outside of that context?
-;
-(comment
- (def db (r/atom {}))
- ; magic sauce
- (defn test [query]
-   (let [slice (get @db (first query))
-         vals (vals slice)
-         keys (last query)]
-     (map #(select-keys val keys) vals)))
-[:id :id]
- {:all {1 {}
-        2 {}}
-  :story {1 {:id 1}
-          2 {:id 2}}
-  }
-
- (select-keys {} [:asdf :asdf :asdf])
-
- (defn select-find-by [kind values & kvs]
-   (let [options  (api/-kvs->kv-pairs kvs)
-         kvs-keys (keys options)
-         cursor   (r/cursor test [k (concat v kvs-keys [:id :kind])])]
-     (->> (ccc/find-by @cursor {:where options})
-          (api/-apply-drop-take options))))
-
-
- (find-in :story [:foo :bar])
- (find-in :story [:title] :foo 123 :bar 543)
- (find-in :story :foo 123 :bar 543)
- (r/cursor test [:story [:foo :bar]])
-
- {:kind :story
-  :id 123
-  :title "blah 2"
-  :estimate 3.0
-  })
-
-{:where {:story 1234 :title "blah"}}
