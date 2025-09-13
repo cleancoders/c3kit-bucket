@@ -1,6 +1,6 @@
 (ns c3kit.bucket.re-memory-spec
   (:require-macros [c3kit.bucket.api :refer [with-safety-off]]
-                   [speclj.core :refer [around before context describe focus-it it redefs-around should should=]])
+                   [speclj.core :refer [around should-throw before context describe focus-it it redefs-around should should=]])
   (:require [c3kit.bucket.api :as db]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.re-memory :as rem]
@@ -45,7 +45,7 @@
 (defn init-entities! []
   (reset! thingy (db/tx {:kind :thingy :name "thingy"}))
   (reset! doodad (db/tx {:kind :doodad :names [:doodad]}))
-  (reset! thingy-2 (db/tx {:kind :thingy :name "thingy-2"}))
+  (reset! thingy-2 (db/tx {:kind :thingy :name "thingy-2" :foo "foo 2"}))
   (reset! doodad-2 (db/tx {:kind :doodad :names ["doodad-2"]})))
 
 
@@ -83,15 +83,22 @@
     (helperc/with-schemas config [spec/thingy spec/doodad])
     (before (reset! thingy (db/tx {:kind :thingy :name "thingy" :foo "hey foo" :bar 12345 :fizz 6789})))
 
+    (it "forget to include keyseq"
+      (should-throw js/Error (rem/select-find-by :thingy :id (:id @thingy))))
+
     (it "search by id, empty selection"
       (should= [(select-keys @thingy [:kind :id])] (rem/select-find-by :thingy [] :id (:id @thingy))))
 
     (it "search by id, one key in selection"
-        (should= [(select-keys @thingy [:kind :id :name])] (rem/select-find-by :thingy [:name] :id (:id @thingy))))
+      (should= [(select-keys @thingy [:kind :id :name])] (rem/select-find-by :thingy [:name] :id (:id @thingy))))
 
     (it "search by id, multiple keys in selection"
-        (should= [(select-keys @thingy [:kind :id :name :foo :bar :fizz])]
-                 (rem/select-find-by :thingy [:name :foo :bar :fizz] :id (:id @thingy))))
+      (should= [(select-keys @thingy [:kind :id :name :foo :bar :fizz])]
+               (rem/select-find-by :thingy [:name :foo :bar :fizz] :id (:id @thingy))))
+
+    (it "search by multiple attrs, multiple keys in selection"
+      (should= [(select-keys @thingy [:kind :id :name :foo :bar :fizz])]
+               (rem/select-find-by :thingy [:bar :fizz] :name (:name @thingy) :foo (:foo @thingy))))
     )
 
   (context "render control"
@@ -139,6 +146,69 @@
         (wire/flush)
         (should= 2 @thingy-render-count)
         (should= 1 @thingy-2-count))
+      )
+
+    (context "find-by"
+      (it "editing a field not searched by"
+        (wire/render [:div
+                      [thingy-component thingy-render-count #(rem/find-by :thingy :name (:name @thingy))]
+                      [thingy-component thingy-2-count #(rem/find-by :thingy :name (:name @thingy-2))]])
+        (should= 1 @thingy-render-count)
+        (should= 1 @thingy-2-count)
+        (db/tx (swap! thingy assoc :foo "bye foo"))
+        (wire/flush)
+        (should= 1 @thingy-render-count)
+        (should= 1 @thingy-2-count))
+
+      (it "editing a field searched by"
+        (let [thingy-3-count (atom 0)
+              thingy-4-count (atom 0)]
+          (wire/render [:div
+                        [thingy-component thingy-render-count #(rem/find-by :thingy :name (:name @thingy))]
+                        [thingy-component thingy-2-count #(rem/find-by :thingy :name (:name @thingy-2))]
+                        [thingy-component thingy-3-count #(rem/find-by :thingy :foo (:foo @thingy-2))]
+                        [thingy-component thingy-4-count #(rem/find-by :thingy :name (:name @thingy-2)
+                                                                       :foo (:foo @thingy-2))]])
+          (should= 1 @thingy-render-count)
+          (should= 1 @thingy-2-count)
+          (db/tx (swap! thingy assoc :name "new name"))
+          (wire/flush)
+          (should= 2 @thingy-render-count)
+          (should= 2 @thingy-2-count)
+          (should= 1 @thingy-3-count)
+          (should= 2 @thingy-4-count)))
+
+      )
+
+    (context "select-find-by"
+      (it "editing a field not searched by or selected"
+        (wire/render [:div
+                      [thingy-component thingy-render-count #(rem/select-find-by :thingy [:foo] :name (:name @thingy))]
+                      [thingy-component thingy-2-count #(rem/select-find-by :thingy [:foo] :name (:name @thingy-2))]])
+        (should= 1 @thingy-render-count)
+        (should= 1 @thingy-2-count)
+        (db/tx (swap! thingy assoc :bar 12345))
+        (wire/flush)
+        (should= 1 @thingy-render-count)
+        (should= 1 @thingy-2-count))
+
+      (it "editing a field selected"
+        (let [thingy-3-count (atom 0)
+              thingy-4-count (atom 0)]
+          (wire/render [:div
+                        [thingy-component thingy-render-count #(rem/select-find-by :thingy [:foo] :name (:name @thingy))]
+                        [thingy-component thingy-2-count #(rem/select-find-by :thingy [:foo] :name (:name @thingy-2))]
+                        [thingy-component thingy-3-count #(rem/select-find-by :thingy [:bar] :name (:name @thingy-2))]
+                        [thingy-component thingy-4-count #(rem/select-find-by :thingy [:name] :foo (:foo @thingy-2))]])
+          (should= 1 @thingy-render-count)
+          (should= 1 @thingy-2-count)
+          (db/tx (swap! thingy assoc :foo "new foo"))
+          (wire/flush)
+          (should= 2 @thingy-render-count)
+          (should= 2 @thingy-2-count)
+          (should= 1 @thingy-3-count)
+          (should= 2 @thingy-4-count)))
+
       )
 
     )
