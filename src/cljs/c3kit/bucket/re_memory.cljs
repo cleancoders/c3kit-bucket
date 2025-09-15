@@ -52,9 +52,10 @@
     (map #(select-keys % keys) vals)))
 
 (defn select-find-by
-  "Takes a keyseq as the second argument, similar to clojure.core/select-keys. Used for selecting attributes
-  beyond the attributes used in the search query. Components will re-render if the selected attributes change
-  but ignore changes to other attributes. Only returns the selected attributes of the entity."
+  "Like rememory/find-by, but takes a keyseq as the second argument, similar to clojure.core/select-keys.
+  Used for selecting attributes beyond the attributes used in the search query. Components will re-render if the
+  selected or queried attributes change but will ignore changes to other attributes.
+  Only returns the selected and queried attributes of the entity."
   ([kind keyseq & kvs]
    (let [kvs        (cond-> kvs (coll? (first kvs)) first)
          options    (api/-kvs->kv-pairs kvs)
@@ -64,5 +65,8 @@
      (->> (ccc/find-by @cursor kvs-as-map)
           (api/-apply-drop-take options)))))
 
-(defn find-by [kind & kvs]
-  (select-find-by kind [] kvs))
+(defn find-by
+  "Components will only re-render if the attributes that were queried by change.
+  Only returns the queried attributes of the entity, in addtition to :kind and :id"
+  ([kind & kvs]
+   (select-find-by kind [] kvs)))
