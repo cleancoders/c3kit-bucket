@@ -46,11 +46,18 @@
   (let [store (or (:store config) (r/atom {}))]
     (ReMemoryDB. (atom (legend/build schemas)) store)))
 
-(defn- slice-db [query]
-  (let [slice (get @(.-store @api/impl) (first query))
-        vals  (vals slice)
-        keys  (last query)]
-    (map #(select-keys % keys) vals)))
+(defn- slice-by-kind [kind] (get @(.-store @api/impl) kind))
+(defn- slice-by-ids [ids] (select-keys (get @(.-store @api/impl) :all) ids))
+
+(defn- slice-db [[kind-or-ids keyseq]]
+  (let [slice (if (keyword? kind-or-ids) (slice-by-kind kind-or-ids) (slice-by-ids kind-or-ids))]
+    (map #(select-keys % keyseq) (vals slice))))
+
+(defn- ->keyseq [& colls]
+  (set (conj (apply concat colls) :id :kind)))
+
+(defn ->kind-or-ids [kvs-as-map kind]
+  (let [id (:id kvs-as-map)] (if id (cond-> id (int? id) vector) kind)))
 
 (defn select-find-by
   "Like rememory/find-by, but takes a keyseq as the second argument, similar to clojure.core/select-keys.
@@ -59,12 +66,12 @@
   Only returns the selected and queried attributes of the entity."
   ([kind keyseq & kvs]
    (let [kvs        (cond-> kvs (coll? (first kvs)) first)
-         options    (api/-kvs->kv-pairs kvs)
+         kv-pairs   (api/-kvs->kv-pairs kvs)
          kvs-as-map (ccc/->options kvs)
          kvs-keys   (keys kvs-as-map)
-         cursor     (r/cursor slice-db [kind (set (concat keyseq kvs-keys [:id :kind]))])]
+         cursor     (r/cursor slice-db [(->kind-or-ids kvs-as-map kind) (->keyseq keyseq kvs-keys)])]
      (->> (ccc/find-by @cursor kvs-as-map)
-          (api/-apply-drop-take options)))))
+          (api/-apply-drop-take kv-pairs)))))
 
 (defn find-by
   "Components will only re-render if the attributes that were queried by change.
