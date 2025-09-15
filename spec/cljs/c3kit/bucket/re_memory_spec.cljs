@@ -1,6 +1,6 @@
 (ns c3kit.bucket.re-memory-spec
   (:require-macros [c3kit.bucket.api :refer [with-safety-off]]
-                   [speclj.core :refer [around should-throw before context describe focus-it it redefs-around should should=]])
+                   [speclj.core :refer [around before context describe focus-it it redefs-around should should-throw should=]])
   (:require [c3kit.bucket.api :as db]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.re-memory :as rem]
@@ -178,6 +178,24 @@
           (should= 1 @thingy-3-count)
           (should= 2 @thingy-4-count)))
 
+      (it "finding by id scopes re-renders to those entities"
+        (let [thingy-3       (db/tx {:kind :thingy :name "thingy-3"})
+              thingy-3-count (atom 0)]
+          (wire/render [:div
+                        [thingy-component thingy-render-count #(rem/find-by :thingy :id [(:id @thingy) (:id @thingy-2)]
+                                                                            :name (:name @thingy))]
+                        [thingy-component thingy-3-count #(rem/find-by :thingy :name (:name thingy-3))]])
+          (should= 1 @thingy-render-count)
+          (should= 1 @thingy-3-count)
+          (db/tx thingy-3 :name "new-thingy-3")
+          (wire/flush)
+          (should= 2 @thingy-3-count)
+          (should= 1 @thingy-render-count)
+          (db/tx @thingy :name (:name "new-thingy-1"))
+          (wire/flush)
+          (should= 3 @thingy-3-count)
+          (should= 2 @thingy-render-count)))
+
       )
 
     (context "select-find-by"
@@ -208,6 +226,23 @@
           (should= 2 @thingy-2-count)
           (should= 1 @thingy-3-count)
           (should= 2 @thingy-4-count)))
+
+      (it "finding by id scopes re-renders to those entities"
+        (let [thingy-3       (db/tx {:kind :thingy :name "thingy-3"})
+              thingy-3-count (atom 0)]
+          (wire/render [:div
+                        [thingy-component thingy-render-count #(rem/select-find-by :thingy [:name] :id (:id @thingy))]
+                        [thingy-component thingy-3-count #(rem/select-find-by :thingy [:foo] :name (:name thingy-3))]])
+          (should= 1 @thingy-render-count)
+          (should= 1 @thingy-3-count)
+          (db/tx thingy-3 :name "new-thingy-3")
+          (wire/flush)
+          (should= 2 @thingy-3-count)
+          (should= 1 @thingy-render-count)
+          (db/tx @thingy :name (:name "new-thingy-1"))
+          (wire/flush)
+          (should= 3 @thingy-3-count)
+          (should= 2 @thingy-render-count)))
 
       )
 
