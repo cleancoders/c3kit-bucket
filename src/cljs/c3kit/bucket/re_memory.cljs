@@ -24,11 +24,27 @@
        (map? id) @(r/cursor (.-store db) [kind (api/-coerced-id @(.-legend db) kind (:id id))])
        :else @(r/cursor (.-store db) [kind (api/-coerced-id @(.-legend db) kind id)])))))
 
+
+(defn- slice-by-kind ([kind] (get @(.-store @api/impl) kind)))
+(defn- slice-by-ids [ids] (select-keys (get @(.-store @api/impl) :all) ids))
+
+(defn- slice-db [[kind-or-ids keyseq]]
+  (let [slice (if (keyword? kind-or-ids) (slice-by-kind kind-or-ids) (slice-by-ids kind-or-ids))]
+    (map #(select-keys % keyseq) (vals slice))))
+
+(defn- ids-not-fns [id]
+  (or (int? id) (int? (first id))))
+
 (defn- do-find [db kind options]
-  (legend/for-kind @(.-legend db) kind)
-  (let [es (or (vals @(r/cursor (.-store db) [kind])) [])]
-    (->> (ccc/find-by es (:where options))
-         (api/-apply-drop-take options))))
+  (let [where-map (ccc/->options (apply concat (:where options)))
+        id        (:id where-map)
+        cursor    (if (ids-not-fns id)
+                    (r/cursor slice-by-ids (cond-> id (int? id) vector))
+                    (r/cursor (.-store db) [kind]))]
+    (legend/for-kind @(.-legend db) kind)
+    (let [es (or (vals @cursor) [])]
+      (->> (ccc/find-by es (conj (:where options) [:kind kind]))
+           (api/-apply-drop-take options)))))
 
 (deftype ReMemoryDB [legend store]
   api/DB
@@ -45,13 +61,6 @@
 (defmethod api/-create-impl :re-memory [config schemas]
   (let [store (or (:store config) (r/atom {}))]
     (ReMemoryDB. (atom (legend/build schemas)) store)))
-
-(defn- slice-by-kind [kind] (get @(.-store @api/impl) kind))
-(defn- slice-by-ids [ids] (select-keys (get @(.-store @api/impl) :all) ids))
-
-(defn- slice-db [[kind-or-ids keyseq]]
-  (let [slice (if (keyword? kind-or-ids) (slice-by-kind kind-or-ids) (slice-by-ids kind-or-ids))]
-    (map #(select-keys % keyseq) (vals slice))))
 
 (defn- ->keyseq [& colls]
   (set (conj (apply concat colls) :id :kind)))

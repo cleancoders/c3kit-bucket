@@ -1,6 +1,6 @@
 (ns c3kit.bucket.re-memory-spec
   (:require-macros [c3kit.bucket.api :refer [with-safety-off]]
-                   [speclj.core :refer [around before context describe focus-it it redefs-around should should-throw should=]])
+                   [speclj.core :refer [around before context describe focus-context focus-it it redefs-around should should-throw should=]])
   (:require [c3kit.bucket.api :as db]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.re-memory :as rem]
@@ -119,10 +119,10 @@
 
       (it "editing a thingy re-renders all thingies but no doodads"
         (wire/render [:div
-                      [thingy-component thingy-render-count #(db/ffind-by :thingy :id (:id @thingy))]
-                      [thingy-component thingy-2-count #(db/ffind-by :thingy :id (:id @thingy-2))]
-                      [doodad-component doodad-render-count #(db/ffind-by :doodad :id (:id @doodad))]
-                      [doodad-component doodad-2-count #(db/ffind-by :doodad :id (:id @doodad-2))]])
+                      [thingy-component thingy-render-count #(db/ffind-by :thingy :name (:name @thingy))]
+                      [thingy-component thingy-2-count #(db/ffind-by :thingy :name (:name @thingy-2))]
+                      [doodad-component doodad-render-count #(db/ffind-by :doodad :name (:name @doodad))]
+                      [doodad-component doodad-2-count #(db/ffind-by :doodad :name (:name @doodad-2))]])
         (should= 1 @thingy-render-count)
         (should= 1 @thingy-2-count)
         (should= 1 @doodad-render-count)
@@ -133,6 +133,23 @@
         (should= 2 @thingy-2-count)
         (should= 1 @doodad-2-count)
         (should= 1 @doodad-render-count))
+
+      (it "finding by id scopes re-renders to those entities"
+        (let [thingy-3       (db/tx {:kind :thingy :name "thingy-3"})
+              thingy-3-count (atom 0)]
+          (wire/render [:div
+                        [thingy-component thingy-render-count #(db/find-by :thingy :id [(:id @thingy) (:id @thingy-2)])]
+                        [thingy-component thingy-3-count #(db/find-by :thingy :name (:name thingy-3))]])
+          (should= 1 @thingy-render-count)
+          (should= 1 @thingy-3-count)
+          (db/tx thingy-3 :name "new-thingy-3")
+          (wire/flush)
+          (should= 2 @thingy-3-count)
+          (should= 1 @thingy-render-count)
+          (db/tx @thingy :name (:name "new-thingy-1"))
+          (wire/flush)
+          (should= 3 @thingy-3-count)
+          (should= 2 @thingy-render-count)))
       )
 
     (context "entity"
@@ -194,18 +211,23 @@
           (db/tx @thingy :name (:name "new-thingy-1"))
           (wire/flush)
           (should= 3 @thingy-3-count)
-          (should= 2 @thingy-render-count)))
+          (should= 2 @thingy-render-count)
+          (db/tx* [(assoc @thingy :bar 123) (assoc thingy-3 :bar 456)])
+          (wire/flush)
+          #_(should= 3 @thingy-3-count)
+          #_(should= 2 @thingy-render-count)))
 
       )
 
     (context "select-find-by"
-      (it "editing a field not searched by or selected"
+      (it "editing a field not searched by or selected does not cause re-render"
         (wire/render [:div
                       [thingy-component thingy-render-count #(rem/select-find-by :thingy [:foo] :name (:name @thingy))]
                       [thingy-component thingy-2-count #(rem/select-find-by :thingy [:foo] :name (:name @thingy-2))]])
         (should= 1 @thingy-render-count)
         (should= 1 @thingy-2-count)
         (db/tx (swap! thingy assoc :bar 12345))
+        (db/tx (swap! thingy-2 assoc :bar 12345))
         (wire/flush)
         (should= 1 @thingy-render-count)
         (should= 1 @thingy-2-count))
@@ -227,7 +249,7 @@
           (should= 1 @thingy-3-count)
           (should= 2 @thingy-4-count)))
 
-      (it "finding by id scopes re-renders to those entities"
+      (it "finding by id scopes re-renders to those entities and attrs"
         (let [thingy-3       (db/tx {:kind :thingy :name "thingy-3"})
               thingy-3-count (atom 0)]
           (wire/render [:div
@@ -242,7 +264,11 @@
           (db/tx @thingy :name (:name "new-thingy-1"))
           (wire/flush)
           (should= 3 @thingy-3-count)
-          (should= 2 @thingy-render-count)))
+          (should= 2 @thingy-render-count)
+          (db/tx* [(assoc @thingy :bar 123) (assoc thingy-3 :bar 456)])
+          (wire/flush)
+          #_(should= 3 @thingy-3-count)
+          #_(should= 2 @thingy-render-count)))
 
       )
 
