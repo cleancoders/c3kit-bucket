@@ -9,7 +9,8 @@
 ;; db api -----------------------------------
 (defn entity
   "kind (optional) in addition to returning nil when kinds don't match,
-  will allow coercion of the id to the right id type for the kind."
+  will allow coercion of the id to the right id type for the kind.
+  Components will only re-render if this entity changes and will ignore all other changes in the db."
   ([db id]
    (cond
      (nil? id) nil
