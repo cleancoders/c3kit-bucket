@@ -68,6 +68,6 @@
 
 (defn find-by
   "Components will only re-render if the attributes that were queried by change.
-  Only returns the queried attributes of the entity, in addtition to :kind and :id"
+  Only returns the queried attributes of the entity, in addition to :kind and :id"
   ([kind & kvs]
    (select-find-by kind [] kvs)))
