@@ -68,22 +68,29 @@
 (defn ->kind-or-ids [kvs-as-map kind]
   (let [id (:id kvs-as-map)] (if id (cond-> id (int? id) vector) kind)))
 
+(defn do-select-find [kind keyseq kvs]
+  (let [kvs-as-map (assoc (ccc/->options kvs) :kind kind)
+        kvs-keys   (keys kvs-as-map)
+        cursor     (r/cursor slice-db [(->kind-or-ids kvs-as-map kind) (->keyseq keyseq kvs-keys)])]
+    (ccc/find-by @cursor kvs-as-map)))
+
 (defn select-find-by
-  "Like rememory/find-by, but takes a keyseq as the second argument, similar to clojure.core/select-keys.
-  Used for selecting attributes beyond the attributes used in the search query. Components will re-render if the
-  selected or queried attributes change but will ignore changes to other attributes.
-  Only returns the selected and queried attributes of the entity."
-  ([kind keyseq & kvs]
-   (let [kvs        (cond-> kvs (coll? (first kvs)) first)
-         kvs-as-map (ccc/->options kvs)
-         kvs-keys   (keys kvs-as-map)
-         cursor     (r/cursor slice-db [(->kind-or-ids kvs-as-map kind) (->keyseq keyseq kvs-keys)])]
-     (ccc/find-by @cursor kvs-as-map))))
+  "Like find-by, but components will only re-render if the selected or queried attributes change
+  and ignore changes to other attributes.
+  Only returns the selected and queried attributes of the entity.
+  If the second argument is a keyseq, the component will also listen to changes to those attributes
+  and re-render acccordingly.
 
-(defn find-by
-  "Components will only re-render if the attributes that were queried by change.
-  Only returns the queried attributes of the entity, in addition to :kind and :id"
+  `(select-find-by :thingy :id 12354 :foo 5678)`
+  `(select-find-by :thingy [:foo :bar] :id 1234)`"
   ([kind & kvs]
-   (select-find-by kind [] kvs)))
+   (let [[keyseq kvs] (if (coll? (first kvs)) [(first kvs) (rest kvs)] [[] kvs])]
+     (do-select-find kind keyseq kvs))))
 
-(defn ffind-by [kind & kvs] (first (select-find-by kind [] kvs)))
+(defn select-ffind-by [kind & kvs]
+  (let [[keyseq kvs] (if (coll? (first kvs)) [(first kvs) (rest kvs)] [[] kvs])]
+    (first (do-select-find kind keyseq kvs))))
+
+; TODO get commented tests passing
+; TODO drop and take
+; TODO check for refactor opportunities between do-select-find and do-find
