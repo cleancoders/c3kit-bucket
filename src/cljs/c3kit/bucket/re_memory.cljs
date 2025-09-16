@@ -27,18 +27,18 @@
 
 (defn- slice-by-kind ([kind] (get @(.-store @api/impl) kind)))
 (defn- slice-by-ids [ids] (select-keys (get @(.-store @api/impl) :all) ids))
+(defn- ids-not-fns? [id] (or (int? id) (int? (first id))))
 
 (defn- slice-db [[kind-or-ids keyseq]]
-  (let [slice (if (keyword? kind-or-ids) (slice-by-kind kind-or-ids) (slice-by-ids kind-or-ids))]
+  (let [slice (if (and (not (keyword? kind-or-ids)) (ids-not-fns? kind-or-ids))
+                (slice-by-ids kind-or-ids)
+                (slice-by-kind kind-or-ids))]
     (map #(select-keys % keyseq) (vals slice))))
-
-(defn- ids-not-fns [id]
-  (or (int? id) (int? (first id))))
 
 (defn- do-find [db kind options]
   (let [where-map (ccc/->options (apply concat (:where options)))
         id        (:id where-map)
-        cursor    (if (ids-not-fns id)
+        cursor    (if (ids-not-fns? id)
                     (r/cursor slice-by-ids (cond-> id (int? id) vector))
                     (r/cursor (.-store db) [kind]))]
     (legend/for-kind @(.-legend db) kind)
@@ -75,15 +75,15 @@
   Only returns the selected and queried attributes of the entity."
   ([kind keyseq & kvs]
    (let [kvs        (cond-> kvs (coll? (first kvs)) first)
-         kv-pairs   (api/-kvs->kv-pairs kvs)
          kvs-as-map (ccc/->options kvs)
          kvs-keys   (keys kvs-as-map)
          cursor     (r/cursor slice-db [(->kind-or-ids kvs-as-map kind) (->keyseq keyseq kvs-keys)])]
-     (->> (ccc/find-by @cursor kvs-as-map)
-          (api/-apply-drop-take kv-pairs)))))
+     (ccc/find-by @cursor kvs-as-map))))
 
 (defn find-by
   "Components will only re-render if the attributes that were queried by change.
   Only returns the queried attributes of the entity, in addition to :kind and :id"
   ([kind & kvs]
    (select-find-by kind [] kvs)))
+
+(defn ffind-by [kind & kvs] (first (select-find-by kind [] kvs)))
