@@ -1,7 +1,8 @@
 (ns c3kit.bucket.re-memory-spec
   (:require-macros [c3kit.bucket.api :refer [with-safety-off]]
-                   [speclj.core :refer [around should-contain should-not-contain before context describe focus-context focus-it it redefs-around should should-throw should=]])
+                   [speclj.core :refer [around before context should-be-nil describe focus-context focus-it it redefs-around should should-contain should-not-contain should-throw should=]])
   (:require [c3kit.apron.corec :as ccc]
+            [c3kit.apron.time :as time]
             [c3kit.bucket.api :as db]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.re-memory :as sut]
@@ -275,100 +276,375 @@
 
     )
 
-  (context "find"
-    (helperc/with-schemas config [spec/bibelot spec/thingy])
+  (context "bucket tests for select-find"
 
-    (it "empty db"
-      (should= [] (sut/select-find-by :bibelot :name "nothing")))
+    (context "find"
+      (helperc/with-schemas config [spec/bibelot spec/thingy])
 
-    (context "(populated db)"
-      (before (db/clear)
-              (db/tx {:kind :bibelot :name "hello"})
-              (db/tx {:kind :bibelot :name "world"})
-              (db/tx {:kind :bibelot :name "world" :size 2})
-              (db/tx {:kind :bibelot :name "hi!" :size 2}))
+      (it "empty db"
+        (should= [] (sut/select-find-by :bibelot :name "nothing")))
 
-      (it "by :name"
-        (let [[entity :as entities] (sut/select-find-by :bibelot :name "hello")]
-          (should= 1 (count entities))
-          (should= "hello" (:name entity))
-          (should-not-contain :size entity)))
+      (context "(populated db)"
+        (before (db/clear)
+                (db/tx {:kind :bibelot :name "hello"})
+                (db/tx {:kind :bibelot :name "world"})
+                (db/tx {:kind :bibelot :name "world" :size 2})
+                (db/tx {:kind :bibelot :name "hi!" :size 2}))
 
-      (it "by :id"
-        (let [b1     (sut/select-ffind-by :bibelot :name "hello")
-              b2     (sut/select-ffind-by :bibelot :name "world" :size nil)
-              b3     (sut/select-ffind-by :bibelot :name "world" :size 2)
-              b4     (sut/select-ffind-by :bibelot :name "hi!")
-              thingy (db/tx {:kind :thingy :id 123 :foo "bar"})]
-          (should= [] (sut/select-find-by :bibelot :id []))
-          (should= [] (sut/select-find-by :bibelot :id nil))
-          (should= [] (sut/select-find-by :bibelot :id [nil]))
-          ;(should= [b1] (sut/find-by :bibelot :id [nil (:id b1)]))
-          (should= [(select-keys b1 [:kind :id])] (sut/select-find-by :bibelot :id (:id b1)))
-          (should= [(select-keys b1 [:kind :id])] (sut/select-find-by :bibelot :id [(:id b1)]))
-          (should= (set (map #(select-keys % [:kind :id]) [b1 b2])) (set (sut/select-find-by :bibelot :id (map :id [b1 b2]))))
-          ;(should= #{b2 b3 b4} (set (sut/find-by :bibelot :id ['not= (:id b1)])))
-          ;(should= #{b2 b3 b4} (set (sut/find-by :bibelot :id ['not= nil (:id b1)])))
-          ;(should= #{b2 b4} (set (sut/find-by :bibelot :id ['not= (:id b1) (:id b3)])))
-          (should= [] (sut/select-find-by :bibelot :id (:id thingy)))
-          ))
+        ;(it ":take option"
+        ;  (let [all (sut/find :bibelot)]
+        ;    (should= (take 1 all) (sut/find :bibelot {:take 1}))
+        ;    (should= (take 2 all) (sut/find :bibelot {:take 2}))
+        ;    (should= (take 3 all) (sut/find :bibelot {:take 3}))
+        ;    (should= all (sut/find :bibelot {:take 4}))
+        ;    (should= all (sut/find :bibelot {:take 99}))))
+        ;
+        ;(it ":drop option"
+        ;  (let [all (sut/find :bibelot)]
+        ;    (should= (drop 1 all) (sut/find :bibelot {:drop 1}))
+        ;    (should= (drop 2 all) (sut/find :bibelot {:drop 2}))
+        ;    (should= (drop 3 all) (sut/find :bibelot {:drop 3}))
+        ;    (should= [] (sut/find :bibelot {:drop 4}))
+        ;    (should= [] (sut/find :bibelot {:drop 99}))))
 
-      (it "by :id and other attributes"
-        (let [b1 (sut/select-ffind-by :bibelot :name "hello")
-              b2 (sut/select-ffind-by :bibelot :name "world" :size nil)
-              b3 (sut/select-ffind-by :bibelot :name "world" :size 2)
-              b4 (sut/select-ffind-by :bibelot :name "hi!" :size 2)]
-          (should= [] (sut/select-find-by :bibelot :name "hello" :id nil))
-          (should= [] (sut/select-find-by :bibelot :name "hello" :id [nil]))
-          (should= [b1] (sut/select-find-by :bibelot :name "hello" :id (:id b1)))
-          ;(should= [b1] (sut/find-by :bibelot :name "hello" :id [nil (:id b1)]))
-          (should= [b2] (sut/select-find-by :bibelot :name "world" :id (:id b2)))
-          ;(should= [b3] (sut/find-by :bibelot :name "world" :id ['not= (:id b2)]))
-          ;(should= [b3] (sut/find-by :bibelot :name "world" :id ['not= nil (:id b2)]))
-          ;(should= [] (sut/find-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
-          (should= [(select-keys b3 [:size :id :kind])] (sut/select-find-by :bibelot :size 2 :id (:id b3)))
-          (should= #{b2 (select-keys b3 [:name :id :kind])}
-                   (set (sut/select-find-by :bibelot :name "world" :id [(:id b2) (:id b3)])))
-          (should= (set (map #(select-keys % [:size :kind :id]) [b3 b4]))
-                   (set (sut/select-find-by :bibelot :size 2 :id [(:id b3) (:id b4)])))
-          ))
+        (it "by :name"
+          (let [[entity :as entities] (sut/select-find-by :bibelot :name "hello")]
+            (should= 1 (count entities))
+            (should= "hello" (:name entity))
+            (should-not-contain :size entity)))
 
-      (it "two attributes"
-        (let [[entity :as entities] (sut/select-find-by :bibelot :name "world" :size 2)]
-          (should= 1 (count entities))
-          (should= "world" (:name entity))
-          (should= 2 (:size entity))))
+        (it "by :id"
+          (let [b1     (sut/select-ffind-by :bibelot :name "hello")
+                b2     (sut/select-ffind-by :bibelot :name "world" :size nil)
+                b3     (sut/select-ffind-by :bibelot :name "world" :size 2)
+                b4     (sut/select-ffind-by :bibelot :name "hi!")
+                thingy (db/tx {:kind :thingy :id 123 :foo "bar"})]
+            (should= [] (sut/select-find-by :bibelot :id []))
+            (should= [] (sut/select-find-by :bibelot :id nil))
+            (should= [] (sut/select-find-by :bibelot :id [nil]))
+            (should= [(dissoc b1 :name)] (sut/select-find-by :bibelot :id [nil (:id b1)]))
+            (should= [(select-keys b1 [:kind :id])] (sut/select-find-by :bibelot :id [(:id b1)]))
+            (should= [(select-keys b1 [:kind :id])] (sut/select-find-by :bibelot :id (:id b1)))
+            (should= (set (map #(select-keys % [:kind :id]) [b1 b2]))
+                     (set (sut/select-find-by :bibelot :id (map :id [b1 b2]))))
+            (should= (set (map #(dissoc % :size) [b2 b3 b4]))
+                     (set (sut/select-find-by :bibelot [:name] :id ['not= (:id b1)])))
+            (should= (set (map #(dissoc % :size) [b2 b3 b4]))
+                     (set (sut/select-find-by :bibelot [:name] :id ['not= nil (:id b1)])))
+            (should= (set (map #(dissoc % :size) [b2 b4]))
+                     (set (sut/select-find-by :bibelot [:name] :id ['not= (:id b1) (:id b3)])))
+            (should= [] (sut/select-find-by :bibelot :id (:id thingy)))))
 
-      (it "returns all found"
-        (let [entities (sut/select-find-by :bibelot [:size] :name "world")
-              world-1  (first (remove :size entities))
-              world-2  (ccc/ffilter :size entities)]
-          (should= 2 (count entities))
-          (should= "world" (:name world-1))
-          (should= nil (:size world-1))
-          (should= "world" (:name world-2))
-          (should= 2 (:size world-2))))
+        (it "by :id and other attributes"
+          (let [b1 (sut/select-ffind-by :bibelot :name "hello")
+                b2 (sut/select-ffind-by :bibelot :name "world" :size nil)
+                b3 (sut/select-ffind-by :bibelot :name "world" :size 2)
+                b4 (sut/select-ffind-by :bibelot :name "hi!" :size 2)]
+            (should= [] (sut/select-find-by :bibelot :name "hello" :id nil))
+            (should= [] (sut/select-find-by :bibelot :name "hello" :id [nil]))
+            (should= [b1] (sut/select-find-by :bibelot :name "hello" :id (:id b1)))
+            (should= [b1] (sut/select-find-by :bibelot :name "hello" :id [nil (:id b1)]))
+            (should= [b2] (sut/select-find-by :bibelot :name "world" :id (:id b2)))
+            (should= [b3] (sut/select-find-by :bibelot [:size] :name "world" :id ['not= (:id b2)]))
+            (should= [b3] (sut/select-find-by :bibelot [:size] :name "world" :id ['not= nil (:id b2)]))
+            (should= [] (sut/select-find-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
+            (should= [(select-keys b3 [:size :id :kind])] (sut/select-find-by :bibelot :size 2 :id (:id b3)))
+            (should= #{b2 (select-keys b3 [:name :id :kind])}
+                     (set (sut/select-find-by :bibelot :name "world" :id [(:id b2) (:id b3)])))
+            (should= (set (map #(select-keys % [:size :kind :id]) [b3 b4]))
+                     (set (sut/select-find-by :bibelot :size 2 :id [(:id b3) (:id b4)])))
+            ))
 
-      (it "all by size"
-        (let [entities (sut/select-find-by :bibelot [:name] :size 2)]
-          (should= 2 (count entities))
-          (should-contain "world" (map :name entities))
-          (should-contain "hi!" (map :name entities))))
+        (it "two attributes"
+          (let [[entity :as entities] (sut/select-find-by :bibelot :name "world" :size 2)]
+            (should= 1 (count entities))
+            (should= "world" (:name entity))
+            (should= 2 (:size entity))))
 
-      (it "nil size"
-        (let [entities (sut/select-find-by :bibelot :name "world" :size nil)]
-          (should= 1 (count entities))
-          (should= "world" (:name (first entities)))))
+        (it "returns all found"
+          (let [entities (sut/select-find-by :bibelot [:size] :name "world")
+                world-1  (first (remove :size entities))
+                world-2  (ccc/ffilter :size entities)]
+            (should= 2 (count entities))
+            (should= "world" (:name world-1))
+            (should= nil (:size world-1))
+            (should= "world" (:name world-2))
+            (should= 2 (:size world-2))))
 
-      (it "nil name"
-        (should= [] (sut/select-find-by :bibelot :size 2 :name nil))
-        (let [nil-name (db/tx {:kind :bibelot :name nil :size 2})]
-          (should= [nil-name] (sut/select-find-by :bibelot :size 2 :name nil))))
+        (it "all by size"
+          (let [entities (sut/select-find-by :bibelot [:name] :size 2)]
+            (should= 2 (count entities))
+            (should-contain "world" (map :name entities))
+            (should-contain "hi!" (map :name entities))))
 
-      (it "ffind-by"
-        (let [world (sut/select-ffind-by :bibelot :name "world" :size 2)]
-          (should= "world" (:name world))))
+        (it "nil size"
+          (let [entities (sut/select-find-by :bibelot :name "world" :size nil)]
+            (should= 1 (count entities))
+            (should= "world" (:name (first entities)))))
 
+        (it "nil name"
+          (should= [] (sut/select-find-by :bibelot :size 2 :name nil))
+          (let [nil-name (db/tx {:kind :bibelot :name nil :size 2})]
+            (should= [nil-name] (sut/select-find-by :bibelot :size 2 :name nil))))
+
+        (it "ffind-by"
+          (let [world (sut/select-ffind-by :bibelot :name "world" :size 2)]
+            (should= "world" (:name world))))
+
+        )
       )
+    (context "multi-value fields"
+
+      (helperc/with-schemas config [spec/doodad])
+
+      (it "loading"
+        (let [saved  (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+              loaded (db/entity (:id saved))]
+          (should= (:id loaded) (:id saved))
+          (should= #{"foo" "bar"} (set (:names loaded)))
+          (should= #{8 42} (set (:numbers loaded)))))
+
+      (it "find by attribute"
+        (let [saved  (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+              loaded (sut/select-find-by :doodad :names "bar")]
+          (should= 1 (count loaded))
+          (should= (:id saved) (:id (first loaded)))))
+
+      (it "retracting [string] value"
+        (let [saved   (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+              updated (db/tx saved :names nil)]
+          (should-be-nil (seq (:names updated)))))
+
+      (it "retracting one value from [string]"
+        (let [saved   (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+              updated (db/tx saved :names ["foo"])]
+          (should= #{"foo"} (set (:names updated)))))
+
+      (it "adding one value to [string]"
+        (let [saved   (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+              updated (db/tx saved :names ["foo" "bar" "fizz"])]
+          (should= #{"foo" "bar" "fizz"} (set (:names updated)))))
+
+      (it "find 'not="
+        (let [d1 (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+              d2 (db/tx {:kind :doodad :names ["foo" "bang"] :numbers [8 43]})]
+          (should= [d1] (sut/select-find-by :doodad :names "foo" :numbers ['not= 43]))
+          (should= [d2] (sut/select-find-by :doodad :names "foo" :numbers ['not= 42]))
+          (should= [] (sut/select-find-by :doodad :names "foo" :numbers ['not= 42 43]))
+          (should= [d2] (sut/select-find-by :doodad :names ['not= "bar"] :numbers 8))
+          (should= [d1] (sut/select-find-by :doodad :names ['not= "bang"] :numbers 8))
+          (should= [] (sut/select-find-by :doodad :names ['not= "bar" "bang"] :numbers 8))))
+
+      (it "find or"
+        (let [d1 (db/tx {:kind :doodad :names ["foo" "bar"] :numbers [8 42]})
+              d2 (db/tx {:kind :doodad :names ["foo" "bang"] :numbers [8 43]})]
+          (should= (set [d1 d2]) (spec/set-find-by :doodad :names ["foo" "BLAH"]))
+          (should= (set [d1 d2]) (spec/set-find-by :doodad :names ["bar" "bang"]))
+          (should= [d1] (sut/select-find-by :doodad [:numbers] :names ["bar" "BLAH"]))
+          (should= [] (sut/select-find-by :doodad :names ["ARG" "BLAH"]))))
+      )
+
+    (context "filters"
+      (helperc/with-schemas config [spec/bibelot spec/thingy])
+
+      (context "(populated db)"
+        (before (db/clear)
+                (db/tx {:kind :bibelot :name "hello"})
+                (db/tx {:kind :bibelot :name "world"})
+                (db/tx {:kind :bibelot :name "world" :size 2})
+                (db/tx {:kind :bibelot :name "hi!" :size 2}))
+
+        (it "="
+          (let [result       (sut/select-find-by :bibelot :name ['= "hi!"])
+                result-names (map :name result)]
+            (should-contain "hi!" result-names)
+            (should-not-contain "world" result-names)))
+
+        (it "= many"
+          (let [result       (sut/select-find-by :bibelot :name ['= "hi!" "world"])
+                result-names (map :name result)]
+            (should-contain "hi!" result-names)
+            (should-contain "world" result-names)
+            (should-not-contain "hello" result-names)))
+
+        (it "not= nil"
+          (let [result       (sut/select-find-by :bibelot [:name] :size ['not= nil])
+                result-names (map :name result)]
+            (should-not-contain "hello" result-names)
+            (should-contain "world" result-names)
+            (should-contain "hi!" result-names)))
+
+        (it "or"
+          (let [b1  (db/tx :kind :bibelot :name "Bee" :color "red" :size 1)
+                b2  (db/tx :kind :bibelot :name "Bee" :color "blue" :size 2)
+                b3  (db/tx :kind :bibelot :name "Ant" :color "blue" :size 1)
+                _b4 (db/tx :kind :bibelot :color "blue" :size 1)]
+            (should= (set [b1 b2 b3]) (spec/set-find-by :bibelot :name ["Bee" "Ant"]))
+            (should= (set [b1 b2 b3]) (spec/set-find-by :bibelot :name #{"Bee" "Ant"}))
+            (should= [b3] (sut/select-find-by :bibelot [:size :color] :name ["BLAH" "Ant"]))
+            (should= [] (sut/select-find-by :bibelot :name ["BLAH" "BLAH" "BLAH"]))
+            (should= [] (sut/select-find-by :bibelot :name ["BLAH" "ARG"]))
+            (should= [] (sut/select-find-by :bibelot :name []))))
+
+        (it "returns nothing for empty seq"
+          (should= [] (sut/select-find-by :bibelot :id []))
+          (should= [] (sut/select-find-by :bibelot :name []))
+          (should= [] (sut/select-find-by :bibelot :size []))
+          (should= [] (sut/select-find-by :bibelot :size [] :id []))
+          (should= [] (sut/select-find-by :bibelot :size [] :name []))
+          (should= [] (sut/select-find-by :bibelot :size 2 :name []))
+          (should= [] (sut/select-find-by :bibelot :size [] :id (:id (db/ffind :bibelot))))
+          (should= [] (sut/select-find-by :bibelot :size [] :name "hello"))
+          (should= [] (sut/select-find-by :bibelot :size nil :name [])))
+
+        (it "not= to nothing returns everything"
+          (let [b1 (sut/select-ffind-by :bibelot :name "hello")
+                b2 (sut/select-ffind-by :bibelot :name "world" :size nil)
+                b3 (sut/select-ffind-by :bibelot :name "world" :size 2)
+                b4 (sut/select-ffind-by :bibelot :name "hi!" :size 2)]
+            (should= #{b3 b4} (set (sut/select-find-by :bibelot [:name] :size 2 :id ['not= nil])))
+            (should= #{b3 b4} (set (sut/select-find-by :bibelot [:name] :size 2 :id ['not=])))
+            (should= #{b3 b4} (set (sut/select-find-by :bibelot :size 2 :name ['not=])))
+            (should= #{b2 b3} (set (sut/select-find-by :bibelot :size ['not=] :name "world")))
+            (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot [:size :name] :id ['not=])))
+            (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot [:size :name] :id ['not= nil])))
+            (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot [:name] :size ['not=])))
+            (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot [:size] :name ['not=])))
+            (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot [:size] :name ['not=] :id ['not=])))
+            (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot :name ['not=] :size ['not=])))
+            ))
+
+        (it "< > string"
+          (let [result       (spec/set-find-by :bibelot :name ['> "g"] :name ['< "i"])
+                result-names (map :name result)]
+            (should-contain "hi!" result-names)
+            (should-not-contain "world" result-names)))
+
+        (it "<= >= string"
+          (db/clear)
+          (let [b1 (db/tx :kind :bibelot :name "aaa")
+                b2 (db/tx :kind :bibelot :name "bbb")
+                b3 (db/tx :kind :bibelot :name "ccc")]
+            (should= (set [b1 b2 b3]) (spec/set-find-by :bibelot :name ['>= "aaa"]))
+            (should= (set [b2 b3]) (spec/set-find-by :bibelot :name ['>= "bbb"]))
+            (should= (set [b1 b2 b3]) (spec/set-find-by :bibelot :name ['<= "ccc"]))
+            (should= (set [b1 b2]) (spec/set-find-by :bibelot :name ['<= "bbb"]))))
+
+        (it "< <= > >= long"
+          (db/clear)
+          (let [b1 (db/tx :kind :bibelot :size 1)
+                b2 (db/tx :kind :bibelot :size 2)
+                b3 (db/tx :kind :bibelot :size 3)]
+            (should= (set [b1 b2 b3]) (spec/set-find-by :bibelot :size ['> 0]))
+            (should= (set [b1 b2 b3]) (spec/set-find-by :bibelot :size ['>= 1]))
+            (should= (set [b2 b3]) (spec/set-find-by :bibelot :size ['> 1]))
+            (should= [b3] (sut/select-find-by :bibelot :size ['> 2]))
+            (should= [] (sut/select-find-by :bibelot :size ['> 3]))
+            (should= (set [b1 b2 b3]) (spec/set-find-by :bibelot :size ['< 4]))
+            (should= (set [b1 b2 b3]) (spec/set-find-by :bibelot :size ['<= 3]))
+            (should= (set [b1 b2]) (spec/set-find-by :bibelot :size ['< 3]))
+            (should= [b1] (sut/select-find-by :bibelot :size ['< 2]))
+            (should= [] (sut/select-find-by :bibelot :size ['< 1]))))
+
+        (it "< <= > >= date"
+          (let [thing1 (db/tx :kind :thingy :id 123 :bang (-> 1 time/minutes time/ago))
+                thing2 (db/tx :kind :thingy :id 456 :bang (-> 3 time/minutes time/ago))
+                thing3 (db/tx :kind :thingy :id 789 :bang (-> 5 time/minutes time/ago))]
+            (should= [thing2 thing3] (reverse (sort-by :bang (sut/select-find-by :thingy :bang ['< (-> 2 time/minutes time/ago)]))))
+            (should= [thing2 thing3] (reverse (sort-by :bang (sut/select-find-by :thingy :bang ['<= (:bang thing2)]))))
+            (should= [thing1] (sut/select-find-by :thingy :bang ['> (-> 2 time/minutes time/ago)]))
+            (should= [thing1 thing2] (reverse (sort-by :bang (sut/select-find-by :thingy :bang ['>= (:bang thing2)]))))
+            (should= [thing2] (sut/select-find-by :thingy :bang ['< (-> 2 time/minutes time/ago)] :bang ['> (-> 4 time/minutes time/ago)]))))
+
+        (it "compare against entity with nil value"
+          (db/clear)
+          (let [b1  (db/tx :kind :bibelot :name "1" :size 1)
+                _b2 (db/tx :kind :bibelot :name "nil" :size nil)]
+            (should= [b1] (sut/select-find-by :bibelot [:name] :size ['>= 0]))))
+
+        (it "compare against boolean value"
+          (db/clear)
+          (let [_thing1 (db/tx :kind :thingy :id 123 :truthy? true)
+                thing2  (db/tx :kind :thingy :id 124 :truthy? false)
+                _thing3 (db/tx :kind :thingy :id 125 :truthy? nil)]
+            (should= [thing2] (sut/select-find-by :thingy :truthy? false))))
+
+        (it "like fuzzy match with anything before or after"
+          (let [result       (sut/select-find-by :bibelot :name ['like "%orl%"])
+                result-names (map :name result)]
+            (should-contain "world" result-names)
+            (should-not-contain "hi!" result-names)))
+
+        (it "case-insensitive fuzzy match"
+          (let [result       (sut/select-find-by :bibelot :name ['ilike "%OrL%"])
+                result-names (map :name result)]
+            (should-contain "world" result-names)
+            (should-not-contain "hi!" result-names)))
+
+        (it "like fuzzy match with anything after"
+          (let [_            (db/tx {:kind :bibelot :name "hello world"})
+                result       (sut/select-find-by :bibelot :name ['like "worl%"])
+                result-names (map :name result)]
+            (should-contain "world" result-names)
+            (should-not-contain "hello world" result-names)))
+
+        (it "like fuzzy match with _"
+          (let [_            (db/tx {:kind :bibelot :name "words"})
+                result       (sut/select-find-by :bibelot :name ['like "wor__"])
+                result-names (map :name result)]
+            (should-contain "world" result-names)
+            (should-contain "words" result-names)
+            (should-not-contain "hello" result-names)))
+
+        (it "like with exact match"
+          (let [_            (db/tx {:kind :bibelot :name "words"})
+                result       (sut/select-find-by :bibelot :name ['like "world"])
+                result-names (map :name result)]
+            (should-contain "world" result-names)
+            (should-not-contain "words" result-names)
+            (should-not-contain "hello" result-names)))
+        )
+      )
+
+    #_(context "count"
+      (helper/with-schemas config [bibelot thingy])
+
+      (it "empty db"
+        (should= 0 (sut/count :bibelot))
+        (should= 0 (sut/count-by :bibelot :name "nothing")))
+
+      (context "populated db"
+        (before (sut/clear)
+                (sut/tx {:kind :bibelot :name "hello"})
+                (sut/tx {:kind :bibelot :name "world"})
+                (sut/tx {:kind :bibelot :name "world" :size 2})
+                (sut/tx {:kind :bibelot :name "hi!" :size 2}))
+
+        (it "all"
+          (sut/tx {:kind :thingy :id 123 :name "world"})
+          (should= 4 (sut/count :bibelot))
+          (should= 1 (sut/count :thingy)))
+
+        (it "count-by: :name"
+          (should= 1 (sut/count-by :bibelot :name "hello")))
+
+        (it "count-by: two attributes"
+          (should= 1 (sut/count-by :bibelot :name "world" :size 2)))
+
+        (it "by :id and other attributes"
+          (let [b1 (sut/ffind-by :bibelot :name "hello")
+                b2 (sut/ffind-by :bibelot :name "world" :size nil)
+                b3 (sut/ffind-by :bibelot :name "world" :size 2)
+                b4 (sut/ffind-by :bibelot :name "hi!")]
+            (should= 1 (sut/count-by :bibelot :name "hello" :id (:id b1)))
+            (should= 1 (sut/count-by :bibelot :name "world" :id (:id b2)))
+            (should= 1 (sut/count-by :bibelot :name "world" :id ['not= (:id b2)]))
+            (should= 0 (sut/count-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
+            (should= 1 (sut/count-by :bibelot :size 2 :id (:id b3)))
+            (should= 2 (sut/count-by :bibelot :name "world" :id [(:id b2) (:id b3)]))
+            (should= 2 (sut/count-by :bibelot :size 2 :id [(:id b3) (:id b4)]))))
+        )
+      )
+
     )
   )
