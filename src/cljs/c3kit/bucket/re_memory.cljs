@@ -79,7 +79,7 @@
   and ignore changes to other attributes.
   Only returns the selected and queried attributes of the entity. Always includes kind and id.
   If the second argument is a keyseq, the component will also listen to changes to those attributes
-  and re-render acccordingly.
+  and re-render accordingly.
   Supports all filters options as db/find (['>], ['not=], etc).
 
   `(select-find-by :thingy :id 12354 :foo 5678)`
