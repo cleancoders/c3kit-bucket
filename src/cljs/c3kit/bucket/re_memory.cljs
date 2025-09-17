@@ -27,10 +27,10 @@
 
 (defn- slice-by-kind ([kind] (get @(.-store @api/impl) kind)))
 (defn- slice-by-ids [ids] (select-keys (get @(.-store @api/impl) :all) ids))
-(defn- ids-not-fns? [id] (or (int? id) (int? (first id))))
+(defn- ids-not-fns? [id] (or (int? id) (and (coll? id) (int? (first (remove nil? id))))))
 
 (defn- slice-db [[kind-or-ids keyseq]]
-  (let [slice (if (and (not (keyword? kind-or-ids)) (ids-not-fns? kind-or-ids))
+  (let [slice (if (ids-not-fns? kind-or-ids)
                 (slice-by-ids kind-or-ids)
                 (slice-by-kind kind-or-ids))]
     (map #(select-keys % keyseq) (vals slice))))
@@ -66,20 +66,21 @@
   (set (conj (apply concat colls) :id :kind)))
 
 (defn ->kind-or-ids [kvs-as-map kind]
-  (let [id (:id kvs-as-map)] (if id (cond-> id (int? id) vector) kind)))
+  (let [id (:id kvs-as-map)] (if (some-> id ids-not-fns?) (cond-> id (int? id) vector) kind)))
 
 (defn do-select-find [kind keyseq kvs]
   (let [kvs-as-map (assoc (ccc/->options kvs) :kind kind)
         kvs-keys   (keys kvs-as-map)
         cursor     (r/cursor slice-db [(->kind-or-ids kvs-as-map kind) (->keyseq keyseq kvs-keys)])]
-    (ccc/find-by @cursor kvs-as-map)))
+    (ccc/find-by @cursor (conj (api/-kvs->kv-pairs kvs) [:kind kind]))))
 
 (defn select-find-by
   "Like find-by, but components will only re-render if the selected or queried attributes change
   and ignore changes to other attributes.
-  Only returns the selected and queried attributes of the entity.
+  Only returns the selected and queried attributes of the entity. Always includes kind and id.
   If the second argument is a keyseq, the component will also listen to changes to those attributes
   and re-render acccordingly.
+  Supports all filters options as db/find (['>], ['not=], etc).
 
   `(select-find-by :thingy :id 12354 :foo 5678)`
   `(select-find-by :thingy [:foo :bar] :id 1234)`"
@@ -91,6 +92,6 @@
   (let [[keyseq kvs] (if (coll? (first kvs)) [(first kvs) (rest kvs)] [[] kvs])]
     (first (do-select-find kind keyseq kvs))))
 
-; TODO get commented tests passing
+; TODO select-count-by
 ; TODO drop and take
 ; TODO check for refactor opportunities between do-select-find and do-find
