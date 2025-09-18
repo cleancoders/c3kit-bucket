@@ -40,18 +40,7 @@
    :id   {:type :long}
    :kind (s/kind :disorganized)})
 
-;(def timepiece
-;  {:kind       (s/kind :timepiece)
-;   :id         {:type :long :db {:type "bigint IDENTITY PRIMARY KEY"}}
-;   :created-at {:type :instant}
-;   :updated-at {:type :instant}
-;   :date       {:type :date}
-;   :timestamp  {:type :timestamp}
-;   :value      {:type :string :db {:type "varchar(255)"}}})
-
-(def child :undefined)
-(def original :undefined)
-(def now :undefined)
+(declare child original)
 
 (defn set-find-by [kind & kvs]
   (set (apply sut/find-by kind kvs)))
@@ -209,35 +198,6 @@
         (sut/clear)
         (should= [] (sut/find :bibelot)))
       )
-
-    ;(context "timestamps"
-    ;
-    ;  (helper/with-schemas db-impl [timepiece])
-    ;  (with now (time/now))
-    ;  (with-stubs)
-    ;  (wire-helperc/stub-now @now)
-    ;
-    ;  (it "created-at only populated once"
-    ;    (let [entity  (sut/tx {:kind :timepiece :value "foo"})
-    ;          day-ago (-> 1 time/days time/ago)
-    ;          updated (sut/tx entity :created-at day-ago)]
-    ;      (should= (time/unparse :dense @now) (time/unparse :dense (:created-at entity)))
-    ;      (should= (time/unparse :dense day-ago) (time/unparse :dense (:created-at updated)))
-    ;      (should= (time/unparse :dense day-ago) (time/unparse :dense (:created-at (sut/tx updated :value "bar"))))))
-    ;
-    ;  (it "updated-at always updated"
-    ;    (let [entity  (sut/tx {:kind :timepiece :value "foo"})
-    ;          day-ago (-> 1 time/days time/ago)
-    ;          updated (sut/tx entity :updated-at day-ago)]
-    ;      (should= (time/unparse :dense @now) (time/unparse :dense (:updated-at entity)))
-    ;      (should= (time/unparse :dense @now) (time/unparse :dense (:updated-at updated)))))
-    ;
-    ;  (it "with tx*"
-    ;    (let [entity (first (sut/tx* [{:kind :timepiece :value "foo"}]))]
-    ;      (should= (time/unparse :dense @now) (time/unparse :dense (:created-at entity)))
-    ;      (should= (time/unparse :dense @now) (time/unparse :dense (:updated-at entity)))))
-    ;
-    ;  )
 
     (context "tx*"
 

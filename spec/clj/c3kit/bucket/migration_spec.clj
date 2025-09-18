@@ -11,8 +11,8 @@
 
 (def db-config {:impl         :memory
                 :migration-ns "c3kit.bucket.migration_samples"})
-(declare config)
-(declare now)
+
+(declare config now)
 
 (describe "Migration"
 
@@ -23,7 +23,7 @@
 
     (it "find available migrations - missing :migration-ns"
       (should-throw ExceptionInfo ":migration-ns is missing from the database config."
-                    (sut/-available-migration-names {})))
+        (sut/-available-migration-names {})))
 
     (it "find available migrations - package doesn't exist"
       (log/capture-logs

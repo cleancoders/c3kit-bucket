@@ -14,10 +14,11 @@
 (def SYNC_SCHEMAS "SYNC_SCHEMAS")
 (def migration-name-pattern #"[0-9]{8}.*")
 (defn migration-name? [arg] (boolean (when (string? arg) (re-matches migration-name-pattern arg))))
+(defn- schema-kind [schema] (-> schema :kind :value))
 
 (defn -ensure-migration-schema! [{:keys [-db] :as config}]
   (let [schema (migrator/migration-schema config)]
-    (swap! (.-legend -db) assoc (-> schema :kind :value) schema)
+    (swap! (.-legend -db) assoc (schema-kind schema) schema)
     (when-not (migrator/-schema-exists? -db schema)
       (migrator/-install-schema! -db schema)
       (log/warn "Installed 'migration' schema because it was missing."))))
@@ -44,13 +45,14 @@
 ;; ----- locking -----
 
 (defn -fetch-lock [{:keys [-db] :as config}]
-  (or (-fetch-migration config LOCK) (db/tx- -db {:kind :migration :name LOCK})))
+  (or (-fetch-migration config LOCK)
+      (db/tx- -db {:kind :migration :name LOCK})))
 
 (defn -attempt-lock! [{:keys [-db] :as config}]
   (let [lock (-fetch-lock config)]
     (try
       (db/tx- -db (db/cas {:at nil} (assoc lock :at (time/now))))
-      (catch Exception _ nil))))
+      (catch Exception _))))
 
 (defn -release-lock! [{:keys [-db] :as config}]
   (let [lock (-fetch-lock config)]
@@ -69,10 +71,10 @@
     (log/report "Waiting for lock to release...")
     (let [attempts (/ lock-wait-time lock-check-delay)]
       (loop [attempts attempts]
-        (when (not (pos? attempts))
+        (when-not (pos? attempts)
           (throw (Exception. "Migration failed to acquire lock on database!")))
         (when (-locked? config)
-          (Thread/sleep lock-check-delay)
+          (Thread/sleep ^Long lock-check-delay)
           (recur (dec attempts)))))))
 
 (defn -attempt-with-lock [{:keys [-preview?] :as config} action-fn]
@@ -115,14 +117,13 @@
 (defn- str> [a b] (pos? (compare a b)))
 (defn- str< [a b] (neg? (compare a b)))
 (defn- str<= [a b] (not (str> a b)))
-(defn- str>= [a b] (not (str< a b)))
 
 (defn- calculate-ups [available current target]
   (filter #(and (str> % current) (str<= % target)) available))
 
 (defn- calculate-downs [available existing current target]
   (let [available-path (filter #(and (str> % target) (str<= % current)) available)
-        existing-path  (filter #(and (str> % target)) existing)]
+        existing-path  (filter #(str> % target) existing)]
     (when-not (= available-path existing-path)
       (throw (Exception. (str target " - can't find consistent path down. migration(s) were not recorded."))))
     (reverse existing-path)))
@@ -190,13 +191,15 @@
 ;; ----- synchronization -----
 
 (defn valid-type? [expected actual-type]
-  (if (vector? actual-type)
-    (apply = (map #(-> % first name str/lower-case) [expected actual-type]))
-    (= (str/lower-case (name expected)) (str/lower-case (name actual-type)))))
+  (let [[expected actual-type] (cond->> [expected actual-type]
+                                        (vector? actual-type)
+                                        (map first))]
+    (= (str/lower-case (name expected))
+       (str/lower-case (name actual-type)))))
 
-(defn- sync-attribute [{:keys [-preview? -db] :as config} schema attr installed-attrs]
+(defn- sync-attribute [{:keys [-preview? -db]} schema attr installed-attrs]
   (let [spec (get schema attr)
-        kind (-> schema :kind :value)]
+        kind (schema-kind schema)]
     (if-let [actual-type (or (get-in installed-attrs [attr :db :type]) (get-in installed-attrs [attr :type]))]
       (let [expected (or (-> spec :db :type) (:type spec))]
         (when-not (valid-type? expected actual-type)
@@ -208,13 +211,13 @@
   (let [expected (set (keys (dissoc schema :kind)))
         actual   (set (keys attributes))
         extra    (set/difference actual expected)
-        kind     (-> schema :kind :value)]
+        kind     (schema-kind schema)]
     (doseq [attr extra]
       (log/warn (str kind "/" (name attr) " - extra attribute. Unused?")))))
 
 ;; TODO - MDM: Handle name translation here.
 (defn- sync-kind [{:keys [-preview? -db -installed-legend] :as config} schema]
-  (let [kind            (-> schema :kind :value)
+  (let [kind            (schema-kind schema)
         installed-attrs (get -installed-legend kind)]
     (if (seq installed-attrs)
       (doseq [attr (sort (keys (dissoc schema :kind)))]
@@ -224,7 +227,8 @@
     (log-extra-attributes schema installed-attrs)))
 
 (defn- fetch-sync [{:keys [-db] :as config}]
-  (or (-fetch-migration config SYNC_SCHEMAS) (db/tx- -db {:kind :migration :name SYNC_SCHEMAS})))
+  (or (-fetch-migration config SYNC_SCHEMAS)
+      (db/tx- -db {:kind :migration :name SYNC_SCHEMAS})))
 
 (def ^:private sync-buffer-time (time/minutes 3))
 
@@ -238,9 +242,9 @@
   (let [legend           (legend/build schemas)
         installed-legend (migrator/-installed-schema-legend -db legend)
         config           (assoc config :-installed-legend installed-legend :_expected-legend legend)]
-    (doseq [schema (sort-by #(-> % :kind :value) schemas)]
+    (doseq [schema (sort-by schema-kind schemas)]
       (sync-kind config schema))
-    (let [expected (set (map #(-> % :kind :value) schemas))
+    (let [expected (set (map schema-kind schemas))
           actual   (set (keys installed-legend))
           extra    (disj (set/difference actual expected) :migration)]
       (doseq [kind (sort extra)]
@@ -271,13 +275,13 @@
 
 ;; ----- Main -----
 
-(defn- list-migrations [{:keys [-db] :as config}]
+(defn- list-migrations [config]
   (-ensure-migration-schema! config)
   (let [available (-available-migration-names config)
         applied   (reduce #(assoc %1 (:name %2) %2) {} (-applied-migrations config))]
     (println "\nmigration listing:\n")
     (println (format "%-50s %-20s" "Migration" "Applied At"))
-    (println (apply str (take 75 (repeat "-"))))
+    (println (apply str (repeat 75 "-")))
     (doseq [name available]
       (let [at (get-in applied [name :at])]
         (println (format "%-50s %s" name (if at (time/unparse :iso8601 at) "")))))))
