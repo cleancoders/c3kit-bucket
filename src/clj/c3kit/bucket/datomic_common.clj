@@ -70,9 +70,6 @@
           spec        (if (seq db) (assoc spec :db db) spec)]
       [kind attr-name spec])))
 
-(defn all-attributes->specs [attributes]
-  (->> attributes (map attribute->spec) (remove nil?)))
-
 (defprotocol DatomicApi
   (connect [this])
   (db [this])
