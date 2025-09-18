@@ -65,26 +65,32 @@
   "Returns the legend (map of :kind -> schema) of the database implementation."
   [db] (deref (.-legend db)))
 
+(defn entity-
+  "entity with explicit db"
+  ([db id] (entity- db nil id))
+  ([db kind id] (when id (-entity db kind id))))
+
 (defn entity
   "Retrieve an entity by its id.
   kind is required by some implementations, otherwise nil is returned when the kind does not match."
-  ([id] (when id (-entity @impl nil id)))
-  ([kind id] (when id (-entity @impl kind id))))
-
-(defn entity-
-  "entity with explicit db"
-  ([db id] (when id (-entity db nil id)))
-  ([db kind id] (when id (-entity db kind id))))
-
-(defn entity!
-  "Like entity but throws an Exception when the entity doesn't exist."
-  ([id] (entity! nil id))
-  ([kind id] (or (entity kind id) (throw (ex-info "Entity missing!" {:kind kind :id id})))))
+  ([id] (entity- @impl id))
+  ([kind id] (entity- @impl kind id)))
 
 (defn entity!-
   "entity! with explicit db"
   ([db id] (entity!- db nil id))
-  ([db kind id] (or (entity- db kind id) (throw (ex-info "Entity missing!" {:kind kind :id id})))))
+  ([db kind id]
+   (or (entity- db kind id)
+       (throw (ex-info "Entity missing!" {:kind kind :id id})))))
+
+(defn entity!
+  "Like entity but throws an Exception when the entity doesn't exist."
+  ([id] (entity!- @impl id))
+  ([kind id] (entity!- @impl kind id)))
+
+(defn find-
+  "find with explicit db"
+  [db kind & opt-args] (-find db kind (ccc/->options opt-args)))
 
 (defn find
   "Searches for entities.
@@ -98,35 +104,31 @@ Options:
     ['< value]    - (< % value)
     ['like str]   - (re-matches str %) where '_' = single char wildcard and '%' = multi char wildcard
   :take   - int - returns only this many entities"
-  ([kind & opt-args] (-find @impl kind (ccc/->options opt-args))))
-
-(defn find-
-  "find with explicit db"
-  ([db kind & opt-args] (-find db kind (ccc/->options opt-args))))
-
-(defn ffind
-  "Shorthand for (ffind kind :where {k1 v1 ...})"
-  [kind & opt-args] (first (-find @impl kind (assoc (ccc/->options opt-args) :take 1))))
+  [kind & opt-args] (apply find- @impl kind opt-args))
 
 (defn ffind-
   "ffind with explicit db"
   [db kind & opt-args] (first (-find db kind (assoc (ccc/->options opt-args) :take 1))))
 
-(defn find-by
+(defn ffind
   "Shorthand for (ffind kind :where {k1 v1 ...})"
-  [kind & kvs] (-find @impl kind {:where (-kvs->kv-pairs kvs)}))
+  [kind & opt-args] (apply ffind- @impl kind opt-args))
 
 (defn find-by-
   "find-by with explicit db"
   [db kind & kvs] (-find db kind {:where (-kvs->kv-pairs kvs)}))
 
-(defn ffind-by
+(defn find-by
   "Shorthand for (ffind kind :where {k1 v1 ...})"
-  [kind & kvs] (first (-find @impl kind {:where (-kvs->kv-pairs kvs) :take 1})))
+  [kind & kvs] (apply find-by- @impl kind kvs))
 
 (defn ffind-by-
   "ffind-by with explicit db"
-  [db kind & kvs] (first (-find db kind {:where (-kvs->kv-pairs kvs) :take 1})))
+  [db kind & kvs] (ffind- db kind {:where (-kvs->kv-pairs kvs)}))
+
+(defn ffind-by
+  "Shorthand for (ffind kind :where {k1 v1 ...})"
+  [kind & kvs] (apply ffind-by- @impl kind kvs))
 
 (defn reduce-
   "reduce with explicit db"
@@ -138,24 +140,23 @@ Useful when processing many entities without loading them all at the same time.
     f       - (fn [result entity] ...)
     init    - initial value for reduction
     options - same as for find"
-  [kind f init & opt-args] (-reduce @impl kind f init (ccc/->options opt-args)))
-
-(defn count
-  "Count the number of entities that match the provided filters."
-  [kind & opt-args]
-  (-count @impl kind (ccc/->options opt-args)))
+  [kind f init & opt-args] (apply reduce- @impl kind f init opt-args))
 
 (defn count-
   "count with explicit db"
   [db kind & opt-args] (-count db kind (ccc/->options opt-args)))
 
-(defn count-by
-  "Shorthand for (count kind :where {k1 v1 ...})"
-  [kind & kvs] (-count @impl kind {:where (-kvs->kv-pairs kvs)}))
+(defn count
+  "Count the number of entities that match the provided filters."
+  [kind & opt-args] (apply count- @impl kind opt-args))
 
 (defn count-by-
   "count-by with explicit db"
-  [db kind & kvs] (-count db kind {:where (-kvs->kv-pairs kvs)}))
+  [db kind & kvs] (count- db kind {:where (-kvs->kv-pairs kvs)}))
+
+(defn count-by
+  "Shorthand for (count kind :where {k1 v1 ...})"
+  [kind & kvs] (apply count-by- @impl kind kvs))
 
 (defn tx-
   "tx with explicit db"
@@ -225,14 +226,6 @@ Useful when processing many entities without loading them all at the same time.
 Presumably only for tests or in-memory implementation, but it will work on any implementation.
 Requires the *safety* be turned off."
   [] (-clear @impl))
-
-;(defn close-
-;  "close with explicit db"
-;  [db] (-close db))
-;
-;(defn close
-;  "Close the database."
-;  [] (-close @impl))
 
 (defmulti -create-impl (fn [config _schema] (:impl config)))
 (defn create-db

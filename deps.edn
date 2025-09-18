@@ -1,26 +1,26 @@
 {
  :paths   ["src/clj" "src/cljc" "src/cljs"]
  :deps    {
-           com.cleancoders.c3kit/apron {:mvn/version "2.2.2"}
+           com.cleancoders.c3kit/apron {:mvn/version "2.2.3"}
            cljsjs/hashids              {:mvn/version "1.0.2-0"}
            jstrutz/hashids             {:mvn/version "1.0.1"}
-           org.clojure/clojure         {:mvn/version "1.12.1"}
+           org.clojure/clojure         {:mvn/version "1.12.2"}
            }
  :aliases {
            :test    {:extra-deps    {
-                                     clj-commons/pomegranate           {:mvn/version "1.2.24"}
+                                     clj-commons/pomegranate           {:mvn/version "1.2.25"}
                                      com.cleancoders.c3kit/scaffold    {:mvn/version "2.2.0"}
                                      com.datomic/datomic-free          {:mvn/version "0.9.5697" :exclusions [com.google.guava/guava]}
                                      com.datomic/client-cloud          {:mvn/version "1.0.131"}
                                      com.datomic/local                 {:mvn/version "1.0.291"}
-                                     com.github.seancorfield/next.jdbc {:mvn/version "1.3.1048"}
+                                     com.github.seancorfield/next.jdbc {:mvn/version "1.3.1070"}
                                      com.h2database/h2                 {:mvn/version "2.3.232"}
                                      com.mchange/c3p0                  {:mvn/version "0.11.2"}
                                      com.microsoft.sqlserver/sqljdbc4  {:mvn/version "4.0"}
-                                     io.github.clojure/tools.build     {:mvn/version "0.10.9"}
+                                     io.github.clojure/tools.build     {:mvn/version "0.10.10"}
                                      org.clojure/clojurescript         {:mvn/version "1.11.132"}
                                      org.postgresql/postgresql         {:mvn/version "42.7.7"}
-                                     org.xerial/sqlite-jdbc            {:mvn/version "3.50.2.0"}
+                                     org.xerial/sqlite-jdbc            {:mvn/version "3.50.3.0"}
                                      speclj/speclj                     {:mvn/version "3.10.0"}
                                      }
                      :override-deps {
@@ -33,8 +33,8 @@
            :cljs    {:main-opts ["-m" "c3kit.scaffold.cljs"]}
            :antq    {:deps      {com.github.liquidz/antq {:mvn/version "2.11.1276"}}
                      :main-opts ["-m" "antq.core"]}
-           :build   {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.10.9"}
-                                   clj-commons/pomegranate       {:mvn/version "1.2.24"}}
+           :build   {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.10.10"}
+                                   clj-commons/pomegranate       {:mvn/version "1.2.25"}}
                      :ns-default  build
                      :extra-paths ["dev"]
                      }
