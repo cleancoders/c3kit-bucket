@@ -2,7 +2,7 @@
   (:require
     [c3kit.apron.log :as log]
     [c3kit.bucket.hashid :as sut]
-    [speclj.core #?(:clj :refer :cljs :refer-macros) [context describe it should= should-contain should-throw before]]))
+    [speclj.core #?(:clj :refer :cljs :refer-macros) [describe it should=]]))
 
 (def hashid-fns (sut/hashid-fns "test" 8))
 (def id->hash (:id->hash hashid-fns))

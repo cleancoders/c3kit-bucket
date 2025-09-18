@@ -6,7 +6,6 @@
             [c3kit.bucket.api :as api]
             [c3kit.bucket.h2 :as h2]
             [c3kit.bucket.impl-spec :as spec]
-            [c3kit.bucket.jdbc :as jdbc]
             [c3kit.bucket.jdbc :as sut]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
@@ -78,13 +77,13 @@
    `(it (pr-str ~type)
       (helper/with-impl ~config [(-> variform
                                      (assoc-in [:variant :type] ~type)
-                                     (assoc-in [:id :db :type] (jdbc/auto-int-primary-key (:dialect ~config))))]
-                        (let [expected# ~expected
-                              variform# (api/tx {:kind :variform :variant ~value})]
-                          (should= expected# (:variant variform#))
-                          (should= expected# (:variant (api/reload variform#)))
-                          (should= (api/soft-delete variform#) (api/delete variform#))
-                          (should-be-nil (api/reload variform#)))))))
+                                     (assoc-in [:id :db :type] (sut/auto-int-primary-key (:dialect ~config))))]
+        (let [expected# ~expected
+              variform# (api/tx {:kind :variform :variant ~value})]
+          (should= expected# (:variant variform#))
+          (should= expected# (:variant (api/reload variform#)))
+          (should= (api/soft-delete variform#) (api/delete variform#))
+          (should-be-nil (api/reload variform#)))))))
 
 (defn type-specs [config]
   (context "data types"
@@ -115,7 +114,7 @@
       (helper/with-impl
         config [(-> variform
                     (assoc-in [:variant :type] :uuid)
-                    (assoc-in [:id :db :type] (jdbc/auto-int-primary-key (:dialect config))))]
+                    (assoc-in [:id :db :type] (sut/auto-int-primary-key (:dialect config))))]
         (let [uuid     (random-uuid)
               str-uuid (str uuid)
               entity   (api/tx {:kind :variform :variant str-uuid})]
@@ -139,10 +138,10 @@
     ))
 
 (defn regurgitate-spec [db spec]
-  (jdbc/drop-table db "foo")
+  (sut/drop-table db "foo")
   (let [schema     {:kind (schema/kind :foo) :bar spec}
         legend     {:foo schema}
-        _          (jdbc/create-table-from-schema db schema)
+        _          (sut/create-table-from-schema db schema)
         new-legend (migrator/-installed-schema-legend db legend)]
     (get-in new-legend [:foo :bar])))
 
@@ -357,8 +356,8 @@
           (should-be-nil (api/tx saved))))
 
       (it "casts parameters to a predefined sql type"
-        (jdbc/execute! "create type If not exists spell_type as enum (1, 2, 3)")
-        (jdbc/execute! "ALTER TABLE thingy ALTER COLUMN spell TYPE spell_type")
+        (sut/execute! "create type If not exists spell_type as enum (1, 2, 3)")
+        (sut/execute! "ALTER TABLE thingy ALTER COLUMN spell TYPE spell_type")
         (let [saved (api/tx {:kind :thingy :id 123 :spell 1})]
           (should= saved (api/ffind-by :thingy :spell 1))))
       )
@@ -392,7 +391,7 @@
     (context "migrator"
 
       (with db (api/create-db config []))
-      (before (doseq [table (jdbc/existing-tables @db)] (jdbc/drop-table @db table)))
+      (before (doseq [table (sut/existing-tables @db)] (sut/drop-table @db table)))
 
       (it "schema"
         (let [schema (migrator/migration-schema {:impl :jdbc})]
@@ -403,7 +402,7 @@
           (should= {:type "timestamp"} (-> schema :at :db))))
 
       (it "installed-schema-legend"
-        (let [_      (jdbc/create-table-from-schema @db bibelot)
+        (let [_      (sut/create-table-from-schema @db bibelot)
               result (migrator/-installed-schema-legend @db {:bibelot bibelot})]
           (should= {:type :long :db {:type "serial PRIMARY KEY"}} (-> result :bibelot :id))
           (should= {:type :string :db {:type "varchar(42)"}} (-> result :bibelot :name))
@@ -433,9 +432,9 @@
         (should= true (migrator/-schema-exists? @db bibelot)))
 
       (it "column-exists?"
-        (should= false (jdbc/column-exists? @db "bibelot" "name"))
+        (should= false (sut/column-exists? @db "bibelot" "name"))
         (migrator/-install-schema! @db bibelot)
-        (should= true (jdbc/column-exists? @db "bibelot" "name")))
+        (should= true (sut/column-exists? @db "bibelot" "name")))
 
       (it "add-attribute!"
         (let [_      (migrator/-install-schema! @db bibelot)

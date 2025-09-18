@@ -1,5 +1,9 @@
+### Next
+ * Upgrade dependencies
+ * Remove deprecated namespaces
+
 ### 2.3.2
-* FIX: `nil` values in seqs passed in to Datomic's `find-by :id` now works
+ * FIX: `nil` values in seqs passed in to Datomic's `find-by :id` now works
 
 ### 2.3.1
  * FIX: `nil` values passed in to Datomic's `find-by :id` now works

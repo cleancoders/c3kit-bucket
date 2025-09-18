@@ -3,7 +3,7 @@
     [c3kit.apron.log :as log]
     [c3kit.bucket.api :as db]
     [c3kit.bucket.migrator :as migrator]
-    [speclj.core #?(:clj :refer :cljs :refer-macros) [around focus-context before context describe it should-not-contain should-not-throw should-throw should= with]]
+    [speclj.core #?(:clj :refer :cljs :refer-macros) [around before context describe it should-not-contain should-not-throw should-throw should= with]]
     [c3kit.bucket.api :as api #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
     [c3kit.bucket.impl-spec :as spec]
     [c3kit.bucket.memory :as sut]))

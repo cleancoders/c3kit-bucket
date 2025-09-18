@@ -1,11 +1,10 @@
 (ns c3kit.bucket.datomic-cloud-spec
   (:require [c3kit.apron.log :as log]
-            [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.datomic-cloud :as sut]
             [c3kit.bucket.datomic-common :as common-api]
-            [c3kit.bucket.impl-spec :as spec]
+            [c3kit.bucket.impl-spec :as impl-spec]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all])
@@ -20,16 +19,7 @@
              :endpoint      "https://d13mjr7yek.execute-api.us-west-2.amazonaws.com/"
              :region        "us-west-2"})
 
-(def bibelot
-  {:kind  (s/kind :bibelot)
-   :id    {:type :long}
-   :name  {:type :string}
-   :size  {:type :long}
-   :color {:type :string}})
-
-
-(declare db)
-(declare biby)
+(declare db biby)
 (defn sleep [entity] (Thread/sleep 10) entity)
 
 (describe "Datomic Cloud"
@@ -38,19 +28,19 @@
   (around [it] (api/with-safety-off (it)))
 
   (context "api"
-    (spec/crud-specs config)
-    (spec/nil-value-specs config)
-    (spec/find-specs config)
-    (spec/filter-specs config)
-    (spec/reduce-specs config)
-    (spec/count-specs config)
-    (spec/kind-in-entity-is-optional config)
-    (spec/multi-value-fields config)
-    (spec/cas config)
+    (impl-spec/crud-specs config)
+    (impl-spec/nil-value-specs config)
+    (impl-spec/find-specs config)
+    (impl-spec/filter-specs config)
+    (impl-spec/reduce-specs config)
+    (impl-spec/count-specs config)
+    (impl-spec/kind-in-entity-is-optional config)
+    (impl-spec/multi-value-fields config)
+    (impl-spec/cas config)
     )
 
   (context "ref attribute"
-    (helper/with-schemas config [spec/bibelot (assoc spec/thingy :fuzz {:type :ref}) spec/disorganized])
+    (helper/with-schemas config [impl-spec/bibelot (assoc impl-spec/thingy :fuzz {:type :ref}) impl-spec/disorganized])
 
     (it "saves just the id"
       (let [bibelot (api/tx {:kind :bibelot :name "bibby"})
@@ -59,32 +49,32 @@
         (should (api/entity (:fuzz thingy)))))
 
     #_(focus-it "testin stuff"
-      (let [bibelot (api/tx {:kind :bibelot :name "bibby"})
-            thingy  (api/tx {:kind :thingy :id 123 :name "thingy" :fuzz (:id bibelot)})]
-        ;(should= thingy (api/entity (:id thingy)))
-        (should= 1 (sut/q
-                     (concat
-                       '[:find ?e
-                         :where
-                         (or [?e :thingy/name]
-                             [?e :thingy/fuzz])
-                         ]
-                       [
-                        [(list '= '?e (:id thingy))]
-                        ;[(list 'contains? #{(:id thingy)} '?e)]
-                        ]
-                       )
-                     ;'[:find ?e
-                     ;  :in $ ?q
-                     ;  :where
-                     ;  [?e :thingy/name "thingy"]
-                     ;  [(contains? ?q ?e)]
-                     ;  ;[?t _ _ ?id]
-                     ;  ;[(= ?q ?e)]
-                     ;  ]
-                     ;#{(:id thingy)}
-                     ))
-        ))
+        (let [bibelot (api/tx {:kind :bibelot :name "bibby"})
+              thingy  (api/tx {:kind :thingy :id 123 :name "thingy" :fuzz (:id bibelot)})]
+          ;(should= thingy (api/entity (:id thingy)))
+          (should= 1 (sut/q
+                       (concat
+                         '[:find ?e
+                           :where
+                           (or [?e :thingy/name]
+                               [?e :thingy/fuzz])
+                           ]
+                         [
+                          [(list '= '?e (:id thingy))]
+                          ;[(list 'contains? #{(:id thingy)} '?e)]
+                          ]
+                         )
+                       ;'[:find ?e
+                       ;  :in $ ?q
+                       ;  :where
+                       ;  [?e :thingy/name "thingy"]
+                       ;  [(contains? ?q ?e)]
+                       ;  ;[?t _ _ ?id]
+                       ;  ;[(= ?q ?e)]
+                       ;  ]
+                       ;#{(:id thingy)}
+                       ))
+          ))
     )
 
   (context "safety"
@@ -95,7 +85,7 @@
 
   (context "unique behavior"
 
-    (with db (api/create-db config [spec/bibelot]))
+    (with db (api/create-db config [impl-spec/bibelot]))
 
     (it "one kv with nil value"
       (log/capture-logs
@@ -105,7 +95,7 @@
     )
 
   (context "find-datalog"
-    (helper/with-schemas config [bibelot])
+    (helper/with-schemas config [impl-spec/bibelot])
 
     (it "returns proper entity"
       (api/tx {:kind :bibelot :name "bibby"})
@@ -126,14 +116,14 @@
         (should= [:unique-value] (-> schema :name :db))))
 
     (it "installed-schema-legend"
-      (let [_      (common-api/transact! @db (common-api/->db-schema spec/bibelot false))
-            result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
+      (let [_      (common-api/transact! @db (common-api/->db-schema impl-spec/bibelot false))
+            result (migrator/-installed-schema-legend @db {:bibelot impl-spec/bibelot})]
         (should= {:type :string} (-> result :bibelot :name))
         (should= {:type :long} (-> result :bibelot :size))
         (should= {:type :string} (-> result :bibelot :color))))
 
     (it "install-schema!"
-      (let [schema (assoc-in spec/bibelot [:kind :value] :bubble)
+      (let [schema (assoc-in impl-spec/bibelot [:kind :value] :bubble)
             _      (migrator/-install-schema! @db schema)
             result (migrator/-installed-schema-legend @db {:bubble schema})]
         (should= {:type :string} (-> result :bubble :name))
@@ -141,22 +131,22 @@
         (should= {:type :string} (-> result :bubble :color))))
 
     (it "schema-exists?"
-      (should= false (migrator/-schema-exists? @db spec/bibelot))
-      (migrator/-install-schema! @db spec/bibelot)
-      (should= true (migrator/-schema-exists? @db spec/bibelot)))
+      (should= false (migrator/-schema-exists? @db impl-spec/bibelot))
+      (migrator/-install-schema! @db impl-spec/bibelot)
+      (should= true (migrator/-schema-exists? @db impl-spec/bibelot)))
 
     (it "add-attribute!"
       (let [_      (migrator/-add-attribute! @db :gum :name {:type :string})
-            result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
+            result (migrator/-installed-schema-legend @db {:bibelot impl-spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "add-attribute! - schema attr"
-      (let [_      (migrator/-add-attribute! @db (assoc-in spec/bibelot [:kind :value] :gum) :name)
-            result (migrator/-installed-schema-legend @db {:bibelot spec/bibelot})]
+      (let [_      (migrator/-add-attribute! @db (assoc-in impl-spec/bibelot [:kind :value] :gum) :name)
+            result (migrator/-installed-schema-legend @db {:bibelot impl-spec/bibelot})]
         (should= {:type :string} (-> result :gum :name))))
 
     (it "remove-attribute!"
-      (let [_          (migrator/-install-schema! @db spec/bibelot)
+      (let [_          (migrator/-install-schema! @db impl-spec/bibelot)
             bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
             _          (migrator/-remove-attribute! @db :bibelot :color)
             reloaded   (api/reload- @db bibelot)
@@ -165,14 +155,14 @@
         (should-not-contain :color (:bibelot new-legend))))
 
     (it "remove-attribute! that doesn't exist"
-      (migrator/-install-schema! @db spec/bibelot)
+      (migrator/-install-schema! @db impl-spec/bibelot)
       (log/capture-logs
         (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
         (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
     (it "remove-attribute! - multi"                         ;
       (let [db         (api/create-db config [])
-            _          (migrator/-install-schema! db spec/doodad)
+            _          (migrator/-install-schema! db impl-spec/doodad)
             doodad     (api/tx- db {:kind :doodad :names ["bill" "bob"] :numbers [123 456]})
             _          (migrator/-remove-attribute! db :doodad :numbers)
             reloaded   (api/reload- db doodad)
@@ -181,7 +171,7 @@
         (should-not-contain :numbers (:doodad new-legend))))
 
     (it "rename-attribute!"
-      (let [_          (migrator/-install-schema! @db spec/bibelot)
+      (let [_          (migrator/-install-schema! @db impl-spec/bibelot)
             bibelot    (api/tx- @db {:kind :bibelot :name "red" :size 2 :color "red"})
             _          (migrator/-rename-attribute! @db :bibelot :color :bibelot :hue)
             new-legend (migrator/-installed-schema-legend @db nil)
@@ -191,16 +181,16 @@
         (should= :string (get-in new-legend [:bibelot :hue :type]))))
 
     (it "rename-attribute! - new attribute exists"
-      (migrator/-install-schema! @db spec/bibelot)
+      (migrator/-install-schema! @db impl-spec/bibelot)
       (should-throw (migrator/-rename-attribute! @db :bibelot :color :bibelot :size)))
 
     (it "rename-attribute! - existing missing"
-      (migrator/-install-schema! @db spec/bibelot)
+      (migrator/-install-schema! @db impl-spec/bibelot)
       (log/capture-logs
         (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size)))))
 
   (context "history"
-    (helper/with-schemas config [spec/bibelot spec/thingy])
+    (helper/with-schemas config [impl-spec/bibelot impl-spec/thingy])
     (with biby (-> (api/tx :kind :bibelot :name "Biby" :size 1 :color "blue")
                    sleep
                    (api/tx :size 2)

@@ -1,22 +1,8 @@
 (ns c3kit.bucket.api-spec
   (:require [c3kit.bucket.api :as api]
-            [speclj.core #?(:clj :refer :cljs :refer-macros) [after after-all around around-all before before before-all
-                                                              context describe focus-context focus-describe focus-it it
-                                                              pending should should-be should-be-a should-be-nil
-                                                              should-be-same should-contain should-end-with should-fail
-                                                              should-have-invoked should-invoke should-not should-not
-                                                              should-not-be should-not-be-a should-not-be-nil
-                                                              should-not-be-same should-not-contain should-not-end-with
-                                                              should-not-have-invoked should-not-invoke
-                                                              should-not-start-with should-not-throw should-not=
-                                                              should-not== should-start-with should-throw should<
-                                                              should<= should= should== should> should>= stub tags
-                                                              with with-all with-stubs xit redefs-around]]
+            [speclj.core #?(:clj :refer :cljs :refer-macros) [context describe it should-contain should-have-invoked
+                                                              should-not-contain should-throw should= stub with-stubs]]
             [c3kit.bucket.api :as sut #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
-            [c3kit.bucket.spec-helperc :as helper]
-            [c3kit.apron.log :as log]
-            [c3kit.apron.schema :as s]
-            [c3kit.apron.time :as time :refer [ago minutes]]
             #?(:clj [c3kit.apron.util :as util])))
 
 (describe "API"

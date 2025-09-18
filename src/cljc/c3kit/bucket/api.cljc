@@ -24,7 +24,7 @@
 
 #?(:clj  (defonce impl (app/resolution! :bucket/impl))
    :cljs (def impl (atom nil)))
-#?(:cljs (def set-impl! (partial reset! impl)))
+#?(:cljs (defn set-impl! [db] (reset! impl db)))
 
 (defn -id-type [legend kind] (get-in (legend/for-kind legend kind) [:id :type]))
 (defn -coerced-id
