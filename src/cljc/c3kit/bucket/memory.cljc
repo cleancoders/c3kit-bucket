@@ -1,14 +1,12 @@
 (ns c3kit.bucket.memory
   (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
-  (:require
-   [c3kit.apron.corec :as ccc]
-   [c3kit.apron.legend :as legend]
-   [c3kit.apron.log :as log]
-   [c3kit.apron.schema :as schema]
-   [c3kit.apron.utilc :as utilc]
-   [c3kit.bucket.api :as api]
-   [c3kit.bucket.migrator :as migrator]
-   [clojure.string :as str]))
+  (:require [c3kit.apron.corec :as ccc]
+            [c3kit.apron.legend :as legend]
+            [c3kit.apron.log :as log]
+            [c3kit.apron.schema :as schema]
+            [c3kit.apron.utilc :as utilc]
+            [c3kit.bucket.api :as api]
+            [c3kit.bucket.migrator :as migrator]))
 
 (def ^:private id-source (atom 1000))
 (defn- gen-id [] (swap! id-source inc))
@@ -117,7 +115,7 @@
                               (dissoc kind))))))
 
 (defn- do-install-schema! [db schema]
-  (let [kind (-> schema :kind :value)]
+  (let [kind (api/-schema-kind schema)]
     (swap! (.-legend db) assoc kind schema)))
 
 (defn do-remove-attribute! [db kind attr]
@@ -152,11 +150,11 @@
   (-tx [this entity] (tx this entity))
   (-tx* [this entities] (tx* this entities))
   migrator/Migrator
-  (-schema-exists? [this schema] (contains? @legend (-> schema :kind :value)))
-  (-installed-schema-legend [this _expected-legend] @legend)
+  (-schema-exists? [_this schema] (contains? @legend (api/-schema-kind schema)))
+  (-installed-schema-legend [_this _expected-legend] @legend)
   (-install-schema! [this schema] (do-install-schema! this schema))
   (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))
-  (-add-attribute! [this kind attr spec] (swap! legend assoc-in [kind attr] spec))
+  (-add-attribute! [_this kind attr spec] (swap! legend assoc-in [kind attr] spec))
   (-remove-attribute! [this kind attr] (do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (do-rename-attribute! this kind attr new-kind new-attr)))
 

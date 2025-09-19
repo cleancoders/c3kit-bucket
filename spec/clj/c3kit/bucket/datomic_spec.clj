@@ -115,6 +115,15 @@
         (should= {:type :long} (-> result :bubble :size))
         (should= {:type :string} (-> result :bubble :color))))
 
+    (it "install-schema! - enum"
+      (migrator/-install-schema! @db spec/bibelot-states)
+      (let [result (migrator/-installed-schema-legend @db {:bibelot.state spec/bibelot-states})
+            values (-> result :bibelot.state :values)]
+        (should= :bibelot.state (-> result :bibelot.state :enum))
+        (should-contain :pending values)
+        (should-contain :active values)
+        (should-contain :disabled values)))
+
     (it "schema-exists?"
       (should= false (migrator/-schema-exists? @db spec/bibelot))
       (migrator/-install-schema! @db spec/bibelot)

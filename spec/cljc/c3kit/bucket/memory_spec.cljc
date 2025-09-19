@@ -1,12 +1,11 @@
 (ns c3kit.bucket.memory-spec
-  (:require
-    [c3kit.apron.log :as log]
-    [c3kit.bucket.api :as db]
-    [c3kit.bucket.migrator :as migrator]
-    [speclj.core #?(:clj :refer :cljs :refer-macros) [around before context describe it should-not-contain should-not-throw should-throw should= with]]
-    [c3kit.bucket.api :as api #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
-    [c3kit.bucket.impl-spec :as spec]
-    [c3kit.bucket.memory :as sut]))
+  (:require [c3kit.apron.log :as log]
+            [c3kit.bucket.api :as db]
+            [c3kit.bucket.migrator :as migrator]
+            [speclj.core #?(:clj :refer :cljs :refer-macros) [around before context describe it should-contain should-not-contain should-not-throw should-throw should= with]]
+            [c3kit.bucket.api :as api #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
+            [c3kit.bucket.impl-spec :as spec]
+            [c3kit.bucket.memory :as sut]))
 
 (def config {:impl :memory})
 (declare db)
@@ -36,7 +35,7 @@
     (let [store (atom {:foo :bar})
           db    (db/create-db {:impl :memory :store store} [])]
       (should= :bar (:foo @(.-store db)))))
-  
+
   (describe "migrator"
 
     (with db (api/create-db config []))
@@ -53,6 +52,15 @@
         (should= {:type :string} (-> result :bubble :name))
         (should= {:type :long} (-> result :bubble :size))
         (should= {:type :string} (-> result :bubble :color))))
+
+    (it "install-schema! - enum"
+      (migrator/-install-schema! @db spec/bibelot-states)
+      (let [result (migrator/-installed-schema-legend @db {:bibelot.state spec/bibelot-states})
+            values (-> result :bibelot.state :values)]
+        (should= :bibelot.state (-> result :bibelot.state :enum))
+        (should-contain :pending values)
+        (should-contain :active values)
+        (should-contain :disabled values)))
 
     (it "schema-exists?"
       (should= false (migrator/-schema-exists? @db spec/bibelot))

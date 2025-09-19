@@ -14,11 +14,10 @@
 (def SYNC_SCHEMAS "SYNC_SCHEMAS")
 (def migration-name-pattern #"[0-9]{8}.*")
 (defn migration-name? [arg] (boolean (when (string? arg) (re-matches migration-name-pattern arg))))
-(defn- schema-kind [schema] (-> schema :kind :value))
 
 (defn -ensure-migration-schema! [{:keys [-db] :as config}]
   (let [schema (migrator/migration-schema config)]
-    (swap! (.-legend -db) assoc (schema-kind schema) schema)
+    (swap! (.-legend -db) assoc (db/-schema-kind schema) schema)
     (when-not (migrator/-schema-exists? -db schema)
       (migrator/-install-schema! -db schema)
       (log/warn "Installed 'migration' schema because it was missing."))))
@@ -199,7 +198,7 @@
 
 (defn- sync-attribute [{:keys [-preview? -db]} schema attr installed-attrs]
   (let [spec (get schema attr)
-        kind (schema-kind schema)]
+        kind (db/-schema-kind schema)]
     (if-let [actual-type (or (get-in installed-attrs [attr :db :type]) (get-in installed-attrs [attr :type]))]
       (let [expected (or (-> spec :db :type) (:type spec))]
         (when-not (valid-type? expected actual-type)
@@ -211,19 +210,30 @@
   (let [expected (set (keys (dissoc schema :kind)))
         actual   (set (keys attributes))
         extra    (set/difference actual expected)
-        kind     (schema-kind schema)]
+        kind     (db/-schema-kind schema)]
     (doseq [attr extra]
       (log/warn (str kind "/" (name attr) " - extra attribute. Unused?")))))
 
+(defn- sync-schema [config schema installed-attrs]
+  (doseq [attr (sort (keys (dissoc schema :kind)))]
+    (sync-attribute config schema attr installed-attrs)))
+
+(defn- maybe-install-schema [{:keys [-preview? -db]} schema]
+  (when-not -preview? (migrator/-install-schema! -db schema)))
+
+(defn- install-schema [config schema]
+  (let [kind (db/-schema-kind schema)]
+    (log/warn (str kind " - kind missing. Creating."))
+    (maybe-install-schema config schema)))
+
 ;; TODO - MDM: Handle name translation here.
-(defn- sync-kind [{:keys [-preview? -db -installed-legend] :as config} schema]
-  (let [kind            (schema-kind schema)
+(defn- sync-kind [{:keys [-installed-legend] :as config} schema]
+  (let [kind            (db/-schema-kind schema)
         installed-attrs (get -installed-legend kind)]
-    (if (seq installed-attrs)
-      (doseq [attr (sort (keys (dissoc schema :kind)))]
-        (sync-attribute config schema attr installed-attrs))
-      (do (log/warn (str kind " - kind missing. Creating."))
-          (when-not -preview? (migrator/-install-schema! -db schema))))
+    (cond
+      (empty? installed-attrs) (install-schema config schema)
+      (:kind schema) (sync-schema config schema installed-attrs)
+      :else (maybe-install-schema config schema))
     (log-extra-attributes schema installed-attrs)))
 
 (defn- fetch-sync [{:keys [-db] :as config}]
@@ -242,9 +252,9 @@
   (let [legend           (legend/build schemas)
         installed-legend (migrator/-installed-schema-legend -db legend)
         config           (assoc config :-installed-legend installed-legend :_expected-legend legend)]
-    (doseq [schema (sort-by schema-kind schemas)]
+    (doseq [schema (sort-by db/-schema-kind schemas)]
       (sync-kind config schema))
-    (let [expected (set (map schema-kind schemas))
+    (let [expected (set (map db/-schema-kind schemas))
           actual   (set (keys installed-legend))
           extra    (disj (set/difference actual expected) :migration)]
       (doseq [kind (sort extra)]

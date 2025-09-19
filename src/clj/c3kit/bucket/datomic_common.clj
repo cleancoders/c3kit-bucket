@@ -31,7 +31,7 @@
 
 (defn ->entity-schema [schema index-allowed?]
   (let [schema (schema/conform-schema! schema)
-        kind   (-> schema :kind :value)]
+        kind   (api/-schema-kind schema)]
     (assert kind (str "kind missing: " schema))
     (assert (keyword? kind) (str "kind must be keyword: " kind))
     (for [[attr spec] (seq (dissoc schema :kind :id :*))]
@@ -322,7 +322,7 @@
         sort)))
 
 (defn schema-exists? [db schema]
-  (let [kind (-> schema :kind :value name)]
+  (let [kind (-> schema api/-schema-kind name)]
     (boolean (some #(= kind (namespace %)) (installed-schema-idents db)))))
 
 (defn schema-attr-id [db datomic-db key]
@@ -375,7 +375,7 @@
                     (transact! db [{:db/id old-id :db/ident qualified-new}])))))
 
 (defn do-install-schema! [db schema]
-  (let [kind (-> schema :kind :value)]
+  (let [kind (api/-schema-kind schema)]
     (log/info (str "  installing schema " kind))
     (transact! db (->db-schema schema false))))
 

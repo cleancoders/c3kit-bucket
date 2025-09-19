@@ -183,6 +183,30 @@
               logs      (log/parse-captured-logs)]
           (should> (time/millis-since-epoch (:at migration)) (time/millis-since-epoch (-> 1 time/seconds time/ago)))
           (should-contain "Synchronizing 1 schema(s) with the database" (map :message logs))))
+
+      (it "enum already installed"
+        (sut/-ensure-migration-schema! @config)
+        (migrator/-install-schema! (:-db @config) spec/bibelot-states)
+        (sut/-maybe-sync-schemas-unlocked! @config [spec/bibelot-states])
+        (let [legend (migrator/installed-schema-legend- (:-db @config) [spec/bibelot-states])
+              values (-> legend :bibelot.state :values)]
+          (should= :bibelot.state (-> legend :bibelot.state :enum))
+          (should= 3 (count values))
+          (should-contain :pending values)
+          (should-contain :active values)
+          (should-contain :disabled values)))
+
+      (it "adds and removes enum values"
+        (sut/-ensure-migration-schema! @config)
+        (migrator/-install-schema! (:-db @config) (assoc spec/bibelot-states :values [:pending :active :blah]))
+        (sut/-maybe-sync-schemas-unlocked! @config [spec/bibelot-states])
+        (let [legend (migrator/installed-schema-legend- (:-db @config) [spec/bibelot-states])
+              values (-> legend :bibelot.state :values)]
+          (should= :bibelot.state (-> legend :bibelot.state :enum))
+          (should= 3 (count values))
+          (should-contain :pending values)
+          (should-contain :active values)
+          (should-contain :disabled values)))
       )
 
     (context "migrate!"

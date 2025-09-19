@@ -36,6 +36,10 @@
             (log/warn (str "failed to coerce id of type " type " - " (ex-message e)))
             id)))))
 
+(defn -schema-kind [schema]
+  (or (-> schema :kind :value)
+      (:enum schema)))
+
 (defn -kvs->kv-pairs [kvs]
   (assert (even? (core/count kvs)) "filter params must come in pairs")
   (let [kv-pairs (partition 2 kvs)]
