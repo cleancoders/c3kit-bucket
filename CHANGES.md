@@ -1,4 +1,4 @@
-### Next
+### 2.4.0
  * Add support for enum types for Datomic in `c3kit.bucket.migration`
  * Upgrade dependencies
  * BREAKING: Remove deprecated namespaces
