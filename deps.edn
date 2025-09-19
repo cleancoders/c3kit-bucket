@@ -1,7 +1,7 @@
 {
  :paths   ["src/clj" "src/cljc"]
  :deps    {
-           com.cleancoders.c3kit/apron {:mvn/version "2.2.3"}
+           com.cleancoders.c3kit/apron {:mvn/version "2.3.0"}
            cljsjs/hashids              {:mvn/version "1.0.2-0"}
            jstrutz/hashids             {:mvn/version "1.0.1"}
            org.clojure/clojure         {:mvn/version "1.12.2"}
@@ -19,7 +19,7 @@
                                      com.microsoft.sqlserver/sqljdbc4  {:mvn/version "4.0"}
                                      io.github.clojure/tools.build     {:mvn/version "0.10.10"}
                                      org.clojure/clojurescript         {:mvn/version "1.11.132"}
-                                     org.postgresql/postgresql         {:mvn/version "42.7.7"}
+                                     org.postgresql/postgresql         {:mvn/version "42.7.8"}
                                      org.xerial/sqlite-jdbc            {:mvn/version "3.50.3.0"}
                                      speclj/speclj                     {:mvn/version "3.10.0"}
                                      }
