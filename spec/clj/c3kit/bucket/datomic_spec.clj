@@ -2,9 +2,9 @@
   (:require [c3kit.apron.log :as log]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
+            [c3kit.bucket.datomic :as sut]
             [c3kit.bucket.datomic-common :as common-api]
             [c3kit.bucket.impl-spec :as spec]
-            [c3kit.bucket.datomic :as sut]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all])
@@ -44,7 +44,7 @@
 
     (it "one kv with nil value"
       (log/capture-logs
-       (should= [] (api/find- @db :bibelot :where {:name nil})))
+        (should= [] (api/find- @db :bibelot :where {:name nil})))
       (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str)))
 
     )
@@ -97,6 +97,16 @@
         (should= {:type :long} (-> result :bibelot :size))
         (should= {:type :string} (-> result :bibelot :color))))
 
+    (it "installed-schema-legend - enum"
+      (common-api/transact! @db (common-api/->db-schema spec/bibelot-states nil))
+      (let [result (migrator/-installed-schema-legend @db {:bibelot.state spec/bibelot-states})
+            values (-> result :bibelot.state :values)]
+        (should= :bibelot.state (-> result :bibelot.state :enum))
+        (should= 3 (count values))
+        (should-contain :pending values)
+        (should-contain :active values)
+        (should-contain :disabled values)))
+
     (it "install-schema!"
       (let [schema (assoc-in spec/bibelot [:kind :value] :bubble)
             _      (migrator/-install-schema! @db schema)
@@ -132,8 +142,8 @@
     (it "remove-attribute! that doesn't exist"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-       (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
-       (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
+        (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
+        (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
     (it "remove-attribute! - multi"
       (let [db         (api/create-db config [])
@@ -162,7 +172,7 @@
     (it "rename-attribute! - existing missing"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-       (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size)))))
+        (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size)))))
 
 
   (context "history"

@@ -138,8 +138,7 @@
      (->> (common-api/installed-schema-idents db)
           (map #(->> % (datomic/pull ddb '[*]) (into {})))
           (map #(update % :db/valueType :db/ident))
-          (map common-api/attribute->spec)
-          (reduce (fn [result [kind attr spec]] (assoc-in result [kind attr] spec)) {})))))
+          common-api/attributes->legend))))
 
 (deftype DatomicCloudDB [db-schema legend config api]
   api/DB

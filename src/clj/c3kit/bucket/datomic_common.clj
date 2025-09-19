@@ -1,5 +1,6 @@
 (ns c3kit.bucket.datomic-common
-  (:require [c3kit.apron.legend :as legend]
+  (:require [c3kit.apron.corec :as ccc]
+            [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as schema]
             [c3kit.bucket.api :as api]
@@ -47,28 +48,55 @@
     (:enum schema) (->enum-schema schema)
     :else (throw (ex-info "Invalid schema" schema))))
 
+(defn add-spec-to-legend [legend spec]
+  (if (= :schema (first spec))
+    (let [[kind attr-name spec] (rest spec)]
+      (assoc-in legend [kind attr-name] spec))
+    (let [[kind value] (rest spec)]
+      (-> legend
+          (assoc-in [kind :enum] kind)
+          (update-in [kind :values] ccc/conjv value)))))
+
+(defn- attribute->schema-spec [attribute]
+  (let [value-type  (:db/valueType attribute)
+        ident       (:db/ident attribute)
+        kind        (keyword (namespace ident))
+        attr-name   (keyword (name ident))
+        cardinality (:db/cardinality attribute)
+        index?      (:db/index attribute)
+        unique      (:db/unique attribute)
+        component?  (:db/isComponent attribute)
+        no-history? (:db/noHistory attribute)
+        fulltext?   (:db/fulltext attribute)
+        schema-type (keyword (name value-type))
+        schema-type (if (= :db.cardinality/many cardinality) [schema-type] schema-type)
+        db          (remove nil? [(when index? :index)
+                                  (when component? :component)
+                                  (when no-history? :no-history)
+                                  (when fulltext? :fulltext)
+                                  (when (= :db.unique/identity unique) :unique-identity)
+                                  (when (= :db.unique/value unique) :unique-value)])
+        spec        {:type schema-type}
+        spec        (if (seq db) (assoc spec :db db) spec)]
+    [:schema kind attr-name spec]))
+
+(defn- attribute->enum-spec [attribute]
+  (let [ident     (:db/ident attribute)
+        kind      (keyword (namespace ident))
+        attr-name (keyword (name ident))]
+    [:enum kind attr-name]))
+
 (defn attribute->spec [attribute]
-  (when-let [value-type (get-in attribute [:db/valueType])]
-    (let [ident       (:db/ident attribute)
-          cardinality (:db/cardinality attribute)
-          index?      (:db/index attribute)
-          unique      (:db/unique attribute)
-          component?  (:db/isComponent attribute)
-          no-history? (:db/noHistory attribute)
-          fulltext?   (:db/fulltext attribute)
-          kind        (keyword (namespace ident))
-          attr-name   (keyword (name ident))
-          schema-type (keyword (name value-type))
-          schema-type (if (= :db.cardinality/many cardinality) [schema-type] schema-type)
-          db          (remove nil? [(when index? :index)
-                                    (when component? :component)
-                                    (when no-history? :no-history)
-                                    (when fulltext? :fulltext)
-                                    (when (= :db.unique/identity unique) :unique-identity)
-                                    (when (= :db.unique/value unique) :unique-value)])
-          spec        {:type schema-type}
-          spec        (if (seq db) (assoc spec :db db) spec)]
-      [kind attr-name spec])))
+  (cond
+    (:db/valueType attribute)
+    (attribute->schema-spec attribute)
+    (-> attribute :db/ident namespace)
+    (attribute->enum-spec attribute)))
+
+(defn attributes->legend [attributes]
+  (->> attributes
+       (keep attribute->spec)
+       (reduce add-spec-to-legend {})))
 
 (defprotocol DatomicApi
   (connect [this])

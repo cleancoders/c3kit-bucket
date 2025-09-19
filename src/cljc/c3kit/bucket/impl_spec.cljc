@@ -40,6 +40,10 @@
    :id   {:type :long}
    :kind (s/kind :disorganized)})
 
+(def bibelot-states
+  {:enum   :bibelot.state
+   :values [:pending :active :disabled]})
+
 (declare child original)
 
 (defn set-find-by [kind & kvs]

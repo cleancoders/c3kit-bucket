@@ -1,12 +1,11 @@
 (ns c3kit.bucket.datomic
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
-            [c3kit.apron.log :as log]
             [c3kit.bucket.api :as api]
+            [c3kit.bucket.datomic-common :as common-api]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
-            [datomic.api :as datomic]
-            [c3kit.bucket.datomic-common :as common-api]))
+            [datomic.api :as datomic]))
 
 (defn connect [uri]
   (datomic/create-database uri)
@@ -41,13 +40,13 @@
        (attributes->entity attributes id kind))))
   ([attributes id kind]
    (reduce-kv
-    (fn [m k v]
-      (assoc m (keyword (name k))
-               (if (set? v)
-                 (ccc/map-set value-or-id v)
-                 (value-or-id v))))
-    {:id id :kind (keyword kind)}
-    attributes)))
+     (fn [m k v]
+       (assoc m (keyword (name k))
+                (if (set? v)
+                  (ccc/map-set value-or-id v)
+                  (value-or-id v))))
+     {:id id :kind (keyword kind)}
+     attributes)))
 
 (defn- id->entity [db id attributes->entity]
   (when-let [attributes (seq (common-api/d-entity (.-api db) (common-api/datomic-db db) id))]
@@ -138,19 +137,13 @@
            (q->entities db)))
     []))
 
-(defn- do-install-schema! [db schema]
-  (let [kind (-> schema :kind :value)]
-    (log/info (str "  installing schema " kind))
-    (common-api/transact! db (common-api/->db-schema schema true))))
-
 (defn installed-schema-legend
   ([] (installed-schema-legend @api/impl))
   ([db]
    (let [ddb (common-api/datomic-db db)]
      (->> (common-api/installed-schema-idents db)
           (map #(->> % (common-api/d-entity (.-api db) ddb) (into {})))
-          (map common-api/attribute->spec)
-          (reduce (fn [result [kind attr spec]] (assoc-in result [kind attr] spec)) {})))))
+          common-api/attributes->legend))))
 
 (deftype DatomicDB [db-schema legend config api]
   api/DB
@@ -174,24 +167,24 @@
 
 (deftype DatomicOnPremApi [config conn]
   common-api/DatomicApi
-  (connect [this] (reset! conn (connect (:uri config))))
-  (db [this] (datomic/db @conn))
-  (transact [this transaction]
+  (connect [_this] (reset! conn (connect (:uri config))))
+  (db [_this] (datomic/db @conn))
+  (transact [_this transaction]
     (datomic/transact @conn transaction))
-  (delete-database [this]
+  (delete-database [_this]
     (datomic/delete-database (:uri config)))
-  (as-of [this t]
+  (as-of [_this t]
     (datomic/as-of (datomic/db @conn) t))
-  (q [this query]
+  (q [_this query]
     (datomic/q query (datomic/db @conn)))
-  (q [this query db args]
+  (q [_this query db args]
     (apply datomic/q query db args))
-  (history [this]
+  (history [_this]
     (datomic/history (datomic/db @conn)))
-  (do-find [this db kind options] (do-find db kind options))
-  (tx [this db e] (tx db e))
-  (tx* [this db entities] (tx* db entities))
-  (d-entity [this ddb eid] (datomic/entity ddb eid)))
+  (do-find [_this db kind options] (do-find db kind options))
+  (tx [_this db e] (tx db e))
+  (tx* [_this db entities] (tx* db entities))
+  (d-entity [_this ddb eid] (datomic/entity ddb eid)))
 
 (defmethod api/-create-impl :datomic [config schemas]
   (let [legend     (atom (legend/build schemas))
@@ -208,11 +201,11 @@
   "Finds the entity with the max attribute for a given kind with specific db instance"
   [db kind attr]
   (->> (common-api/q
-        (.-api db)
-        '[:find (max ?e) :in $ ?attribute
-          :where [?e ?attribute]]
-        (common-api/datomic-db db)
-        [(common-api/->attr-kw kind attr)])
+         (.-api db)
+         '[:find (max ?e) :in $ ?attribute
+           :where [?e ?attribute]]
+         (common-api/datomic-db db)
+         [(common-api/->attr-kw kind attr)])
        (q->entities db)
        first))
 
@@ -229,17 +222,17 @@
 (defn find-max-val-of-all
   "Finds the max value of a kind/attr with default db instance"
   [kind attr]
-  (-> (find-max-of-all- @api/impl kind attr) (get attr)))
+  (find-max-val-of-all- @api/impl kind attr))
 
 (defn find-min-of-all-
   "Finds the entity with the min attribute for a given kind with specific db instance"
   [db kind attr]
   (->> (common-api/q
-        (.-api db)
-        '[:find (min ?e) :in $ ?attribute
-          :where [?e ?attribute]]
-        (common-api/datomic-db db)
-        [(common-api/->attr-kw kind attr)])
+         (.-api db)
+         '[:find (min ?e) :in $ ?attribute
+           :where [?e ?attribute]]
+         (common-api/datomic-db db)
+         [(common-api/->attr-kw kind attr)])
        (q->entities db)
        first))
 
@@ -256,7 +249,7 @@
 (defn find-min-val-of-all
   "Finds the min value of a kind/attr with default db instance"
   [kind attr]
-  (-> (find-min-of-all- @api/impl kind attr) (get attr)))
+  (find-min-val-of-all- @api/impl kind attr))
 
 (defn history
   "Returns a list of every version of the entity form creation to current state,
@@ -274,11 +267,11 @@
   (let [eid (->eid id-or-entity)
         api (.-api impl)]
     (ffirst (common-api/q
-             api
-             '[:find (min ?inst)
-               :in $ ?e
-               :where [?e _ _ ?tx]
-               [?tx :db/txInstant ?inst]] (common-api/history api) [eid]))))
+              api
+              '[:find (min ?inst)
+                :in $ ?e
+                :where [?e _ _ ?tx]
+                [?tx :db/txInstant ?inst]] (common-api/history api) [eid]))))
 
 (defn created-at
   "Returns the instant (java.util.Date) the entity was created."
@@ -291,11 +284,11 @@
   (let [eid (->eid id-or-entity)
         api (.-api impl)]
     (ffirst (common-api/q
-             api
-             '[:find (max ?inst)
-               :in $ ?e
-               :where [?e _ _ ?tx]
-               [?tx :db/txInstant ?inst]] (common-api/history api) [eid]))))
+              api
+              '[:find (max ?inst)
+                :in $ ?e
+                :where [?e _ _ ?tx]
+                [?tx :db/txInstant ?inst]] (common-api/history api) [eid]))))
 
 (defn updated-at
   "Returns the instant (java.util.Date) this entity was last updated."
