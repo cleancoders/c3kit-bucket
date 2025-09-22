@@ -33,18 +33,23 @@
   (let [slice (if (ids-not-fns? kind-or-ids)
                 (slice-by-ids kind-or-ids)
                 (slice-by-kind kind-or-ids))]
-    (map #(select-keys % keyseq) (vals slice))))
+    (if (seq keyseq)
+      (map #(select-keys % keyseq) (vals slice))
+      (vals slice))))
+
+(defn- ->keyseq [& colls] (set (conj (apply concat colls) :id :kind)))
+(defn ->kind-or-ids [kvs kind]
+  (let [id (second (first (take-while #(= :id (first %)) kvs)))]
+    (if (some-> id ids-not-fns?) (cond-> id (int? id) vector) kind)))
+
+(defn- really-do-find [cursor options kind]
+  (->> (ccc/find-by @cursor (conj (:where options) [:kind kind]))
+       (api/-apply-drop-take options)))
 
 (defn- do-find [db kind options]
-  (let [where-map (ccc/->options (apply concat (:where options)))
-        id        (:id where-map)
-        cursor    (if (ids-not-fns? id)
-                    (r/cursor slice-by-ids (cond-> id (int? id) vector))
-                    (r/cursor (.-store db) [kind]))]
+  (let [cursor (r/cursor slice-db [(->kind-or-ids (:where options) kind) []])]
     (legend/for-kind @(.-legend db) kind)
-    (let [es (or (vals @cursor) [])]
-      (->> (ccc/find-by es (conj (:where options) [:kind kind]))
-           (api/-apply-drop-take options)))))
+    (really-do-find cursor options kind)))
 
 (deftype ReMemoryDB [legend store]
   api/DB
@@ -62,17 +67,19 @@
   (let [store (or (:store config) (r/atom {}))]
     (ReMemoryDB. (atom (legend/build schemas)) store)))
 
-(defn- ->keyseq [& colls]
-  (set (conj (apply concat colls) :id :kind)))
+(defn do-select-find [kind keyseq options]
+  (let [where  (:where options)
+        cursor (r/cursor slice-db [(->kind-or-ids where kind) (->keyseq keyseq (map first where))])]
+    (legend/for-kind @(.-legend @api/impl) kind)
+    (really-do-find cursor options kind)))
 
-(defn ->kind-or-ids [kvs-as-map kind]
-  (let [id (:id kvs-as-map)] (if (some-> id ids-not-fns?) (cond-> id (int? id) vector) kind)))
+(defn- coll-not-map? [thing] (or (seq? thing) (vector? thing)))
+(defn ->keyseq-and-options [kvs]
+  (if (coll-not-map? (first kvs)) [(first kvs) (rest kvs)] [[] kvs]))
 
-(defn do-select-find [kind keyseq kvs]
-  (let [kvs-as-map (assoc (ccc/->options kvs) :kind kind)
-        kvs-keys   (keys kvs-as-map)
-        cursor     (r/cursor slice-db [(->kind-or-ids kvs-as-map kind) (->keyseq keyseq kvs-keys)])]
-    (ccc/find-by @cursor (conj (api/-kvs->kv-pairs kvs) [:kind kind]))))
+(defn select-find [kind & opt-args]
+  (let [[keyseq options] (->keyseq-and-options opt-args)]
+    (do-select-find kind keyseq (first options))))
 
 (defn select-find-by
   "Like find-by, but components will only re-render if the selected or queried attributes change
@@ -80,18 +87,16 @@
   Only returns the selected and queried attributes of the entity. Always includes kind and id.
   If the second argument is a keyseq, the component will also listen to changes to those attributes
   and re-render accordingly.
-  Supports all filters options as db/find (['>], ['not=], etc).
+  Supports all filters options as db/find (['>], ['not=], etc.).
 
   `(select-find-by :thingy :id 12354 :foo 5678)`
   `(select-find-by :thingy [:foo :bar] :id 1234)`"
   ([kind & kvs]
-   (let [[keyseq kvs] (if (coll? (first kvs)) [(first kvs) (rest kvs)] [[] kvs])]
-     (do-select-find kind keyseq kvs))))
+   (let [[keyseq options] (->keyseq-and-options kvs)]
+     (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
 
 (defn select-ffind-by [kind & kvs]
-  (let [[keyseq kvs] (if (coll? (first kvs)) [(first kvs) (rest kvs)] [[] kvs])]
-    (first (do-select-find kind keyseq kvs))))
+  (let [[keyseq options] (->keyseq-and-options kvs)]
+    (first (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
 
 ; TODO select-count-by
-; TODO drop and take
-; TODO check for refactor opportunities between do-select-find and do-find

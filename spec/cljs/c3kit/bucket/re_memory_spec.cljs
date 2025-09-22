@@ -99,6 +99,10 @@
       (it "search by multiple attrs, multiple keys in selection"
         (should= [(select-keys @thingy [:kind :id :name :foo :bar :fizz])]
                  (sut/select-find-by :thingy [:bar :fizz] :name (:name @thingy) :foo (:foo @thingy))))
+
+      (it "select-find can take keyseq"
+        (should= [(select-keys @thingy [:kind :id :name])]
+                 (sut/select-find :thingy [:name] {:where [[:id (:id @thingy)]]})))
       )
     )
 
@@ -291,21 +295,21 @@
                 (db/tx {:kind :bibelot :name "world" :size 2})
                 (db/tx {:kind :bibelot :name "hi!" :size 2}))
 
-        ;(it ":take option"
-        ;  (let [all (sut/find :bibelot)]
-        ;    (should= (take 1 all) (sut/find :bibelot {:take 1}))
-        ;    (should= (take 2 all) (sut/find :bibelot {:take 2}))
-        ;    (should= (take 3 all) (sut/find :bibelot {:take 3}))
-        ;    (should= all (sut/find :bibelot {:take 4}))
-        ;    (should= all (sut/find :bibelot {:take 99}))))
-        ;
-        ;(it ":drop option"
-        ;  (let [all (sut/find :bibelot)]
-        ;    (should= (drop 1 all) (sut/find :bibelot {:drop 1}))
-        ;    (should= (drop 2 all) (sut/find :bibelot {:drop 2}))
-        ;    (should= (drop 3 all) (sut/find :bibelot {:drop 3}))
-        ;    (should= [] (sut/find :bibelot {:drop 4}))
-        ;    (should= [] (sut/find :bibelot {:drop 99}))))
+        (it ":take option"
+          (let [all (sut/select-find :bibelot)]
+            (should= (take 1 all) (sut/select-find :bibelot {:take 1}))
+            (should= (take 2 all) (sut/select-find :bibelot {:take 2}))
+            (should= (take 3 all) (sut/select-find :bibelot {:take 3}))
+            (should= all (sut/select-find :bibelot {:take 4}))
+            (should= all (sut/select-find :bibelot {:take 99}))))
+
+        (it ":drop option"
+          (let [all (sut/select-find :bibelot)]
+            (should= (drop 1 all) (sut/select-find :bibelot {:drop 1}))
+            (should= (drop 2 all) (sut/select-find :bibelot {:drop 2}))
+            (should= (drop 3 all) (sut/select-find :bibelot {:drop 3}))
+            (should= [] (sut/select-find :bibelot {:drop 4}))
+            (should= [] (sut/select-find :bibelot {:drop 99}))))
 
         (it "by :name"
           (let [[entity :as entities] (sut/select-find-by :bibelot :name "hello")]
