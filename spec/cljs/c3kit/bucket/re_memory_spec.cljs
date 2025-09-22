@@ -1,10 +1,12 @@
 (ns c3kit.bucket.re-memory-spec
   (:require-macros [c3kit.bucket.api :refer [with-safety-off]]
-                   [speclj.core :refer [around before context should-be-nil describe focus-context focus-it it redefs-around should should-contain should-not-contain should-throw should=]])
+                   [speclj.core :refer [around before context describe focus-context focus-it it redefs-around should should-be-nil should-contain should-not-contain should-not-throw should-throw should= with]])
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.time :as time]
+            [c3kit.bucket.api]
             [c3kit.bucket.api :as db]
             [c3kit.bucket.impl-spec :as spec]
+            [c3kit.bucket.memory-spec :as memory-spec]
             [c3kit.bucket.re-memory :as sut]
             [c3kit.bucket.spec-helperc :as helperc]
             [c3kit.wire.spec-helper :as wire]))
@@ -64,6 +66,7 @@
   (spec/broken-in-datomic config)
   (spec/multi-value-fields config)
   (spec/cas config)
+  (memory-spec/migrator-specs)
 
   (context "select-find-by"
     (context "without keyseq"
@@ -610,45 +613,44 @@
         )
       )
 
-    #_(context "count"
-      (helper/with-schemas config [bibelot thingy])
+    (context "count"
+        (helperc/with-schemas config [spec/bibelot spec/thingy])
 
-      (it "empty db"
-        (should= 0 (sut/count :bibelot))
-        (should= 0 (sut/count-by :bibelot :name "nothing")))
+        (it "empty db"
+          (should= 0 (sut/select-count :bibelot))
+          (should= 0 (sut/select-count-by :bibelot :name "nothing")))
 
-      (context "populated db"
-        (before (sut/clear)
-                (sut/tx {:kind :bibelot :name "hello"})
-                (sut/tx {:kind :bibelot :name "world"})
-                (sut/tx {:kind :bibelot :name "world" :size 2})
-                (sut/tx {:kind :bibelot :name "hi!" :size 2}))
+        (context "populated db"
+          (before (db/clear)
+                  (db/tx {:kind :bibelot :name "hello"})
+                  (db/tx {:kind :bibelot :name "world"})
+                  (db/tx {:kind :bibelot :name "world" :size 2})
+                  (db/tx {:kind :bibelot :name "hi!" :size 2}))
 
-        (it "all"
-          (sut/tx {:kind :thingy :id 123 :name "world"})
-          (should= 4 (sut/count :bibelot))
-          (should= 1 (sut/count :thingy)))
+          (it "all"
+            (db/tx {:kind :thingy :id 123 :name "world"})
+            (should= 4 (sut/select-count :bibelot))
+            (should= 1 (sut/select-count :thingy)))
 
-        (it "count-by: :name"
-          (should= 1 (sut/count-by :bibelot :name "hello")))
+          (it "select-count-by: :name"
+            (should= 1 (sut/select-count-by :bibelot :name "hello")))
 
-        (it "count-by: two attributes"
-          (should= 1 (sut/count-by :bibelot :name "world" :size 2)))
+          (it "select-count-by: two attributes"
+            (should= 1 (sut/select-count-by :bibelot :name "world" :size 2)))
 
-        (it "by :id and other attributes"
-          (let [b1 (sut/ffind-by :bibelot :name "hello")
-                b2 (sut/ffind-by :bibelot :name "world" :size nil)
-                b3 (sut/ffind-by :bibelot :name "world" :size 2)
-                b4 (sut/ffind-by :bibelot :name "hi!")]
-            (should= 1 (sut/count-by :bibelot :name "hello" :id (:id b1)))
-            (should= 1 (sut/count-by :bibelot :name "world" :id (:id b2)))
-            (should= 1 (sut/count-by :bibelot :name "world" :id ['not= (:id b2)]))
-            (should= 0 (sut/count-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
-            (should= 1 (sut/count-by :bibelot :size 2 :id (:id b3)))
-            (should= 2 (sut/count-by :bibelot :name "world" :id [(:id b2) (:id b3)]))
-            (should= 2 (sut/count-by :bibelot :size 2 :id [(:id b3) (:id b4)]))))
+          (it "by :id and other attributes"
+            (let [b1 (db/ffind-by :bibelot :name "hello")
+                  b2 (db/ffind-by :bibelot :name "world" :size nil)
+                  b3 (db/ffind-by :bibelot :name "world" :size 2)
+                  b4 (db/ffind-by :bibelot :name "hi!")]
+              (should= 1 (sut/select-count-by :bibelot :name "hello" :id (:id b1)))
+              (should= 1 (sut/select-count-by :bibelot :name "world" :id (:id b2)))
+              (should= 1 (sut/select-count-by :bibelot :name "world" :id ['not= (:id b2)]))
+              (should= 0 (sut/select-count-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
+              (should= 1 (sut/select-count-by :bibelot :size 2 :id (:id b3)))
+              (should= 2 (sut/select-count-by :bibelot :name "world" :id [(:id b2) (:id b3)]))
+              (should= 2 (sut/select-count-by :bibelot :size 2 :id [(:id b3) (:id b4)]))))
+          )
         )
-      )
-
     )
   )

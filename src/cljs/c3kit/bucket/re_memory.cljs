@@ -4,6 +4,7 @@
             [c3kit.apron.legend :as legend]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.memory :refer [MemoryDB] :as memory]
+            [c3kit.bucket.migrator :as migrator]
             [reagent.core :as r]))
 
 ;; db api -----------------------------------
@@ -61,7 +62,15 @@
   (-find [this kind options] (do-find this kind options))
   (-reduce [this kind f init options] (core-reduce f init (do-find this kind options)))
   (-tx [this entity] (memory/tx this entity))
-  (-tx* [this entities] (memory/tx* this entities)))
+  (-tx* [this entities] (memory/tx* this entities))
+  migrator/Migrator
+  (-schema-exists? [this schema] (contains? @legend (-> schema :kind :value)))
+  (-installed-schema-legend [this _expected-legend] @legend)
+  (-install-schema! [this schema] (memory/do-install-schema! this schema))
+  (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))
+  (-add-attribute! [this kind attr spec] (swap! legend assoc-in [kind attr] spec))
+  (-remove-attribute! [this kind attr] (memory/do-remove-attribute! this kind attr))
+  (-rename-attribute! [this kind attr new-kind new-attr] (memory/do-rename-attribute! this kind attr new-kind new-attr)))
 
 (defmethod api/-create-impl :re-memory [config schemas]
   (let [store (or (:store config) (r/atom {}))]
@@ -77,12 +86,22 @@
 (defn ->keyseq-and-options [kvs]
   (if (coll-not-map? (first kvs)) [(first kvs) (rest kvs)] [[] kvs]))
 
-(defn select-find [kind & opt-args]
-  (let [[keyseq options] (->keyseq-and-options opt-args)]
-    (do-select-find kind keyseq (first options))))
+(defn select-find
+  "Like db/find, but components will only re-render if the selected or queried attributes change
+    and ignore changes to other attributes.
+    Only returns the selected and queried attributes of the entity. Always includes kind and id.
+    If the second argument is a keyseq, the component will also listen to changes to those attributes
+    and re-render accordingly.
+    Supports all filters options as db/find (['>], ['not=], etc.).
+
+    `(select-find :thingy {:where [[:id 12354] [:foo 5678]] :drop 1 :take 5})`
+    `(select-find :thingy [:foo :bar] {:where [[:id 1234]]})`"
+  ([kind & opt-args]
+   (let [[keyseq options] (->keyseq-and-options opt-args)]
+     (do-select-find kind keyseq (first options)))))
 
 (defn select-find-by
-  "Like find-by, but components will only re-render if the selected or queried attributes change
+  "Like db/find-by, but components will only re-render if the selected or queried attributes change
   and ignore changes to other attributes.
   Only returns the selected and queried attributes of the entity. Always includes kind and id.
   If the second argument is a keyseq, the component will also listen to changes to those attributes
@@ -99,4 +118,13 @@
   (let [[keyseq options] (->keyseq-and-options kvs)]
     (first (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
 
-; TODO select-count-by
+(defn select-count [kind & opt-args]
+  (let [[keyseq options] (->keyseq-and-options opt-args)]
+    (core-count (do-select-find kind keyseq (first options)))))
+
+(defn select-count-by [kind & kvs]
+  (let [[keyseq options] (->keyseq-and-options kvs)]
+    (core-count (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
+
+;Todo implement tx that ensures full entities
+; TODO rendering tests for select-count-by?
