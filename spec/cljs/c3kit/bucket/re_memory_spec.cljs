@@ -660,7 +660,7 @@
       (it "tx'ing an entity that was retrieved with select-find doesn't delete the missing fields"
         (let [full-entity (db/ffind-by :thingy :name "thingy-2")
               queried     (sut/select-ffind-by :thingy :name "thingy-2")
-              updated     (db/tx queried :name "new-name-2")
+              _updated     (db/tx queried :name "new-name-2")
               reloaded    (db/ffind-by :thingy :name "new-name-2")]
           (should= (assoc full-entity :name "new-name-2") reloaded)))
 
