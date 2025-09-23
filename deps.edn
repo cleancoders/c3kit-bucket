@@ -6,8 +6,6 @@
            jstrutz/hashids             {:mvn/version "1.0.1"}
            org.clojure/clojure         {:mvn/version "1.12.2"}
            reagent/reagent             {:mvn/version "1.2.0"}
-           cljsjs/react                {:mvn/version "17.0.2-0"} ; A new major version of cljsjs is available, but reagent.dom/render is not yet compatible with it.
-           cljsjs/react-dom            {:mvn/version "17.0.2-0"}
            }
  :aliases {
            :test    {:extra-deps    {
@@ -26,6 +24,8 @@
                                      org.postgresql/postgresql         {:mvn/version "42.7.8"}
                                      org.xerial/sqlite-jdbc            {:mvn/version "3.50.3.0"}
                                      speclj/speclj                     {:mvn/version "3.10.0"}
+                                     cljsjs/react                      {:mvn/version "17.0.2-0"} ; A new major version of cljsjs is available, but reagent.dom/render is not yet compatible with it.
+                                     cljsjs/react-dom                  {:mvn/version "17.0.2-0"}
                                      }
                      :override-deps {
                                      ;com.cleancoders.c3kit/apron    {:local/root "../apron"}
