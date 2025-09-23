@@ -614,43 +614,60 @@
       )
 
     (context "count"
-        (helperc/with-schemas config [spec/bibelot spec/thingy])
+      (helperc/with-schemas config [spec/bibelot spec/thingy])
 
-        (it "empty db"
-          (should= 0 (sut/select-count :bibelot))
-          (should= 0 (sut/select-count-by :bibelot :name "nothing")))
+      (it "empty db"
+        (should= 0 (sut/select-count :bibelot))
+        (should= 0 (sut/select-count-by :bibelot :name "nothing")))
 
-        (context "populated db"
-          (before (db/clear)
-                  (db/tx {:kind :bibelot :name "hello"})
-                  (db/tx {:kind :bibelot :name "world"})
-                  (db/tx {:kind :bibelot :name "world" :size 2})
-                  (db/tx {:kind :bibelot :name "hi!" :size 2}))
+      (context "populated db"
+        (before (db/clear)
+                (db/tx {:kind :bibelot :name "hello"})
+                (db/tx {:kind :bibelot :name "world"})
+                (db/tx {:kind :bibelot :name "world" :size 2})
+                (db/tx {:kind :bibelot :name "hi!" :size 2}))
 
-          (it "all"
-            (db/tx {:kind :thingy :id 123 :name "world"})
-            (should= 4 (sut/select-count :bibelot))
-            (should= 1 (sut/select-count :thingy)))
+        (it "all"
+          (db/tx {:kind :thingy :id 123 :name "world"})
+          (should= 4 (sut/select-count :bibelot))
+          (should= 1 (sut/select-count :thingy)))
 
-          (it "select-count-by: :name"
-            (should= 1 (sut/select-count-by :bibelot :name "hello")))
+        (it "select-count-by: :name"
+          (should= 1 (sut/select-count-by :bibelot :name "hello")))
 
-          (it "select-count-by: two attributes"
-            (should= 1 (sut/select-count-by :bibelot :name "world" :size 2)))
+        (it "select-count-by: two attributes"
+          (should= 1 (sut/select-count-by :bibelot :name "world" :size 2)))
 
-          (it "by :id and other attributes"
-            (let [b1 (db/ffind-by :bibelot :name "hello")
-                  b2 (db/ffind-by :bibelot :name "world" :size nil)
-                  b3 (db/ffind-by :bibelot :name "world" :size 2)
-                  b4 (db/ffind-by :bibelot :name "hi!")]
-              (should= 1 (sut/select-count-by :bibelot :name "hello" :id (:id b1)))
-              (should= 1 (sut/select-count-by :bibelot :name "world" :id (:id b2)))
-              (should= 1 (sut/select-count-by :bibelot :name "world" :id ['not= (:id b2)]))
-              (should= 0 (sut/select-count-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
-              (should= 1 (sut/select-count-by :bibelot :size 2 :id (:id b3)))
-              (should= 2 (sut/select-count-by :bibelot :name "world" :id [(:id b2) (:id b3)]))
-              (should= 2 (sut/select-count-by :bibelot :size 2 :id [(:id b3) (:id b4)]))))
-          )
+        (it "by :id and other attributes"
+          (let [b1 (db/ffind-by :bibelot :name "hello")
+                b2 (db/ffind-by :bibelot :name "world" :size nil)
+                b3 (db/ffind-by :bibelot :name "world" :size 2)
+                b4 (db/ffind-by :bibelot :name "hi!")]
+            (should= 1 (sut/select-count-by :bibelot :name "hello" :id (:id b1)))
+            (should= 1 (sut/select-count-by :bibelot :name "world" :id (:id b2)))
+            (should= 1 (sut/select-count-by :bibelot :name "world" :id ['not= (:id b2)]))
+            (should= 0 (sut/select-count-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
+            (should= 1 (sut/select-count-by :bibelot :size 2 :id (:id b3)))
+            (should= 2 (sut/select-count-by :bibelot :name "world" :id [(:id b2) (:id b3)]))
+            (should= 2 (sut/select-count-by :bibelot :size 2 :id [(:id b3) (:id b4)]))))
         )
+      )
+
+    (context "tx with select-find"
+      (helperc/with-schemas config [spec/thingy spec/doodad])
+      (before (init-entities!))
+
+      (it "tx'ing an entity that was retrieved with select-find doesn't delete the missing fields"
+        (let [full-entity (db/ffind-by :thingy :name "thingy-2")
+              queried     (sut/select-ffind-by :thingy :name "thingy-2")
+              updated     (db/tx queried :name "new-name-2")
+              reloaded    (db/ffind-by :thingy :name "new-name-2")]
+          (should= (assoc full-entity :name "new-name-2") reloaded)))
+
+      (it "can delete an attr with an explicit nil"
+        (let [original (db/ffind-by :thingy :name "thingy-2")]
+          (should= original (db/tx (dissoc original :name)))
+          (should= (dissoc original :name) (db/tx original :name nil))))
+      )
     )
   )

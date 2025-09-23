@@ -52,6 +52,25 @@
     (legend/for-kind @(.-legend db) kind)
     (really-do-find cursor options kind)))
 
+(defn- ensure-full-entity-and-meta [db e]
+  (let [meta (meta e)] (with-meta (merge (entity db (:id e)) e) meta)))
+(defn- ensure-entity-or-id [db {:keys [id] :as e}]
+  (if id (ensure-full-entity-and-meta db e) (memory/ensure-id e)))
+
+(defn tx-with-reload
+  "Since select-find only returns partial entities, this will reload the entity
+  before transacting to prevent data loss.
+  As a result, attributes must be explicitly set to nil in order to delete them."
+  ([db e]
+   (let [e (ensure-entity-or-id db e)]
+     (swap! (.-store db) #(memory/tx-entity @(.-legend db) % e))
+     (memory/tx-result db e))))
+
+(defn tx*-with-reload [db entities]
+  (let [entities (map #(ensure-entity-or-id db %) entities)]
+    (swap! (.-store db) (fn [store] (core-reduce #(memory/tx-entity @(.-legend db) %1 %2) store entities)))
+    (map #(memory/tx-result db %) entities)))
+
 (deftype ReMemoryDB [legend store]
   api/DB
   (-clear [this] (memory/clear this))
@@ -61,8 +80,8 @@
   (-entity [this kind id] (entity this kind id))
   (-find [this kind options] (do-find this kind options))
   (-reduce [this kind f init options] (core-reduce f init (do-find this kind options)))
-  (-tx [this entity] (memory/tx this entity))
-  (-tx* [this entities] (memory/tx* this entities))
+  (-tx [this entity] (tx-with-reload this entity))
+  (-tx* [this entities] (tx*-with-reload this entities))
   migrator/Migrator
   (-schema-exists? [this schema] (contains? @legend (-> schema :kind :value)))
   (-installed-schema-legend [this _expected-legend] @legend)
@@ -125,6 +144,3 @@
 (defn select-count-by [kind & kvs]
   (let [[keyseq options] (->keyseq-and-options kvs)]
     (core-count (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
-
-;Todo implement tx that ensures full entities
-; TODO rendering tests for select-count-by?

@@ -11,7 +11,7 @@
 (def ^:private id-source (atom 1000))
 (defn- gen-id [] (swap! id-source inc))
 
-(defn- ensure-id [e]
+(defn ensure-id [e]
   (if (:id e)
     e
     (assoc e :id (gen-id))))
@@ -47,7 +47,7 @@
         (update :all assoc (:id e) e)
         (update (:kind e) assoc (:id e) e))))
 
-(defn- tx-entity [legend store e]
+(defn tx-entity [legend store e]
   (if (api/delete? e)
     (retract-entity store e)
     (install-entity legend store e)))
@@ -92,7 +92,7 @@
 
 (defn reload [db e] (when-let [id (:id e)] (entity db (:kind e) id)))
 
-(defn- tx-result [db entity]
+(defn tx-result [db entity]
   (if (api/delete? entity)
     (api/soft-delete entity)
     (reload db entity)))
