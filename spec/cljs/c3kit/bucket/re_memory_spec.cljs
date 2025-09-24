@@ -112,6 +112,10 @@
                  (sut/select-find-by :thingy ['dissoc :bar] :name (:name @thingy)))
         (should= [(dissoc @thingy :bar :foo)]
                  (sut/select-find-by :thingy ['dissoc :bar :foo] :name (:name @thingy))))
+
+      (it "gracefully ignores other fns that are passed in"
+        (should= [(select-keys @thingy [:kind :id :name :foo :bar])]
+                 (sut/select-find-by :thingy ['reduce :bar :foo] :name (:name @thingy))))
       )
     )
 
