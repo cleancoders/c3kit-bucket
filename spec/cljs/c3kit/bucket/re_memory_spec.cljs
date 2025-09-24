@@ -106,6 +106,12 @@
       (it "select-find can take keyseq"
         (should= [(select-keys @thingy [:kind :id :name])]
                  (sut/select-find :thingy [:name] {:where [[:id (:id @thingy)]]})))
+
+      (it "supports dissoc option to specify which attrs to exclude instead of selecting attrs"
+        (should= [(dissoc @thingy :bar)]
+                 (sut/select-find-by :thingy ['dissoc :bar] :name (:name @thingy)))
+        (should= [(dissoc @thingy :bar :foo)]
+                 (sut/select-find-by :thingy ['dissoc :bar :foo] :name (:name @thingy))))
       )
     )
 

@@ -38,7 +38,13 @@
       (map #(select-keys % keyseq) (vals slice))
       (vals slice))))
 
-(defn- ->keyseq [& colls] (set (conj (apply concat colls) :id :kind)))
+(defn- ->keyseq [kind & colls]
+  (if (= 'dissoc (-> colls first first))
+    (let [keys-to-dissoc (rest (-> colls first))
+          legend         (legend/for-kind @(.-legend @api/impl) kind)]
+      (keys (apply (partial dissoc legend) keys-to-dissoc)))
+    (set (conj (apply concat colls) :id :kind))))
+
 (defn ->kind-or-ids [kvs kind]
   (let [id (second (first (take-while #(= :id (first %)) kvs)))]
     (if (some-> id ids-not-fns?) (cond-> id (int? id) vector) kind)))
@@ -97,7 +103,7 @@
 
 (defn do-select-find [kind keyseq options]
   (let [where  (:where options)
-        cursor (r/cursor slice-db [(->kind-or-ids where kind) (->keyseq keyseq (map first where))])]
+        cursor (r/cursor slice-db [(->kind-or-ids where kind) (->keyseq kind keyseq (map first where))])]
     (legend/for-kind @(.-legend @api/impl) kind)
     (really-do-find cursor options kind)))
 
@@ -112,9 +118,11 @@
     If the second argument is a keyseq, the component will also listen to changes to those attributes
     and re-render accordingly.
     Supports all filters options as db/find (['>], ['not=], etc.).
+    'dissoc can be used in the keyseq to exclude specific attributes instead of listing what to include.
 
     `(select-find :thingy {:where [[:id 12354] [:foo 5678]] :drop 1 :take 5})`
-    `(select-find :thingy [:foo :bar] {:where [[:id 1234]]})`"
+    `(select-find :thingy [:foo :bar] {:where [[:id 1234]]})`
+    `(select-find :thingy ['dissoc :bar] {:where [[:id 1234]]})`"
   ([kind & opt-args]
    (let [[keyseq options] (->keyseq-and-options opt-args)]
      (do-select-find kind keyseq (first options)))))
@@ -126,9 +134,11 @@
   If the second argument is a keyseq, the component will also listen to changes to those attributes
   and re-render accordingly.
   Supports all filters options as db/find (['>], ['not=], etc.).
+  'dissoc can be used in the keyseq to exclude specific attributes instead of listing what to include.
 
   `(select-find-by :thingy :id 12354 :foo 5678)`
-  `(select-find-by :thingy [:foo :bar] :id 1234)`"
+  `(select-find-by :thingy [:foo :bar] :id 1234)`
+  `(select-find-by :thingy ['dissoc :bar] :id 1234)`"
   ([kind & kvs]
    (let [[keyseq options] (->keyseq-and-options kvs)]
      (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
@@ -144,3 +154,5 @@
 (defn select-count-by [kind & kvs]
   (let [[keyseq options] (->keyseq-and-options kvs)]
     (core-count (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
+
+;TODO add dissoc to select-find
