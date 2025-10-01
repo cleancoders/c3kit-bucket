@@ -154,5 +154,3 @@
 (defn select-count-by [kind & kvs]
   (let [[keyseq options] (->keyseq-and-options kvs)]
     (core-count (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
-
-;TODO add dissoc to select-find
