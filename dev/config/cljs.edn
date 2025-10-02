@@ -1,8 +1,8 @@
 {
  :ns-prefix     "c3kit.bucket"
- :ignore-errors ["goog/i18n/bidi.js"
-                 "React DevTools"
-                 "You might need to use a local HTTP serve"]
+ :ignore-errors ["goog/i18n/bidi.js"]
+ :ignore-console ["React DevTools"
+                  "You might need to use a local HTTP serve"]
  :development   {:cache-analysis true
                  :optimizations  :none
                  :output-dir     "target/cljs/"
