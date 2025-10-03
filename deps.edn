@@ -5,10 +5,11 @@
            cljsjs/hashids              {:mvn/version "1.0.2-0"}
            jstrutz/hashids             {:mvn/version "1.0.1"}
            org.clojure/clojure         {:mvn/version "1.12.2"}
-           reagent/reagent             {:mvn/version "1.2.0"}
+
            }
  :aliases {
            :test    {:extra-deps    {
+                                     reagent/reagent                   {:mvn/version "1.2.0"}
                                      clj-commons/pomegranate           {:mvn/version "1.2.25"}
                                      com.cleancoders.c3kit/scaffold    {:mvn/version "2.2.0"}
                                      com.cleancoders.c3kit/wire        {:mvn/version "2.5.3"}
