@@ -1,10 +1,10 @@
 {
  :paths   ["src/clj" "src/cljc" "src/cljs"]
  :deps    {
-           com.cleancoders.c3kit/apron         {:mvn/version "2.3.0"}
-           cljsjs/hashids                      {:mvn/version "1.0.2-0"}
-           io.github.brandoncorrea/hashids.clj {:git/tag "1.1.0" :git/sha "a29330f"}
-           org.clojure/clojure                 {:mvn/version "1.12.2"}
+           com.cleancoders.c3kit/apron {:mvn/version "2.3.0"}
+           cljsjs/hashids              {:mvn/version "1.0.2-0"}
+           jstrutz/hashids             {:mvn/version "1.0.1"}
+           org.clojure/clojure         {:mvn/version "1.12.2"}
            }
  :aliases {
            :test    {:extra-deps    {

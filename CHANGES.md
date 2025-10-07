@@ -1,3 +1,6 @@
+### 2.5.1
+ * Reverts hashids dependency to the previously used version
+
 ### 2.5.0
  * Added ReMemory, a cljs reagent-focused bucket implementation
    * Optimizes frontend performance with state management
