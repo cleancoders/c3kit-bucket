@@ -1,3 +1,10 @@
+### 2.5.0
+ * Added ReMemory, a cljs reagent-focused bucket implementation
+   * Optimizes frontend performance with state management
+   * `find` will only deref parts of the database based on the query instead of being a deref for the whole database
+   * `entity` will only deref the specific entity instead of being a deref for the whole database
+   * `select-find` added to allow more precise control over what is part of a deref
+
 ### 2.4.0
  * Add support for enum types for Datomic in `c3kit.bucket.migration`
  * Upgrade dependencies
