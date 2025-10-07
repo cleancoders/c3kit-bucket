@@ -10,32 +10,7 @@
 (def config {:impl :memory})
 (declare db)
 
-(describe "Memory DB"
-
-  (around [it] (with-safety-off (it)))
-
-  (spec/crud-specs config)
-  (spec/nil-value-specs config)
-  (spec/count-specs config)
-  (spec/find-specs config)
-  (spec/filter-specs config)
-  (spec/reduce-specs config)
-  (spec/kind-in-entity-is-optional config)
-  (spec/broken-in-datomic config)
-  (spec/multi-value-fields config)
-  (spec/cas config)
-
-  (context "safety"
-    (around [it] (with-redefs [api/*safety* true] (it)))
-
-    (it "clear" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/clear (api/create-db config nil))))
-    (it "delete-all" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/delete-all (api/create-db config nil) :foo))))
-
-  (it "specifying the store"
-    (let [store (atom {:foo :bar})
-          db    (db/create-db {:impl :memory :store store} [])]
-      (should= :bar (:foo @(.-store db)))))
-
+(defn migrator-specs []
   (describe "migrator"
 
     (with db (api/create-db config []))
@@ -89,8 +64,8 @@
     (it "remove-attribute! that doesn't exist"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-        (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
-        (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
+       (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
+       (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
     (it "rename-attribute!"
       (let [_          (migrator/-install-schema! @db spec/bibelot)
@@ -113,7 +88,37 @@
     (it "rename-attribute! - existing missing"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-        (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size))))
-    )
+       (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size))))
+    ))
+
+(describe "Memory DB"
+
+  (around [it] (with-safety-off (it)))
+
+  (spec/crud-specs config)
+  (spec/nil-value-specs config)
+  (spec/count-specs config)
+  (spec/find-specs config)
+  (spec/filter-specs config)
+  (spec/reduce-specs config)
+  (spec/kind-in-entity-is-optional config)
+  (spec/broken-in-datomic config)
+  (spec/multi-value-fields config)
+  (spec/cas config)
+
+  (context "safety"
+    (around [it] (with-redefs [api/*safety* true] (it)))
+
+    (it "clear" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/clear (api/create-db config nil))))
+    (it "delete-all" (should-throw #?(:clj AssertionError :cljs js/Error) (sut/delete-all (api/create-db config nil) :foo))))
+
+  (it "specifying the store"
+    (let [store (atom {:foo :bar})
+          db    (db/create-db {:impl :memory :store store} [])]
+      (should= :bar (:foo @(.-store db)))))
+
+  (migrator-specs)
+
+
   )
 

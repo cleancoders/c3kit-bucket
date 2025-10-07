@@ -1,6 +1,6 @@
 (ns c3kit.bucket.impl-spec
   (:require [c3kit.apron.corec :as ccc]
-            [speclj.core #?(:clj :refer :cljs :refer-macros) [before context it should-be-nil should-contain
+            [speclj.core #?(:clj :refer :cljs :refer-macros) [before context focus-it it should-be-nil should-contain
                                                               should-not-be-nil should-not-contain should-not-have-invoked
                                                               should-not-throw should-throw should= stub with with-stubs]]
             [c3kit.bucket.api :as sut]

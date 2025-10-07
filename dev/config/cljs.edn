@@ -1,13 +1,15 @@
 {
  :ns-prefix     "c3kit.bucket"
  :ignore-errors ["goog/i18n/bidi.js"]
+ :ignore-console ["React DevTools"
+                  "You might need to use a local HTTP serve"]
  :development   {:cache-analysis true
                  :optimizations  :none
                  :output-dir     "target/cljs/"
                  :output-to      "target/cljs/c3kit_bucket_dev.js"
                  :pretty-print   true
                  :source-map     true
-                 :sources        ["spec/cljc" "src/cljc"]
+                 :sources        ["spec/cljc" "src/cljc" "src/cljs" "spec/cljs"]
                  :specs          true
                  :verbose        false
                  :watch-fn       c3kit.scaffold.cljs/on-dev-compiled
@@ -18,7 +20,7 @@
                  :output-dir     "target/cljs/"
                  :output-to      "target/cljs/c3kit_bucket.js"
                  :pretty-print   false
-                 :sources        ["spec/cljc" "src/cljc"]
+                 :sources        ["spec/cljc" "src/cljc" "src/cljs" "spec/cljs"]
                  :specs          true
                  :verbose        false
                  }
@@ -31,7 +33,7 @@
                  :pretty-print   false
                  ;:pretty-print   true
                  ;:pseudo-names   true
-                 :sources        ["src/cljc"]
+                 :sources        ["src/cljc" ]
                  :specs          false
                  :verbose        false
                  }
