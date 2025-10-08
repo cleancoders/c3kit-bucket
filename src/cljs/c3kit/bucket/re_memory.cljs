@@ -41,7 +41,7 @@
 (defn- ->keyseq [kind & colls]
   (if (= 'dissoc (-> colls first first))
     (let [keys-to-dissoc (rest (-> colls first))
-          legend         (legend/for-kind @(.-legend @api/impl) kind)]
+          legend (legend/for-kind @(.-legend @api/impl) kind)]
       (keys (apply (partial dissoc legend) keys-to-dissoc)))
     (set (conj (apply concat colls) :id :kind))))
 
@@ -63,20 +63,6 @@
 (defn- ensure-entity-or-id [db {:keys [id] :as e}]
   (if id (ensure-full-entity-and-meta db e) (memory/ensure-id e)))
 
-(defn tx-with-reload
-  "Since select-find only returns partial entities, this will reload the entity
-  before transacting to prevent data loss.
-  As a result, attributes must be explicitly set to nil in order to delete them."
-  ([db e]
-   (let [e (ensure-entity-or-id db e)]
-     (swap! (.-store db) #(memory/tx-entity @(.-legend db) % e))
-     (memory/tx-result db e))))
-
-(defn tx*-with-reload [db entities]
-  (let [entities (map #(ensure-entity-or-id db %) entities)]
-    (swap! (.-store db) (fn [store] (core-reduce #(memory/tx-entity @(.-legend db) %1 %2) store entities)))
-    (map #(memory/tx-result db %) entities)))
-
 (deftype ReMemoryDB [legend store]
   api/DB
   (-clear [this] (memory/clear this))
@@ -86,8 +72,8 @@
   (-entity [this kind id] (entity this kind id))
   (-find [this kind options] (do-find this kind options))
   (-reduce [this kind f init options] (core-reduce f init (do-find this kind options)))
-  (-tx [this entity] (tx-with-reload this entity))
-  (-tx* [this entities] (tx*-with-reload this entities))
+  (-tx [this entity] (memory/tx this entity))
+  (-tx* [this entities] (memory/tx* this entities))
   migrator/Migrator
   (-schema-exists? [this schema] (contains? @legend (-> schema :kind :value)))
   (-installed-schema-legend [this _expected-legend] @legend)
@@ -102,7 +88,7 @@
     (ReMemoryDB. (atom (legend/build schemas)) store)))
 
 (defn do-select-find [kind keyseq options]
-  (let [where  (:where options)
+  (let [where (:where options)
         cursor (r/cursor slice-db [(->kind-or-ids where kind) (->keyseq kind keyseq (map first where))])]
     (legend/for-kind @(.-legend @api/impl) kind)
     (really-do-find cursor options kind)))
@@ -154,3 +140,27 @@
 (defn select-count-by [kind & kvs]
   (let [[keyseq options] (->keyseq-and-options kvs)]
     (core-count (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
+
+(defn select-tx- [db & args]
+  (let [e (ccc/->options args)
+        e (ensure-entity-or-id db e)]
+    (swap! (.-store db) #(memory/tx-entity @(.-legend db) % e))
+    (memory/tx-result db e)))
+
+(defn select-tx*- [db entities]
+  (let [entities (map #(ensure-entity-or-id db %) entities)]
+    (swap! (.-store db) (fn [store] (core-reduce #(memory/tx-entity @(.-legend db) %1 %2) store entities)))
+    (map #(memory/tx-result db %) entities)))
+
+(defn select-tx
+  "Since select-find only returns partial entities, this will reload the entity
+   before transacting to prevent data loss.
+   As a result, attributes must be explicitly set to nil in order to delete them."
+  [& args]
+  (apply select-tx- @api/impl args))
+
+(defn select-tx*
+  "Since select-find only returns partial entities, this will reload the entity
+   before transacting to prevent data loss.
+   As a result, attributes must be explicitly set to nil in order to delete them."
+  [entities] (select-tx*- @api/impl entities))

@@ -670,14 +670,31 @@
       (it "tx'ing an entity that was retrieved with select-find doesn't delete the missing fields"
         (let [full-entity (db/ffind-by :thingy :name "thingy-2")
               queried     (sut/select-ffind-by :thingy :name "thingy-2")
-              _updated     (db/tx queried :name "new-name-2")
+              _updated     (sut/select-tx queried :name "new-name-2")
               reloaded    (db/ffind-by :thingy :name "new-name-2")]
           (should= (assoc full-entity :name "new-name-2") reloaded)))
 
       (it "can delete an attr with an explicit nil"
         (let [original (db/ffind-by :thingy :name "thingy-2")]
-          (should= original (db/tx (dissoc original :name)))
-          (should= (dissoc original :name) (db/tx original :name nil))))
+          (should= original (sut/select-tx (dissoc original :name)))
+          (should= (dissoc original :name) (sut/select-tx original :name nil))))
+      )
+
+    (context "tx* with select-find"
+      (helperc/with-schemas config [spec/thingy spec/doodad])
+      (before (init-entities!))
+
+      (it "tx*'ing entities that were retrieved with select-find doesn't delete the missing fields"
+        (let [full-entities (db/find :thingy)
+              queried     (sut/select-find-by :thingy)
+              _updated    (sut/select-tx* queried)
+              reloaded    (db/find :thingy)]
+          (should= full-entities reloaded)))
+
+      (it "can delete an attr with an explicit nil"
+        (let [originals (db/find-by :thingy)]
+          (should= originals (sut/select-tx* (map #(dissoc % :name) originals)))
+          (should= (map #(dissoc % :name) originals) (sut/select-tx* (map #(assoc % :name nil) originals)))))
       )
     )
   )

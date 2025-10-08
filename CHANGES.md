@@ -1,3 +1,9 @@
+### 2.6.0
+ * ReMemory `db/tx` changed to use implicit nils 
+   * `(db/tx (dissoc my-entity :some-attr))`
+ * Added `rem/select-tx` and `rem/select-tx*` to ReMemory to use explicit nils
+   * `(db/select-tx my-entity :some-attr nil)`
+
 ### 2.5.1
  * Reverts hashids dependency to the previously used version
 
