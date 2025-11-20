@@ -23,7 +23,7 @@
                                      org.clojure/clojurescript         {:mvn/version "1.12.42"}
                                      org.postgresql/postgresql         {:mvn/version "42.7.8"}
                                      org.xerial/sqlite-jdbc            {:mvn/version "3.51.0.0"}
-                                     speclj/speclj                     {:mvn/version "3.12.0"}
+                                     speclj/speclj                     {:mvn/version "3.10.0"}
                                      cljsjs/react                      {:mvn/version "17.0.2-0"} ; A new major version of cljsjs is available, but reagent.dom/render is not yet compatible with it.
                                      cljsjs/react-dom                  {:mvn/version "17.0.2-0"}
                                      }
@@ -37,7 +37,7 @@
            :cljs    {:main-opts ["-m" "c3kit.scaffold.cljs"]}
            :antq    {:deps      {com.github.liquidz/antq {:mvn/version "2.11.1276"}}
                      :main-opts ["-m" "antq.core"]}
-           :build   {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.10.11"}
+           :build   {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.10.10"}
                                    clj-commons/pomegranate       {:mvn/version "1.2.25"}}
                      :ns-default  build
                      :extra-paths ["dev"]
