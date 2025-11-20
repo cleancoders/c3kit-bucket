@@ -1,3 +1,6 @@
+### 2.7.1
+ * Normalizes input schemas when performing a migrate sync
+
 ### 2.7.0
  * Allow nested collections of schemas in `:full-schema`
  * Fix issue where conflicting types would throw during migrations
