@@ -1,3 +1,10 @@
+### 2.7.0
+ * Allow nested collections of schemas in `:full-schema`
+ * Fix issue where conflicting types would throw during migrations
+ * Suppress migration warnings with missing `:kind` attributes
+ * `-installed-schema-legend` returns normalized schemas
+   * Particularly for schemas of type `:seq`
+
 ### 2.6.0
  * ReMemory `db/tx` changed to use implicit nils 
    * `(db/tx (dissoc my-entity :some-attr))`

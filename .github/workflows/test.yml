@@ -42,7 +42,7 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5.01
 
       - name: Install SQLite3
         run: sudo apt-get install -y sqlite3
@@ -60,7 +60,7 @@ jobs:
         run: psql -h localhost -U postgres -c "CREATE USER runner SUPERUSER"
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: 21
           distribution: 'temurin'

@@ -57,6 +57,9 @@
           (assoc-in [kind :enum] kind)
           (update-in [kind :values] ccc/conjv value)))))
 
+(defn- many? [cardinality]
+  (= :db.cardinality/many (:db/ident cardinality cardinality)))
+
 (defn- attribute->schema-spec [attribute]
   (let [value-type  (:db/valueType attribute)
         ident       (:db/ident attribute)
@@ -69,15 +72,16 @@
         no-history? (:db/noHistory attribute)
         fulltext?   (:db/fulltext attribute)
         schema-type (keyword (name value-type))
-        schema-type (if (= :db.cardinality/many cardinality) [schema-type] schema-type)
+        schema-type (if (many? cardinality) [schema-type] schema-type)
         db          (remove nil? [(when index? :index)
                                   (when component? :component)
                                   (when no-history? :no-history)
                                   (when fulltext? :fulltext)
                                   (when (= :db.unique/identity unique) :unique-identity)
                                   (when (= :db.unique/value unique) :unique-value)])
-        spec        {:type schema-type}
-        spec        (if (seq db) (assoc spec :db db) spec)]
+        spec        (-> {:type schema-type}
+                        (cond-> (seq db) (assoc :db db))
+                        schema/normalize-spec)]
     [:schema kind attr-name spec]))
 
 (defn- attribute->enum-spec [attribute]
@@ -375,7 +379,8 @@
                     (transact! db [{:db/id old-id :db/ident qualified-new}])))))
 
 (defn do-install-schema! [db schema]
-  (let [kind (api/-schema-kind schema)]
+  (let [schema (cond-> schema (contains? schema :kind) schema/normalize-schema)
+        kind   (api/-schema-kind schema)]
     (log/info (str "  installing schema " kind))
     (transact! db (->db-schema schema false))))
 

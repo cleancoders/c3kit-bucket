@@ -122,6 +122,13 @@
         (should= {:type :long} (-> result :bibelot :size))
         (should= {:type :string} (-> result :bibelot :color))))
 
+    (it "installed-schema-legend - seq types"
+      (common-api/transact! @db (common-api/->db-schema impl-spec/doodad false))
+      (let [result (migrator/-installed-schema-legend @db {:doodad impl-spec/doodad})]
+        (should= {:type :seq :spec {:type :string}} (-> result :doodad :names))
+        (should= {:type :seq :spec {:type :long}} (-> result :doodad :numbers))
+        (should= {:type :seq :spec {:type :keyword}} (-> result :doodad :letters))))
+
     (it "install-schema!"
       (let [schema (assoc-in impl-spec/bibelot [:kind :value] :bubble)
             _      (migrator/-install-schema! @db schema)

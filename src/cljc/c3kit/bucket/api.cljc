@@ -291,7 +291,7 @@ Requires the *safety* be turned off."
       (log/info "Starting bucket service:" (:impl config))
       (let [schemas-var (:full-schema config)
             _           (when-not schemas-var (throw (ex-info ":full-schema missing from bucket config" config)))
-            schemas     (util/var-value schemas-var)
+            schemas     (flatten (util/var-value schemas-var))
             impl        (create-db config schemas)]
         (assoc app :bucket/impl impl
                    :bucket/config config

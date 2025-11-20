@@ -115,7 +115,8 @@
                               (dissoc kind))))))
 
 (defn- do-install-schema! [db schema]
-  (let [kind (api/-schema-kind schema)]
+  (let [schema (cond-> schema (contains? schema :kind) schema/normalize-schema)
+        kind   (api/-schema-kind schema)]
     (swap! (.-legend db) assoc kind schema)))
 
 (defn do-remove-attribute! [db kind attr]

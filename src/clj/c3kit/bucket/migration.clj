@@ -189,12 +189,16 @@
 
 ;; ----- synchronization -----
 
-(defn valid-type? [expected actual-type]
-  (let [[expected actual-type] (cond->> [expected actual-type]
-                                        (vector? actual-type)
-                                        (map first))]
-    (= (str/lower-case (name expected))
-       (str/lower-case (name actual-type)))))
+(defn- type-name [db-type]
+  (-> db-type
+      (cond-> (vector? db-type) first)
+      name
+      str/lower-case))
+
+(defn- valid-type? [expected actual-type]
+  (->> [expected actual-type]
+       (map type-name)
+       (apply =)))
 
 (defn- sync-attribute [{:keys [-preview? -db]} schema attr installed-attrs]
   (let [spec (get schema attr)
@@ -206,9 +210,12 @@
       (do (log/warn (str kind "/" (name attr) " - attribute missing. Creating."))
           (when-not -preview? (migrator/-add-attribute! -db schema attr))))))
 
+(defn- schema-attrs [schema]
+  (set (keys (dissoc schema :kind))))
+
 (defn- log-extra-attributes [schema attributes]
-  (let [expected (set (keys (dissoc schema :kind)))
-        actual   (set (keys attributes))
+  (let [expected (schema-attrs schema)
+        actual   (schema-attrs attributes)
         extra    (set/difference actual expected)
         kind     (db/-schema-kind schema)]
     (doseq [attr extra]

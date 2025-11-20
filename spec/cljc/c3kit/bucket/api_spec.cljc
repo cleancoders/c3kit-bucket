@@ -1,5 +1,6 @@
 (ns c3kit.bucket.api-spec
   (:require [c3kit.bucket.api :as api]
+            [c3kit.bucket.impl-spec :as spec]
             [speclj.core #?(:clj :refer :cljs :refer-macros) [context describe it should-contain should-have-invoked
                                                               should-not-contain should-throw should= stub with-stubs]]
             [c3kit.bucket.api :as sut #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
@@ -82,6 +83,15 @@
          (it "start - missing :full-schema"
            (with-redefs [sut/load-config (constantly {:impl :memory})]
              (should-throw (sut/-start-service {}))))
+
+         (it "start - full-schema contains sequences of schemas"
+           (let [config      {:full-schema 'foo/bar :impl :memory}
+                 full-schema [spec/bibelot [spec/doodad spec/thingy]]]
+             (with-redefs [sut/load-config (constantly config)
+                           util/var-value  (constantly full-schema)]
+               (let [app     (sut/-start-service {})
+                     schemas (:bucket/schemas app)]
+                 (should= [spec/bibelot spec/doodad spec/thingy] schemas)))))
 
          (it "stop"
            (with-redefs [api/close (stub :close)]

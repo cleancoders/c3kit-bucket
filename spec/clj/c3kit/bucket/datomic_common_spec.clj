@@ -96,7 +96,7 @@
         (let [spec (sut/attribute->spec {:db/ident       :foo/bar
                                          :db/valueType   :db.type/string
                                          :db/cardinality :db.cardinality/many})]
-          (should= [:schema :foo :bar {:type [:string]}] spec)))
+          (should= [:schema :foo :bar {:type :seq :spec {:type :string}}] spec)))
 
       (it "index"
         (let [spec (sut/attribute->spec {:db/ident     :foo/bar
