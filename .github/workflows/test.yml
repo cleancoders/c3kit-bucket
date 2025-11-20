@@ -42,7 +42,7 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v5.01
+      - uses: actions/checkout@v5
 
       - name: Install SQLite3
         run: sudo apt-get install -y sqlite3
