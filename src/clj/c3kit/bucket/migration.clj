@@ -3,7 +3,6 @@
             [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
-            [c3kit.apron.schema :as schema]
             [c3kit.apron.time :as time]
             [c3kit.apron.util :as util]
             [c3kit.bucket.api :as db]
@@ -201,11 +200,15 @@
        (map type-name)
        (apply =)))
 
+(defn- spec-type [spec]
+  (or (-> spec :db :type)
+      (-> spec :type)))
+
 (defn- sync-attribute [{:keys [-preview? -db]} schema attr installed-attrs]
   (let [spec (get schema attr)
         kind (db/-schema-kind schema)]
-    (if-let [actual-type (or (get-in installed-attrs [attr :db :type]) (get-in installed-attrs [attr :type]))]
-      (let [expected (or (-> spec :db :type) (:type spec))]
+    (if-let [actual-type (spec-type (get installed-attrs attr))]
+      (let [expected (spec-type spec)]
         (when-not (valid-type? expected actual-type)
           (log/warn (str kind "/" (name attr) " - type mismatch. expected: '" expected "' but was '" actual-type "'"))))
       (do (log/warn (str kind "/" (name attr) " - attribute missing. Creating."))
