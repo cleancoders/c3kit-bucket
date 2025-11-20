@@ -157,6 +157,16 @@
           (should-not-be-nil migration)
           (should-contain "Synchronizing 1 schema(s) with the database" (map :message logs))))
 
+      (it "creates migration with a vector type"
+        (sut/-ensure-migration-schema! @config)
+        (let [migration (sut/-create-migration! @config sut/SYNC_SCHEMAS)]
+          (db/tx migration :at (-> 6 time/minutes time/ago)))
+        (sut/-maybe-sync-schemas-unlocked! @config [spec/doodad])
+        (let [migration (sut/-fetch-migration @config sut/SYNC_SCHEMAS)
+              logs      (log/parse-captured-logs)]
+          (should> (time/millis-since-epoch (:at migration)) (time/millis-since-epoch (-> 1 time/seconds time/ago)))
+          (should-contain "Synchronizing 1 schema(s) with the database" (map :message logs))))
+
       (it "won't run within 5 min of last run"
         (sut/-ensure-migration-schema! @config)
         (sut/-create-migration! @config sut/SYNC_SCHEMAS)
@@ -176,13 +186,12 @@
 
       (it "updates migration with a vector type"
         (sut/-ensure-migration-schema! @config)
-        (let [migration (sut/-create-migration! @config sut/SYNC_SCHEMAS)]
-          (db/tx migration :at (-> 6 time/minutes time/ago)))
-        (sut/-maybe-sync-schemas-unlocked! @config [spec/doodad])
+        (migrator/install-schema! spec/doodad)
+        (sut/-maybe-sync-schemas-unlocked! @config [spec/doodad spec/thingy])
         (let [migration (sut/-fetch-migration @config sut/SYNC_SCHEMAS)
               logs      (log/parse-captured-logs)]
           (should> (time/millis-since-epoch (:at migration)) (time/millis-since-epoch (-> 1 time/seconds time/ago)))
-          (should-contain "Synchronizing 1 schema(s) with the database" (map :message logs))))
+          (should= ["Synchronizing 2 schema(s) with the database"] (map :message logs))))
 
       (it "enum already installed"
         (sut/-ensure-migration-schema! @config)

@@ -379,7 +379,7 @@
                     (transact! db [{:db/id old-id :db/ident qualified-new}])))))
 
 (defn do-install-schema! [db schema]
-  (let [schema (cond-> schema (contains? schema :kind) schema/normalize-schema)
+  (let [schema (api/-normalize-schema schema)
         kind   (api/-schema-kind schema)]
     (log/info (str "  installing schema " kind))
     (transact! db (->db-schema schema false))))

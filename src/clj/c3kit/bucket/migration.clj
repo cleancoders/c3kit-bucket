@@ -3,6 +3,7 @@
             [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
+            [c3kit.apron.schema :as schema]
             [c3kit.apron.time :as time]
             [c3kit.apron.util :as util]
             [c3kit.bucket.api :as db]
@@ -256,7 +257,8 @@
 
 (defn- perform-synchronization! [{:keys [-db] :as config} schemas]
   (log/report (str "Synchronizing " (count schemas) " schema(s) with the database"))
-  (let [legend           (legend/build schemas)
+  (let [schemas          (map db/-normalize-schema schemas)
+        legend           (legend/build schemas)
         installed-legend (migrator/-installed-schema-legend -db legend)
         config           (assoc config :-installed-legend installed-legend :_expected-legend legend)]
     (doseq [schema (sort-by db/-schema-kind schemas)]

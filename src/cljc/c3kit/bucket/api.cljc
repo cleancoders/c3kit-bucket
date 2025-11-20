@@ -40,6 +40,11 @@
   (or (-> schema :kind :value)
       (:enum schema)))
 
+(defn -normalize-schema [schema]
+  (cond-> schema
+          (contains? schema :kind)
+          schema/normalize-schema))
+
 (defn -kvs->kv-pairs [kvs]
   (assert (even? (core/count kvs)) "filter params must come in pairs")
   (let [kv-pairs (partition 2 kvs)]

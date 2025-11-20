@@ -115,7 +115,7 @@
                               (dissoc kind))))))
 
 (defn- do-install-schema! [db schema]
-  (let [schema (cond-> schema (contains? schema :kind) schema/normalize-schema)
+  (let [schema (api/-normalize-schema schema)
         kind   (api/-schema-kind schema)]
     (swap! (.-legend db) assoc kind schema)))
 
