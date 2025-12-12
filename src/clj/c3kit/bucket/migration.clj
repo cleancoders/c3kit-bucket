@@ -187,6 +187,16 @@
 
 ;; ^^^^^ migration ^^^^^
 
+;; ----- service -----
+
+(defn -start-service [app]
+  (migrate!)
+  app)
+
+(def service (app/service 'c3kit.bucket.migration/-start-service nil))
+
+;; ^^^^^ service ^^^^^
+
 ;; ----- synchronization -----
 
 (defn- type-name [db-type]
