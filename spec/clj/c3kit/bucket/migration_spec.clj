@@ -15,6 +15,7 @@
 (declare config now)
 
 (describe "Migration"
+  (with-stubs)
 
   (with now (time/now))
   (redefs-around [time/now (constantly @now)])
@@ -256,6 +257,20 @@
         (log/capture-logs (sut/migrate! @config nil))
         (let [logs (log/parse-captured-logs)]
           (should= ["No migrations needed."] (map :message logs))))
+      )
+
+    (context "service"
+
+      (it "runs migrations on start"
+        (with-redefs [sut/migrate! (stub :migrate!)]
+          (let [start @(resolve (:start sut/service))
+                app   {:foo :bar}]
+            (should= app (start app))
+            (should-have-invoked :migrate!))))
+
+      (it "does nothing on stop"
+        (should-be-nil (:stop sut/service)))
+
       )
 
     )

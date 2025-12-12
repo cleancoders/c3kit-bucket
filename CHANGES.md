@@ -1,3 +1,6 @@
+### 2.8.0
+ * Adds Migration as a service
+
 ### 2.7.1
  * Normalizes input schemas when performing a migrate sync
 
