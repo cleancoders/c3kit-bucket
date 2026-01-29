@@ -112,7 +112,14 @@ Options:
     ['> value]    - (> % value)
     ['< value]    - (< % value)
     ['like str]   - (re-matches str %) where '_' = single char wildcard and '%' = multi char wildcard
-  :take   - int - returns only this many entities"
+  :order-by - map of {field direction} to sort results (not supported by datomic)
+    :asc          - ascending order
+    :desc         - descending order
+    ['<-> vec]    - L2 distance (memory, postgres with pgvector)
+    ['<=> vec]    - cosine distance (memory, postgres with pgvector)
+    ['<#> vec]    - inner product distance (memory, postgres with pgvector)
+  :take   - int - returns only this many entities
+  :drop   - int - skips this many entities"
   [kind & opt-args] (apply find- @impl kind opt-args))
 
 (defn ffind-

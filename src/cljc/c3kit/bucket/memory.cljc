@@ -11,6 +11,43 @@
 (def ^:private id-source (atom 1000))
 (defn- gen-id [] (swap! id-source inc))
 
+;; Vector distance functions for similarity search
+(defn- dot-product [v1 v2]
+  (core-reduce + (map * v1 v2)))
+
+(defn- magnitude [v]
+  #?(:clj  (Math/sqrt (dot-product v v))
+     :cljs (js/Math.sqrt (dot-product v v))))
+
+(defn- cosine-distance
+  "Returns cosine distance (1 - cosine similarity). Range: 0 (identical) to 2 (opposite)."
+  [v1 v2]
+  (let [dot (dot-product v1 v2)
+        mag1 (magnitude v1)
+        mag2 (magnitude v2)]
+    (if (or (zero? mag1) (zero? mag2))
+      1.0
+      (- 1.0 (/ dot (* mag1 mag2))))))
+
+(defn- l2-distance
+  "Returns Euclidean (L2) distance between two vectors."
+  [v1 v2]
+  #?(:clj  (Math/sqrt (core-reduce + (map #(Math/pow (- %1 %2) 2) v1 v2)))
+     :cljs (js/Math.sqrt (core-reduce + (map #(js/Math.pow (- %1 %2) 2) v1 v2)))))
+
+(defn- inner-product-distance
+  "Returns negative inner product (for ORDER BY ASC semantics - higher similarity = lower value)."
+  [v1 v2]
+  (- (dot-product v1 v2)))
+
+(defn- safe-distance
+  "Compute distance, returning MAX_VALUE if either vector is nil."
+  [distance-fn v1 v2]
+  (if (or (nil? v1) (nil? v2))
+    #?(:clj  Double/MAX_VALUE
+       :cljs js/Number.MAX_VALUE)
+    (distance-fn v1 v2)))
+
 (defn ensure-id [e]
   (if (:id e)
     e
@@ -62,10 +99,45 @@
 
 (defn- ensure-schema! [legend kind] (legend/for-kind legend kind))
 
+(def ^:private vector-operators #{'<-> '<=> '<#>})
+
+(defn- apply-order-by
+  "Apply ordering to a collection of entities.
+   order-by is a map of {field direction-or-op} where direction-or-op can be:
+   - :asc or :desc for standard ordering
+   - ['<-> query-vec] for L2 distance
+   - ['<=> query-vec] for cosine distance
+   - ['<#> query-vec] for inner product"
+  [order-by entities]
+  (if-not (and order-by (map? order-by) (seq order-by))
+    entities
+    (let [entry (first order-by)
+          field (key entry)
+          direction-or-op (val entry)]
+      (cond
+        ;; Vector similarity ordering
+        (and (sequential? direction-or-op)
+             (vector-operators (first direction-or-op)))
+        (let [[op query-vec] direction-or-op
+              distance-fn (case op
+                            <-> l2-distance
+                            <=> cosine-distance
+                            <#> inner-product-distance)]
+          (sort-by #(safe-distance distance-fn (get % field) query-vec) entities))
+
+        ;; Standard descending
+        (= :desc direction-or-op)
+        (sort-by field #(compare %2 %1) entities)
+
+        ;; Standard ascending (default)
+        :else
+        (sort-by field entities)))))
+
 (defn- do-find [db kind options]
   (ensure-schema! @(.-legend db) kind)
   (let [es (or (vals (get @(.-store db) kind)) [])]
     (->> (ccc/find-by es (:where options))
+         (apply-order-by (:order-by options))
          (api/-apply-drop-take options))))
 
 ;; db api -----------------------------------

@@ -50,15 +50,17 @@
                "RETURNING " id-col)
           (map :value sql-args))))
 
-(defmethod jdbc/-build-find-query :sqlite3 [dialect t-map {:keys [where take drop]}]
-  (let [[where-sql & args] (jdbc/-build-where dialect t-map where)
+(defmethod jdbc/-build-find-query :sqlite3 [dialect t-map {:keys [where order-by take drop]}]
+  (let [[where-sql & where-args] (jdbc/-build-where dialect t-map where)
+        [order-sql & order-args] (jdbc/-build-order-by dialect t-map order-by)
         sql (jdbc/-seq->sql
               "SELECT * FROM " (jdbc/->safe-name dialect (:table t-map))
               where-sql
+              order-sql
               (cond take (str "LIMIT " take)
                     drop "LIMIT -1")
               (when drop (str "OFFSET " drop)))]
-    (cons sql args)))
+    (cons sql (concat where-args order-args))))
 
 (defmethod jdbc/existing-tables :sqlite3 [db]
   (->> (jdbc/execute! db ["SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"])

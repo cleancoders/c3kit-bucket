@@ -17,17 +17,20 @@
 
 (defmethod jdbc/->safe-name :mssql [_ name] (str \[ name \]))
 
-(defmethod jdbc/-build-find-query :mssql [dialect t-map {:keys [where take drop]}]
+(defmethod jdbc/-build-find-query :mssql [dialect t-map {:keys [where order-by take drop]}]
   (let [id-col (get-in t-map [:key->col :id])
-        [where-sql & args] (jdbc/-build-where dialect t-map where)
+        [where-sql & where-args] (jdbc/-build-where dialect t-map where)
+        [order-sql & order-args] (jdbc/-build-order-by dialect t-map order-by)
+        ;; MSSQL requires ORDER BY for OFFSET/FETCH, default to id if using pagination
+        order-sql (or order-sql (when drop (str "ORDER BY " id-col)))
         sql    (jdbc/-seq->sql "SELECT"
                  (when (and take (not drop)) (str "TOP " take))
                  "* FROM" (jdbc/->safe-name dialect (:table t-map))
                  where-sql
-                 (when drop ["ORDER BY" id-col
-                             "OFFSET" drop "ROWS"
+                 order-sql
+                 (when drop ["OFFSET" drop "ROWS"
                              (when take ["FETCH NEXT" take " ROWS ONLY"])]))]
-    (cons sql args)))
+    (cons sql (concat where-args order-args))))
 
 (defmethod jdbc/build-upsert-sql :mssql [dialect t-map {:keys [id] :as entity}]
   (let [[fetch-sql & fetch-params] (jdbc/build-fetch-sql dialect t-map id)

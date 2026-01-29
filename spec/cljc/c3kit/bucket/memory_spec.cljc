@@ -2,7 +2,7 @@
   (:require [c3kit.apron.log :as log]
             [c3kit.bucket.api :as db]
             [c3kit.bucket.migrator :as migrator]
-            [speclj.core #?(:clj :refer :cljs :refer-macros) [around before context describe it should-contain should-not-contain should-not-throw should-throw should= with]]
+            [speclj.core #?(:clj :refer :cljs :refer-macros) [around before context describe it should-be-nil should-contain should-not-contain should-not-throw should-throw should= with]]
             [c3kit.bucket.api :as api #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.memory :as sut]))
@@ -105,6 +105,9 @@
   (spec/broken-in-datomic config)
   (spec/multi-value-fields config)
   (spec/cas config)
+  (spec/order-by-specs config)
+  (spec/order-by-vector-specs config)
+  (migrator-specs)
 
   (context "safety"
     (around [it] (with-redefs [api/*safety* true] (it)))
@@ -116,9 +119,6 @@
     (let [store (atom {:foo :bar})
           db    (db/create-db {:impl :memory :store store} [])]
       (should= :bar (:foo @(.-store db)))))
-
-  (migrator-specs)
-
 
   )
 

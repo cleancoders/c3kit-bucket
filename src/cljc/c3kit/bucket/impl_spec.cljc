@@ -40,6 +40,18 @@
    :id   {:type :long}
    :kind (s/kind :disorganized)})
 
+(def orderable
+  {:kind (s/kind :orderable)
+   :id   {:type :long}
+   :name {:type :string}
+   :size {:type :long}})
+
+(def vectorable
+  {:kind      (s/kind :vectorable)
+   :id        {:type :long}
+   :name      {:type :string}
+   :embedding {:type [:float]}})
+
 (def bibelot-states
   {:enum   :bibelot.state
    :values [:pending :active :disabled]})
@@ -810,3 +822,72 @@
     )
 
   )
+
+(defn order-by-specs [config]
+  (context "order-by"
+
+    (helper/with-schemas config [orderable])
+
+    (before
+      (sut/clear)
+      (sut/tx {:kind :orderable :name "a" :size 3})
+      (sut/tx {:kind :orderable :name "b" :size 1})
+      (sut/tx {:kind :orderable :name "c" :size 2}))
+
+    (it "orders by field ascending"
+      (should= ["a" "b" "c"] (map :name (sut/find :orderable :order-by {:name :asc}))))
+
+    (it "orders by field descending"
+      (should= ["c" "b" "a"] (map :name (sut/find :orderable :order-by {:name :desc}))))
+
+    (it "orders by numeric field ascending"
+      (should= ["b" "c" "a"] (map :name (sut/find :orderable :order-by {:size :asc}))))
+
+    (it "orders by numeric field descending"
+      (should= ["a" "c" "b"] (map :name (sut/find :orderable :order-by {:size :desc}))))
+
+    (it "combines order-by with where"
+      (let [results (sut/find :orderable :where [[:name ['not= "b"]]]
+                              :order-by {:size :asc})]
+        (should= ["c" "a"] (map :name results))))
+
+    (it "combines order-by with take"
+      (let [results (sut/find :orderable :order-by {:size :asc} :take 2)]
+        (should= ["b" "c"] (map :name results))))))
+
+(defn order-by-vector-specs [config]
+  (context "order-by vector distance"
+
+    (helper/with-schemas config [vectorable])
+
+    (before
+      (sut/clear)
+      (sut/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+      (sut/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+      (sut/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]}))
+
+    (it "orders by L2 distance (<->)"
+      (let [query-vec [1.0 0.0 0.0]
+            results   (sut/find :vectorable :order-by {:embedding ['<-> query-vec]})]
+        (should= ["a" "c" "b"] (map :name results))))
+
+    (it "orders by cosine distance (<=>)"
+      (let [query-vec [1.0 0.0 0.0]
+            results   (sut/find :vectorable :order-by {:embedding ['<=> query-vec]})]
+        (should= ["a" "c" "b"] (map :name results))))
+
+    (it "orders by inner product distance (<#>)"
+      (let [query-vec [1.0 0.0 0.0]
+            results   (sut/find :vectorable :order-by {:embedding ['<#> query-vec]})]
+        (should= ["a" "c" "b"] (map :name results))))
+
+    (it "handles nil embeddings gracefully"
+      (sut/tx {:kind :vectorable :name "d" :embedding nil})
+      (let [query-vec [1.0 0.0 0.0]
+            results   (sut/find :vectorable :order-by {:embedding ['<-> query-vec]})]
+        (should= ["a" "c" "b" "d"] (map :name results))))
+
+    (it "combines vector distance with take"
+      (let [query-vec [1.0 0.0 0.0]
+            results   (sut/find :vectorable :order-by {:embedding ['<=> query-vec]} :take 2)]
+        (should= ["a" "c"] (map :name results))))))

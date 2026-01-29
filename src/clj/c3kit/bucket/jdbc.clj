@@ -134,29 +134,23 @@
            (not (namespace k))
            (str (->safe-name dialect table) \.)))
 
-(defn- json? [type db-type]
-  (and (= :string type)
-       db-type
-       (str/starts-with? db-type "json")))
-
-(defn spec->db-type [spec]
-  (let [type    (:type spec)
-        db-type (-> spec :db :type)]
-    (if (json? type db-type)
-      :json
-      type)))
+(defmulti spec->db-type (fn [dialect _spec] dialect))
+(defmethod spec->db-type :default [_ spec] (:type spec))
 
 (defn time? [type] (#{:instant :date :timestamp} type))
 
-(defn <-sql-value [type value]
+(defmulti <-sql-value-for-dialect (fn [dialect _type _value] dialect))
+(defmethod <-sql-value-for-dialect :default [_ _ value] value)
+
+(defn <-sql-value [dialect type value]
   (cond
-    (= :json type) (.getValue value)
+    (nil? value) nil
     (= :uuid type) (schema/->uuid value)
     (= :bigdec type) (schema/->bigdec value)
     (#{:keyword :kw-ref} type) (schema/->keyword value)
     (and (time? type) (integer? value)) (time/from-epoch value)
     (and (= :boolean type) (integer? value)) (not= 0 value)
-    :else value))
+    :else (<-sql-value-for-dialect dialect type value)))
 
 (defmulti ->sql-value (fn [dialect _type _value] dialect))
 
@@ -181,17 +175,21 @@
     (str "CAST(? AS " db-type ")")
     "?"))
 
-(defn -add-type [result [key spec]] (assoc result key (spec->db-type spec)))
+(defn -add-type [dialect result [key spec]] (assoc result key (spec->db-type dialect spec)))
 
-(defn- -add-cast [result [key spec]]
-  (if-let [cast (-> spec :db :cast)]
+(defmulti spec->db-cast (fn [dialect _spec] dialect))
+(defmethod spec->db-cast :default [_ _spec])
+
+(defn- -add-cast [dialect result [key spec]]
+  (if-let [cast (or (-> spec :db :cast)
+                    (spec->db-cast dialect spec))]
     (assoc result key cast)
     result))
 
 (defn- get-full-key-name [k]
   (if-let [ns (namespace k)] (str ns "." (name k)) (name k)))
 
-(defrecord MapResultSetOptionalBuilder [^ResultSet rs rs-meta cols key->type]
+(defrecord MapResultSetOptionalBuilder [^ResultSet rs rs-meta cols key->type dialect]
   rs/RowBuilder
   (->row [_] (transient {}))
   (column-count [_] (core-count cols))
@@ -203,7 +201,7 @@
   (with-column-value [_ row col v]
     (if (nil? v)
       row
-      (let [v (<-sql-value (key->type col) v)]
+      (let [v (<-sql-value dialect (key->type col) v)]
         (assoc! row col v))))
   (row! [_ row] (persistent! row))
   rs/ResultSetBuilder
@@ -211,21 +209,21 @@
   (with-row [_ mrs row] (conj! mrs row))
   (rs! [_ mrs] (persistent! mrs)))
 
-(defn col->key-builder [{:keys [col->key key->type]} rs _opts]
+(defn col->key-builder [dialect {:keys [col->key key->type]} rs _opts]
   (let [rs-meta   (.getMetaData rs)
         col-range (range 1 (inc (if rs-meta (.getColumnCount rs-meta) 0)))
         cols      (mapv (fn [^Integer i]
                           (let [col-name (.getColumnLabel rs-meta i)]
                             (get col->key col-name))) col-range)]
-    (->MapResultSetOptionalBuilder rs rs-meta cols key->type)))
+    (->MapResultSetOptionalBuilder rs rs-meta cols key->type dialect)))
 
-(defn compile-mapping [schema]
+(defn compile-mapping [dialect schema]
   (let [k->c    (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column)
                                                           (-> s :db :name)
                                                           (get-full-key-name k)))) {} (dissoc schema :kind))
         c->k    (core-reduce (fn [m [k c]] (assoc m c k)) {} k->c)
-        k->t    (core-reduce -add-type {} (dissoc schema :kind))
-        k->cast (core-reduce -add-cast {} (dissoc schema :kind))]
+        k->t    (core-reduce (partial -add-type dialect) {} (dissoc schema :kind))
+        k->cast (core-reduce (partial -add-cast dialect) {} (dissoc schema :kind))]
     {:table       (table-name schema)
      :id-type     (get-in schema [:id :type])
      :id-strategy (get-in schema [:id :strategy] :db-generated)
@@ -233,16 +231,16 @@
      :col->key    c->k
      :key->type   k->t
      :key->cast   k->cast
-     :builder-fn  (partial col->key-builder {:col->key c->k :key->type k->t})
+     :builder-fn  (partial col->key-builder dialect {:col->key c->k :key->type k->t})
      }))
 
 (defn key-map
-  ([db kind] (key-map @(.-legend db) (.-mappings db) kind))
-  ([legend mappings kind]
+  ([db kind] (key-map (dialect db) @(.-legend db) (.-mappings db) kind))
+  ([dialect legend mappings kind]
    (if-let [m (get @mappings kind)]
      m
      (let [schema (legend/for-kind legend kind)
-           m      (compile-mapping schema)]
+           m      (compile-mapping dialect schema)]
        (swap! mappings assoc kind m)
        m))))
 
@@ -450,15 +448,59 @@
        (remove nil?)
        (str/join " ")))
 
+(def ^:private vector-operators #{'<-> '<=> '<#>})
+
+(defn- build-order-clause
+  "Build a single ORDER BY clause. Returns [sql-fragment & args].
+   direction-or-op can be:
+   - :asc or :desc for standard ordering
+   - ['<-> vector] or ['<=> vector] or ['<#> vector] for vector similarity"
+  [dialect {:keys [key->type key->cast] :as t-map} field direction-or-op]
+  (let [field-name (->field-name dialect t-map field)]
+    (cond
+      ;; Vector similarity: ['<=> [0.1 0.2 ...]]
+      (and (sequential? direction-or-op)
+           (vector-operators (first direction-or-op)))
+      (let [[op query-vec] direction-or-op
+            op-str    (name op)
+            type      (get key->type field)
+            cast-type (get key->cast field)
+            param     (->sql-param dialect type cast-type)]
+        [(str field-name " " op-str " " param) (->sql-value dialect type query-vec)])
+
+      ;; Standard: :asc / :desc
+      (= :desc direction-or-op)
+      [(str field-name " DESC")]
+
+      (= :asc direction-or-op)
+      [(str field-name " ASC")]
+
+      ;; Default ascending
+      :else
+      [(str field-name " ASC")])))
+
+(defn -build-order-by
+  "Build ORDER BY clause from order-by option. Returns [sql-fragment & args].
+   order-by is a map of {field direction-or-op}"
+  [dialect t-map order-by]
+  (when (seq order-by)
+    (let [clauses (for [[field direction-or-op] order-by]
+                    (build-order-clause dialect t-map field direction-or-op))
+          sql     (str "ORDER BY " (str/join ", " (map first clauses)))
+          args    (mapcat rest clauses)]
+      (cons sql args))))
+
 (defmulti -build-find-query (fn [dialect _t-map _options] dialect))
-(defmethod -build-find-query :default [dialect t-map {:keys [where take drop]}]
-  (let [[where-sql & args] (-build-where dialect t-map where)
+(defmethod -build-find-query :default [dialect t-map {:keys [where order-by take drop]}]
+  (let [[where-sql & where-args] (-build-where dialect t-map where)
+        [order-sql & order-args] (-build-order-by dialect t-map order-by)
         table (->safe-name dialect (:table t-map))
         sql   (-seq->sql "SELECT * FROM" table
-                where-sql
-                (when take (str "LIMIT " take))
-                (when drop (str "OFFSET " drop)))]
-    (cons sql args)))
+                         where-sql
+                         order-sql
+                         (when take (str "LIMIT " take))
+                         (when drop (str "OFFSET " drop)))]
+    (cons sql (concat where-args order-args))))
 
 (defn- do-find [db kind options]
   (let [t-map (key-map db kind)
@@ -605,7 +647,7 @@
     (let [config                    (set/rename-keys config {:min-pool-size :minPoolSize :max-pool-size :maxPoolSize})
           ^ComboPooledDataSource ds (connection/->pool ComboPooledDataSource config)]
       (log/info "\tConnection Pooling: " {:min (.getMinPoolSize ds) :max (.getMaxPoolSize ds)})
-      (.close (jdbc/get-connection ds)) ;; initialize and validate pool says the docs
+      (.close (jdbc/get-connection ds))                     ;; initialize and validate pool says the docs
       ds)
     (jdbc/get-datasource config)))
 

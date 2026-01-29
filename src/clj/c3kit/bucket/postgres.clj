@@ -14,6 +14,46 @@
    :kw-ref  "text"
    :instant "timestamp without time zone"})
 
+(defn- parse-vector-string [value]
+  (when value
+    (let [s (str value)]
+      (when (str/starts-with? s "[")
+        (-> s
+            (str/replace #"[\[\]]" "")
+            (str/split #",")
+            (->> (mapv #(Double/parseDouble (str/trim %)))))))))
+
+(defn- json? [type db-type]
+  (and (= :string type)
+       db-type
+       (str/includes? db-type "json")))
+
+(defn- pg-vector? [type db-type]
+  (and (= :seq type) (str/includes? db-type "vector")))
+
+(defmethod jdbc/spec->db-type :postgres [_ spec]
+  (let [type    (:type spec)
+        db-type (-> spec :db :type)]
+    (cond
+      (json? type db-type) :json
+      (pg-vector? type db-type) :pg-vector
+      :else type)))
+
+(defmethod jdbc/spec->db-cast :postgres [_ spec]
+  (let [type    (:type spec)
+        db-type (-> spec :db :type)]
+    (when (pg-vector? type db-type)
+      db-type)))
+
+(defmethod jdbc/<-sql-value-for-dialect :postgres [_ type value]
+  (cond (= :json type) (when value (.getValue value))
+        (= :pg-vector type) (parse-vector-string value)
+        :else value))
+
+(defmethod jdbc/->sql-value :postgres [_ type value]
+  (cond (= :pg-vector type) (when value (str "[" (str/join "," value) "]"))
+        :else (jdbc/->sql-value nil type value)))
+
 (defmethod jdbc/build-upsert-sql :postgres [dialect t-map {:keys [id] :as entity}]
   (let [{:keys [table key->col key->type key->cast]} t-map
         id-col   (:id key->col)

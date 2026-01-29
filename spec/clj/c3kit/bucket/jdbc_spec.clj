@@ -236,14 +236,14 @@
     (context "compile schema"
 
       (it "bibelot - keys = columns"
-        (let [compiled (sut/compile-mapping spec/bibelot)]
+        (let [compiled (sut/compile-mapping :h2 spec/bibelot)]
           (should= "bibelot" (:table compiled))
           (should= {:id "id" :name "name" :size "size" :color "color"} (:key->col compiled))
           (should= {"id" :id "name" :name "size" :size "color" :color} (:col->key compiled))
           (should= {:id :long :name :string :size :long :color :string} (:key->type compiled))))
 
       (it "bibelot2 - given table & columns"
-        (let [compiled (sut/compile-mapping bibelot-2)]
+        (let [compiled (sut/compile-mapping :h2 bibelot-2)]
           (should= "BIBELOT" (:table compiled))
           (should= {:id "Number" :name "Name" :size "size" :color "Colour"} (:key->col compiled))
           (should= {"Number" :id "Name" :name "size" :size "Colour" :color} (:col->key compiled))
@@ -251,7 +251,7 @@
           ))
 
       (it "json reader"
-        (let [compiled (sut/compile-mapping json-entity)]
+        (let [compiled (sut/compile-mapping :h2 json-entity)]
           (should= "json_entity" (:table compiled))
           (should= {:id "id" :stuff "stuff"} (:key->col compiled))
           (should= {"id" :id "stuff" :stuff} (:col->key compiled))))

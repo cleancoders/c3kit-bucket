@@ -1,3 +1,6 @@
+### 2.9.0
+* Adds support for vector searching (embeddings) for postgres and memory implementations
+
 ### 2.8.0
  * Adds Migration as a service
 
