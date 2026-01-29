@@ -1,5 +1,7 @@
 ### 2.9.0
 * Adds support for vector searching (embeddings) for postgres and memory implementations
+* Formalizes :order-by option for find-by
+* Formalizes json support for postgres and h2 
 
 ### 2.8.0
  * Adds Migration as a service

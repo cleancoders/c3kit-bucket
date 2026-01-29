@@ -3,6 +3,7 @@
             [c3kit.apron.schema :as schema]
             [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
+            [c3kit.apron.utilc :as utilc]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.h2 :as h2]
             [c3kit.bucket.impl-spec :as spec]
@@ -505,5 +506,28 @@
 
         )
       )
+
+    (context "json"
+
+      ;(before (log/debug!))
+      (def h2-json-entity
+        {:kind  (assoc (s/kind :json-entity) :db {:name "json_entity"})
+         :id    {:type :int :db {:type "serial PRIMARY KEY"}}
+         :stuff {:type :string :db {:type "json"}}})
+      ;; don't use the json type with h2 unless you really need to for some reason.  Use varchar instead.
+
+      (with db (api/create-db config [h2-json-entity]))
+      (before (doseq [table (sut/existing-tables @db)] (sut/drop-table @db table))
+              (sut/create-table-from-schema @db h2-json-entity))
+
+      (it "stores and retrieves json"
+        (let [data  {:foo "bar" :count 42}
+              json  (utilc/->json data)
+              saved (sut/tx @db {:kind :json-entity :stuff json})]
+          (should= data (utilc/<-json-kw (:stuff saved)))
+          (should= data (-> (sut/entity @db :json-entity (:id saved))
+                            :stuff
+                            utilc/<-json-kw)))))
+
     )
   )

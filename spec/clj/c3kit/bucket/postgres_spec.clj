@@ -1,13 +1,12 @@
 (ns c3kit.bucket.postgres-spec
-  (:require [c3kit.apron.log :as log]
-            [c3kit.apron.schema :as s]
+  (:require [c3kit.apron.utilc :as util]
+            [c3kit.apron.utilc :as utilc]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.jdbc :as jdbc]
             [c3kit.bucket.jdbc-spec :as jdbc-spec]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.postgres]
-            [c3kit.bucket.spec-helperc :as helper]
             [speclj.core :refer :all]))
 
 (def config {:impl    :jdbc
@@ -33,7 +32,7 @@
 
     (context "slow"
 
-      ;(tags :slow)
+      (tags :slow)
       ;(before (log/debug!))
 
       (spec/crud-specs config)
@@ -143,89 +142,21 @@
           )
         )
 
-      #_(context "vector type"
+      (context "json"
 
-          (def vectored
-            {:kind      (s/kind :vectored)
-             :id        {:type :long :db {:type "serial PRIMARY KEY"}}
-             :name      {:type :string :db {:type "varchar(255)"}}
-             :embedding {:type [:float] :db {:type "vector(3)"}}}) ;; [:float] with pgvector db type
+        (with db (api/create-db config [jdbc-spec/json-entity]))
+        (before (doseq [table (jdbc/existing-tables @db)] (jdbc/drop-table @db table))
+                (jdbc/create-table-from-schema @db jdbc-spec/json-entity))
 
-          (helper/with-schemas config [vectored])
+        (it "stores and retrieves json"
+          (let [data  {:foo "bar" :count 42}
+                json  (utilc/->json data)
+                saved (jdbc/tx @db {:kind :json-entity :stuff json})]
+            (should= data (util/<-json-kw (:stuff saved)))
+            (should= data (-> (jdbc/entity @db :json-entity (:id saved))
+                              :stuff
+                              util/<-json-kw)))))
 
-          (it "stores and retrieves vectors"
-            (let [saved (api/tx {:kind :vectored :name "test" :embedding [0.1 0.2 0.3]})]
-              (should= [0.1 0.2 0.3] (:embedding (api/reload saved)))))
-
-          (it "handles nil vectors"
-            (let [saved (api/tx {:kind :vectored :name "test" :embedding nil})]
-              (should-be-nil (:embedding (api/reload saved)))))
-
-          (it "updates vector value"
-            (let [saved   (api/tx {:kind :vectored :name "test" :embedding [0.1 0.2 0.3]})
-                  updated (api/tx saved :embedding [0.4 0.5 0.6])]
-              (should= [0.4 0.5 0.6] (:embedding (api/reload updated)))))
-
-          (it "retracts vector value"
-            (let [saved   (api/tx {:kind :vectored :name "test" :embedding [0.1 0.2 0.3]})
-                  updated (api/tx saved :embedding nil)]
-              (should-be-nil (:embedding (api/reload updated))))))
-
-      #_(context "order-by"
-
-          (def orderable
-            {:kind      (s/kind :orderable)
-             :id        {:type :long :db {:type "serial PRIMARY KEY"}}
-             :name      {:type :string :db {:type "varchar(255)"}}
-             :embedding {:type [:float] :db {:type "vector(3)"}}}) ;; [:float] with pgvector db type
-
-          (helper/with-schemas config [orderable])
-
-          (before
-            (api/clear)
-            (api/tx {:kind :orderable :name "a" :embedding [1.0 0.0 0.0]})
-            (api/tx {:kind :orderable :name "b" :embedding [0.0 1.0 0.0]})
-            (api/tx {:kind :orderable :name "c" :embedding [0.9 0.1 0.0]}))
-
-          (it "orders by field ascending"
-            (should= ["a" "b" "c"] (map :name (api/find :orderable {:order-by {:name :asc}}))))
-
-          (it "orders by field descending"
-            (should= ["c" "b" "a"] (map :name (api/find :orderable {:order-by {:name :desc}}))))
-
-          (it "orders by cosine distance <=>"
-            (let [query   [1.0 0.0 0.0]
-                  results (api/find :orderable {:order-by {:embedding ['<=> query]}})]
-              (should= ["a" "c" "b"] (map :name results))))
-
-          (it "orders by L2 distance <->"
-            (let [query   [1.0 0.0 0.0]
-                  results (api/find :orderable {:order-by {:embedding ['<-> query]}})]
-              (should= ["a" "c" "b"] (map :name results))))
-
-          (it "orders by inner product <#>"
-            (let [query   [1.0 0.0 0.0]
-                  results (api/find :orderable {:order-by {:embedding ['<#> query]}})]
-              (should= ["a" "c" "b"] (map :name results))))
-
-          (it "combines order-by with where clause"
-            (let [query   [1.0 0.0 0.0]
-                  results (api/find-by :orderable :name ['not= "b"]
-                                       {:order-by {:embedding ['<=> query]}})]
-              (should= ["a" "c"] (map :name results))))
-
-          (it "combines order-by with take/drop (pagination)"
-            (let [query [1.0 0.0 0.0]
-                  page1 (api/find :orderable {:order-by {:embedding ['<=> query]} :take 2})
-                  page2 (api/find :orderable {:order-by {:embedding ['<=> query]} :take 2 :drop 2})]
-              (should= ["a" "c"] (map :name page1))
-              (should= ["b"] (map :name page2))))
-
-          (it "handles nil embeddings in ordering"
-            (api/tx {:kind :orderable :name "d" :embedding nil})
-            (let [query   [1.0 0.0 0.0]
-                  results (api/find :orderable {:order-by {:embedding ['<=> query]}})]
-              (should= 4 (count results)))))
       )
     )
   )

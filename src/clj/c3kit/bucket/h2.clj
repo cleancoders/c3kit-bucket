@@ -2,6 +2,43 @@
   (:require [c3kit.bucket.jdbc :as jdbc]
             [clojure.string :as str]))
 
+(defn- json? [type db-type]
+  (and (= :string type)
+       db-type
+       (str/includes? db-type "json")))
+
+(defmethod jdbc/spec->db-type :h2 [_ spec]
+  (let [type    (:type spec)
+        db-type (-> spec :db :type)]
+    (if (json? type db-type)
+      :json
+      type)))
+
+(defn- unwrap-json-string
+  "H2 wraps JSON string values with extra quotes - unwrap if needed"
+  [s]
+  (if (and (string? s)
+           (> (count s) 1)
+           (= \" (first s))
+           (= \" (last s)))
+    (-> s
+        (subs 1 (dec (count s)))
+        (str/replace "\\\"" "\"")
+        (str/replace "\\\\" "\\"))
+    s))
+
+(defmethod jdbc/<-sql-value-for-dialect :h2 [_ type value]
+  (if (= :json type)
+    (when value
+      (let [s (if (bytes? value)
+                (String. ^bytes value "UTF-8")
+                value)]
+        (unwrap-json-string s)))
+    value))
+
+;; Note: H2 doesn't need a cast for JSON - it accepts the string directly
+;; Using CAST(? AS json) causes H2 to double-encode the value
+
 
 (defmethod jdbc/build-upsert-sql :h2 [dialect t-map {:keys [id] :as entity}]
   (let [{:keys [table key->col key->type key->cast]} t-map

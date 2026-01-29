@@ -42,8 +42,9 @@
 (defmethod jdbc/spec->db-cast :postgres [_ spec]
   (let [type    (:type spec)
         db-type (-> spec :db :type)]
-    (when (pg-vector? type db-type)
-      db-type)))
+    (cond
+      (json? type db-type) db-type
+      (pg-vector? type db-type) db-type)))
 
 (defmethod jdbc/<-sql-value-for-dialect :postgres [_ type value]
   (cond (= :json type) (when value (.getValue value))
