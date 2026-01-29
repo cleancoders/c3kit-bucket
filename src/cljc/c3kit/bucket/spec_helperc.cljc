@@ -5,6 +5,7 @@
 
 (defmacro with-impl [config schemas & body]
   `(with-redefs [api/*safety* false
+                 ;; TODO - MDM: api/set-impl! fails with the use of delay.  Use atom?
                  api/impl     (delay (api/create-db ~config ~schemas))]
      (api/clear)
      (try ~@body (finally (api/close @api/impl)))))
@@ -15,6 +16,7 @@
    (list
      (around-all [it]
        (with-redefs [api/*safety* false
+                     ;; TODO - MDM: api/set-impl! fails with the use of delay.  Use atom?
                      api/impl     (delay (api/create-db config schemas))]
          (try
            (it)
