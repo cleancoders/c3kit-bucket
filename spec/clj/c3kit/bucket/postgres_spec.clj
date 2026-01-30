@@ -33,6 +33,9 @@
     (context "slow"
 
       (tags :slow)
+      (before-all
+        (let [db (api/create-db config [])]
+          (jdbc/execute! db "CREATE EXTENSION IF NOT EXISTS vector")))
       ;(before (log/debug!))
 
       (spec/crud-specs config)
@@ -46,8 +49,6 @@
       (jdbc-spec/type-specs config)
       (jdbc-spec/reserved-word-specs config)
       (spec/order-by-specs config)
-      ;; For vectors to work, the pgvector plugin needs to be installed in the test database.
-      ;; psql -d test -c "CREATE EXTENSION IF NOT EXISTS vector;"
       (spec/order-by-vector-specs config)
 
 
