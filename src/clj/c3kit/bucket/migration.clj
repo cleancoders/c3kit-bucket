@@ -332,8 +332,9 @@
        " no arguments will migrate UP to latest migration\n"
        " preview: migrations/syncing will not update the database\n"))
 
-(defn -main [& args]
-  (app/start! [db/service])
+(defn migrate
+  "Runs the migrations, assuming the db service has already been started."
+  [& args]
   (let [impl     @db/impl
         config   (:bucket/config app/app)
         schemas  (:bucket/schemas app/app)
@@ -351,5 +352,9 @@
                       (println usage)
                       (System/exit -1)))))
   (System/exit 0))
+
+(defn -main [& args]
+  (app/start! [db/service])
+  (apply migrate args))
 
 ;; ^^^^^ Main ^^^^^
