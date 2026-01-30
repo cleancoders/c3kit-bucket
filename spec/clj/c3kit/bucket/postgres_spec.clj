@@ -33,9 +33,6 @@
     (context "slow"
 
       (tags :slow)
-      (before-all
-        (let [db (api/create-db config [])]
-          (jdbc/execute! db "CREATE EXTENSION IF NOT EXISTS vector")))
       ;(before (log/debug!))
 
       (spec/crud-specs config)
@@ -49,7 +46,11 @@
       (jdbc-spec/type-specs config)
       (jdbc-spec/reserved-word-specs config)
       (spec/order-by-specs config)
-      (spec/order-by-vector-specs config)
+      (context "with pgvector"
+        (before-all
+          (let [db (api/create-db config [])]
+            (jdbc/execute! db "CREATE EXTENSION IF NOT EXISTS vector")))
+        (spec/order-by-vector-specs config))
 
 
 
