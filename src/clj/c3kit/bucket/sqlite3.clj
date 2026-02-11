@@ -148,14 +148,27 @@
   {'<-> "vec_distance_L2"
    '<=> "vec_distance_cosine"})
 
-(defmethod jdbc/build-vector-order-clause :sqlite3 [dialect {:keys [key->type key->cast] :as t-map} field op query-vec]
-  (if-let [distance-fn (vector-distance-fns op)]
-    (let [field-name (jdbc/->field-name dialect t-map field)
-          type       (get key->type field)
-          cast-type  (get key->cast field)
-          param      (jdbc/->sql-param dialect type cast-type)]
-      [(str distance-fn "(" field-name ", " param ")") (jdbc/->sql-value dialect type query-vec)])
-    (throw (ex-info (str "Unsupported vector operator on sqlite3: " op) {:operator op}))))
+(def ^:private op->required-distance
+  {'<-> :l2
+   '<=> :cosine})
+
+(defn- validate-vector-op! [op field configured-distance]
+  (when-let [required (op->required-distance op)]
+    (when (not= required configured-distance)
+      (throw (ex-info (str "Operator " op " requires :distance " required
+                           ", but field " field " is configured as " configured-distance)
+                      {:operator op :field field :required required :configured configured-distance})))))
+
+(defmethod jdbc/build-vector-order-clause :sqlite3 [dialect {:keys [key->type key->cast key->distance] :as t-map} field op query-vec]
+  (let [distance (get key->distance field :l2)]
+    (validate-vector-op! op field distance)
+    (if-let [distance-fn (vector-distance-fns op)]
+      (let [field-name (jdbc/->field-name dialect t-map field)
+            type       (get key->type field)
+            cast-type  (get key->cast field)
+            param      (jdbc/->sql-param dialect type cast-type)]
+        [(str distance-fn "(" field-name ", " param ")") (jdbc/->sql-value dialect type query-vec)])
+      (throw (ex-info (str "Unsupported vector operator on sqlite3: " op) {:operator op})))))
 
 (defn- sqlite-vec? [type db-type]
   (and (= :seq type) db-type (str/includes? db-type "vec_f32")))

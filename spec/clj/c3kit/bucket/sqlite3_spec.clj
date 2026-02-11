@@ -127,10 +127,11 @@
           (should= "[1.0,0.0,0.0]" (first args))))
 
       (it "generates vec_distance_cosine for <=> operator"
-        (let [t-map {:table   "vectorable"
-                     :key->col  {:embedding "embedding"}
-                     :key->type {:embedding :sqlite-vec}
-                     :key->cast {:embedding "vec_f32(3)"}}
+        (let [t-map {:table        "vectorable"
+                     :key->col     {:embedding "embedding"}
+                     :key->type    {:embedding :sqlite-vec}
+                     :key->cast    {:embedding "vec_f32(3)"}
+                     :key->distance {:embedding :cosine}}
               [sql & args] (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]})]
           (should-contain "vec_distance_cosine" sql)
           (should-contain "vec_f32(?)" sql)))
@@ -142,6 +143,87 @@
                      :key->cast {:embedding "vec_f32(3)"}}]
           (should-throw Exception "Unsupported vector operator on sqlite3: <#>"
             (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<#> [1.0 0.0 0.0]]}))))
+
+      )
+
+    (context "operator-distance metric validation"
+
+      (it "<=> on :distance :l2 schema throws"
+        (let [t-map {:table        "vectorable"
+                     :key->col     {:embedding "embedding"}
+                     :key->type    {:embedding :sqlite-vec}
+                     :key->cast    {:embedding "vec_f32(3)"}
+                     :key->distance {:embedding :l2}}]
+          (should-throw Exception "Operator <=> requires :distance :cosine, but field :embedding is configured as :l2"
+            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]}))))
+
+      (it "<-> on :distance :cosine schema throws"
+        (let [t-map {:table        "vectorable"
+                     :key->col     {:embedding "embedding"}
+                     :key->type    {:embedding :sqlite-vec}
+                     :key->cast    {:embedding "vec_f32(3)"}
+                     :key->distance {:embedding :cosine}}]
+          (should-throw Exception "Operator <-> requires :distance :l2, but field :embedding is configured as :cosine"
+            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<-> [1.0 0.0 0.0]]}))))
+
+      (it "<#> always throws on sqlite3 regardless of distance"
+        (let [t-map {:table        "vectorable"
+                     :key->col     {:embedding "embedding"}
+                     :key->type    {:embedding :sqlite-vec}
+                     :key->cast    {:embedding "vec_f32(3)"}
+                     :key->distance {:embedding :l2}}]
+          (should-throw Exception "Unsupported vector operator on sqlite3: <#>"
+            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<#> [1.0 0.0 0.0]]}))))
+
+      (it "correct operator succeeds on matching :l2 schema"
+        (let [t-map {:table        "vectorable"
+                     :key->col     {:embedding "embedding"}
+                     :key->type    {:embedding :sqlite-vec}
+                     :key->cast    {:embedding "vec_f32(3)"}
+                     :key->distance {:embedding :l2}}
+              [sql] (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<-> [1.0 0.0 0.0]]})]
+          (should-contain "vec_distance_L2" sql)))
+
+      (it "correct operator succeeds on matching :cosine schema"
+        (let [t-map {:table        "vectorable"
+                     :key->col     {:embedding "embedding"}
+                     :key->type    {:embedding :sqlite-vec}
+                     :key->cast    {:embedding "vec_f32(3)"}
+                     :key->distance {:embedding :cosine}}
+              [sql] (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]})]
+          (should-contain "vec_distance_cosine" sql)))
+
+      (it "defaults to :l2 when no :distance configured"
+        (let [t-map {:table     "vectorable"
+                     :key->col  {:embedding "embedding"}
+                     :key->type {:embedding :sqlite-vec}
+                     :key->cast {:embedding "vec_f32(3)"}}
+              [sql] (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<-> [1.0 0.0 0.0]]})]
+          (should-contain "vec_distance_L2" sql)))
+
+      (it "throws <=> when no :distance configured (defaults to :l2)"
+        (let [t-map {:table     "vectorable"
+                     :key->col  {:embedding "embedding"}
+                     :key->type {:embedding :sqlite-vec}
+                     :key->cast {:embedding "vec_f32(3)"}}]
+          (should-throw Exception "Operator <=> requires :distance :cosine, but field :embedding is configured as :l2"
+            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]}))))
+
+      (it "compile-mapping populates key->distance from schema :db :distance"
+        (let [schema   {:kind      (schema/kind :vectorable)
+                        :id        {:type :long :db {:type "INTEGER PRIMARY KEY AUTOINCREMENT"}}
+                        :name      {:type :string}
+                        :embedding {:type [:float] :db {:type "vec_f32(3)" :distance :cosine}}}
+              compiled (jdbc/compile-mapping :sqlite3 schema)]
+          (should= {:embedding :cosine} (:key->distance compiled))))
+
+      (it "compile-mapping omits key->distance entries for fields without :distance"
+        (let [schema   {:kind      (schema/kind :vectorable)
+                        :id        {:type :long :db {:type "INTEGER PRIMARY KEY AUTOINCREMENT"}}
+                        :name      {:type :string}
+                        :embedding {:type [:float] :db {:type "vec_f32(3)"}}}
+              compiled (jdbc/compile-mapping :sqlite3 schema)]
+          (should= {} (:key->distance compiled))))
 
       )
 

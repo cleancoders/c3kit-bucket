@@ -224,21 +224,29 @@
                             (get col->key col-name))) col-range)]
     (->MapResultSetOptionalBuilder rs rs-meta cols key->type dialect)))
 
+(defn- -add-distance [result [key spec]]
+  (if-let [distance (-> spec :db :distance)]
+    (assoc result key distance)
+    result))
+
 (defn compile-mapping [dialect schema]
-  (let [k->c    (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column)
+  (let [fields  (dissoc schema :kind)
+        k->c    (core-reduce (fn [m [k s]] (assoc m k (or (-> s :db :column)
                                                           (-> s :db :name)
-                                                          (get-full-key-name k)))) {} (dissoc schema :kind))
+                                                          (get-full-key-name k)))) {} fields)
         c->k    (core-reduce (fn [m [k c]] (assoc m c k)) {} k->c)
-        k->t    (core-reduce (partial -add-type dialect) {} (dissoc schema :kind))
-        k->cast (core-reduce (partial -add-cast dialect) {} (dissoc schema :kind))]
-    {:table       (table-name schema)
-     :id-type     (get-in schema [:id :type])
-     :id-strategy (get-in schema [:id :strategy] :db-generated)
-     :key->col    k->c
-     :col->key    c->k
-     :key->type   k->t
-     :key->cast   k->cast
-     :builder-fn  (partial col->key-builder dialect {:col->key c->k :key->type k->t})
+        k->t    (core-reduce (partial -add-type dialect) {} fields)
+        k->cast (core-reduce (partial -add-cast dialect) {} fields)
+        k->dist (core-reduce -add-distance {} fields)]
+    {:table        (table-name schema)
+     :id-type      (get-in schema [:id :type])
+     :id-strategy  (get-in schema [:id :strategy] :db-generated)
+     :key->col     k->c
+     :col->key     c->k
+     :key->type    k->t
+     :key->cast    k->cast
+     :key->distance k->dist
+     :builder-fn   (partial col->key-builder dialect {:col->key c->k :key->type k->t})
      }))
 
 (defn key-map
