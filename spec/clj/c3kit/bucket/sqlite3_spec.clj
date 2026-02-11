@@ -46,6 +46,25 @@
     (around [it] (api/with-safety-off (it)))
     (with-stubs)
 
+    (context "extensions"
+
+      (it "load-extensions is called during create-db"
+        (let [calls (atom [])]
+          (with-redefs [jdbc/load-extensions (fn [dialect ds config] (swap! calls conj {:dialect dialect :ds ds :config config}))]
+            (let [db (api/create-db config [])]
+              (try
+                (should= 1 (count @calls))
+                (should= :sqlite3 (:dialect (first @calls)))
+                (should= config (:config (first @calls)))
+                (finally (api/close db)))))))
+
+      (it "throws meaningful error for invalid extension path"
+        (let [bad-config (assoc config :extensions ["/nonexistent/path/to/vec0"])]
+          (should-throw Exception
+            (api/create-db bad-config []))))
+
+      )
+
     (context "slow"
 
       (tags :slow)

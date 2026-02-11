@@ -651,11 +651,15 @@
       ds)
     (jdbc/get-datasource config)))
 
+(defmulti load-extensions (fn [dialect _ds _config] dialect))
+(defmethod load-extensions :default [_ _ _])
+
 (defmethod api/-create-impl :jdbc [config schemas]
   (let [dialect (:dialect config)
         ds      (connect config)
         legend  (atom (legend/build schemas))]
     (require [(symbol (str "c3kit.bucket." (name dialect)))])
+    (load-extensions dialect ds config)
     (JDBCDB. legend dialect ds (atom {}))))
 
 (defn find-sql-

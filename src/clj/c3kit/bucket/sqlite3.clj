@@ -1,9 +1,12 @@
 (ns c3kit.bucket.sqlite3
   (:require [c3kit.apron.corec :as ccc]
+            [c3kit.apron.log :as log]
             [c3kit.apron.time :as time]
             [c3kit.bucket.jdbc :as jdbc]
             [clojure.set :as set]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [next.jdbc])
+  (:import (org.sqlite SQLiteConnection)))
 
 (defmethod jdbc/schema->db-type-map :sqlite3 [_]
   {
@@ -125,3 +128,25 @@
   (-> (jdbc/execute! db ["SELECT * FROM pragma_table_info(?) WHERE name = ?" table column])
       seq
       boolean))
+
+(defn- load-extension! [conn path]
+  (log/info "Loading SQLite extension:" path)
+  (try
+    (let [stmt (.prepareStatement conn "SELECT load_extension(?)")]
+      (try
+        (.setString stmt 1 path)
+        (.execute stmt)
+        (finally
+          (.close stmt))))
+    (catch Exception e
+      (throw (ex-info (str "Failed to load SQLite extension: " path) {:path path} e)))))
+
+(defn- enable-and-load-extensions! [ds extensions]
+  (let [conn (.unwrap (next.jdbc/get-connection ds) SQLiteConnection)]
+    (.enableLoadExtension conn true)
+    (doseq [path extensions]
+      (load-extension! conn path))))
+
+(defmethod jdbc/load-extensions :sqlite3 [_ ds config]
+  (when-let [extensions (seq (:extensions config))]
+    (enable-and-load-extensions! ds extensions)))
