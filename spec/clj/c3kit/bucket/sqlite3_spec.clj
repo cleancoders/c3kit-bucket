@@ -40,6 +40,13 @@
     {:id        {:db {:type "INTEGER PRIMARY KEY AUTOINCREMENT"}}
      :embedding {:type [:float] :db {:type "vec_f32(3)"}}}))
 
+(def multi-vectorable
+  {:kind            (schema/kind :multi-vectorable)
+   :id              {:type :long :db {:type "INTEGER PRIMARY KEY AUTOINCREMENT"}}
+   :name            {:type :string}
+   :title-embedding {:type [:float] :db {:type "vec_f32(3)"}}
+   :body-embedding  {:type [:float] :db {:type "vec_f32(2)" :distance :cosine}}})
+
 (defmacro test-type-conversion [from to]
   `(it ~from
      (should= ~to (jdbc/->sql-type :sqlite3 ~from))))
@@ -358,6 +365,36 @@
           (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
           (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
             (should= ["a" "c"] (map :name results))))
+
+        )
+
+      (context "multiple vector columns"
+        (helper/with-schemas vec-config [multi-vectorable])
+
+        (it "stores and retrieves entity with two vector columns"
+          (let [saved (api/tx {:kind :multi-vectorable :name "doc"
+                               :title-embedding [1.0 0.0 0.0]
+                               :body-embedding  [0.5 0.5]})]
+            (should= "doc" (:name saved))
+            (should= [1.0 0.0 0.0] (:title-embedding saved))
+            (should= [0.5 0.5] (:body-embedding saved))
+            (let [reloaded (api/entity :multi-vectorable (:id saved))]
+              (should= [1.0 0.0 0.0] (:title-embedding reloaded))
+              (should= [0.5 0.5] (:body-embedding reloaded)))))
+
+        (it "orders by title-embedding distance"
+          (api/tx {:kind :multi-vectorable :name "a" :title-embedding [1.0 0.0 0.0] :body-embedding [1.0 0.0]})
+          (api/tx {:kind :multi-vectorable :name "b" :title-embedding [0.0 1.0 0.0] :body-embedding [0.0 1.0]})
+          (api/tx {:kind :multi-vectorable :name "c" :title-embedding [0.9 0.1 0.0] :body-embedding [0.5 0.5]})
+          (let [results (api/find :multi-vectorable :order-by {:title-embedding ['<-> [1.0 0.0 0.0]]})]
+            (should= ["a" "c" "b"] (map :name results))))
+
+        (it "orders by body-embedding distance (cosine)"
+          (api/tx {:kind :multi-vectorable :name "a" :title-embedding [1.0 0.0 0.0] :body-embedding [1.0 0.0]})
+          (api/tx {:kind :multi-vectorable :name "b" :title-embedding [0.0 1.0 0.0] :body-embedding [0.0 1.0]})
+          (api/tx {:kind :multi-vectorable :name "c" :title-embedding [0.9 0.1 0.0] :body-embedding [0.9 0.1]})
+          (let [results (api/find :multi-vectorable :order-by {:body-embedding ['<=> [1.0 0.0]]})]
+            (should= ["a" "c" "b"] (map :name results))))
 
         )
 
