@@ -155,6 +155,17 @@
           (should-throw Exception "Unsupported vector operator on sqlite3: <#>"
             (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<#> [1.0 0.0 0.0]]}))))
 
+      (it "generates mixed vector and scalar ORDER BY"
+        (let [t-map {:table      "vectorable"
+                     :key->col   {:embedding "embedding" :name "name"}
+                     :key->type  {:embedding :sqlite-vec :name :string}
+                     :key->cast  {:embedding "vec_f32(3)"}}
+              [sql & args] (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<-> [1.0 0.0 0.0]] :name :asc})]
+          (should-contain "vec_distance_L2" sql)
+          (should-contain "name" sql)
+          (should-contain "ASC" sql)
+          (should (bytes? (first args)))))
+
       )
 
     (context "operator-distance metric validation"
@@ -331,6 +342,22 @@
           (api/tx {:kind :vectorable :name "d" :embedding nil})
           (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]})]
             (should= ["a" "c" "b" "d"] (map :name results))))
+
+        (it "mixed vector and scalar ORDER BY"
+          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+          (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]] :name :desc})]
+            (should= 3 (count results))
+            ;; primary sort: vector distance; secondary: name desc
+            (should= "a" (:name (first results)))))
+
+        (it "vector distance with take"
+          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+          (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
+            (should= ["a" "c"] (map :name results))))
 
         )
 
