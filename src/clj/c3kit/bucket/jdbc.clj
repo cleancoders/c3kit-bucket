@@ -380,9 +380,7 @@
            (concat (map :value sql-args) args)))))
 
 (defmulti build-upsert-sql (fn [dialect _t-map _entity] dialect))
-(defmulti build-insert-sql (fn [dialect _t-map _entity] dialect))
-
-(defmethod build-insert-sql :default [dialect t-map entity]
+(defn build-insert-sql-default [dialect t-map entity]
   (let [{:keys [table key->col key->type key->cast]} t-map
         used-key->col (select-keys key->col (keys entity))
         ->sql-args    (partial ->sql-args dialect used-key->col key->type key->cast entity)
@@ -392,6 +390,11 @@
     (cons (str "INSERT INTO " table " (" (str/join ", " cols) ") "
                "VALUES (" (str/join ", " (map :param sql-args)) ")")
           (map :value sql-args))))
+
+(defmulti build-insert-sql (fn [dialect _t-map _entity] dialect))
+
+(defmethod build-insert-sql :default [dialect t-map entity]
+  (build-insert-sql-default dialect t-map entity))
 
 (defn- build-delete-sql [dialect t-map entity]
   (let [{:keys [table key->col key->type key->cast]} t-map
@@ -674,15 +677,19 @@
       ds)
     (jdbc/get-datasource config)))
 
+(defmulti prepare-config (fn [dialect _config] dialect))
+(defmethod prepare-config :default [_ config] config)
+
 (defmulti load-extensions (fn [dialect _ds _config] dialect))
-(defmethod load-extensions :default [_ _ _])
+(defmethod load-extensions :default [_ ds _] ds)
 
 (defmethod api/-create-impl :jdbc [config schemas]
   (let [dialect (:dialect config)
+        _       (require [(symbol (str "c3kit.bucket." (name dialect)))])
+        config  (prepare-config dialect config)
         ds      (connect config)
+        ds      (load-extensions dialect ds config)
         legend  (atom (legend/build schemas))]
-    (require [(symbol (str "c3kit.bucket." (name dialect)))])
-    (load-extensions dialect ds config)
     (JDBCDB. legend dialect ds (atom {}))))
 
 (defn find-sql-

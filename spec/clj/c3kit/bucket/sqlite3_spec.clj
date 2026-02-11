@@ -17,6 +17,10 @@
              :dbtype  "sqlite"
              :dbname  "sqlite_test.db"})
 
+(def vec-extension-path "/Users/micahmartin/Library/Python/3.9/lib/python/site-packages/sqlite_vec/vec0")
+
+(def vec-config (assoc config :extensions [vec-extension-path]))
+
 (def auto-id {:id {:db {:type "INTEGER PRIMARY KEY AUTOINCREMENT"}}})
 
 (def reserved-word-entity (schema/merge-schemas jdbc-spec/reserved-word-entity auto-id))
@@ -29,6 +33,12 @@
     jdbc-spec/thingy
     {:id      {:db {:type "INTEGER PRIMARY KEY" :strategy :pre-populated}}
      :truthy? {:db {:column "truthy"}}}))
+
+(def vectorable
+  (schema/merge-schemas
+    spec/vectorable
+    {:id        {:db {:type "INTEGER PRIMARY KEY AUTOINCREMENT"}}
+     :embedding {:type [:float] :db {:type "vec_f32(3)"}}}))
 
 (defmacro test-type-conversion [from to]
   `(it ~from
@@ -231,7 +241,7 @@
 
       (it "load-extensions is called during create-db"
         (let [calls (atom [])]
-          (with-redefs [jdbc/load-extensions (fn [dialect ds config] (swap! calls conj {:dialect dialect :ds ds :config config}))]
+          (with-redefs [jdbc/load-extensions (fn [dialect ds config] (swap! calls conj {:dialect dialect :ds ds :config config}) ds)]
             (let [db (api/create-db config [])]
               (try
                 (should= 1 (count @calls))
@@ -273,6 +283,39 @@
           (let [now    (time/now)
                 thingy (api/tx {:kind :thingy :id 1 :bang now})]
             (should= now (:bang thingy))))
+
+        )
+
+      (context "vector CRUD"
+        (helper/with-schemas vec-config [vectorable])
+
+        (it "roundtrip: stores and retrieves vector entity"
+          (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})]
+            (should= "a" (:name saved))
+            (should= [1.0 0.0 0.0] (:embedding saved))
+            (let [reloaded (api/entity :vectorable (:id saved))]
+              (should= [1.0 0.0 0.0] (:embedding reloaded)))))
+
+        (it "deletes a single vectorable entity"
+          (let [saved    (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+                deleted  (api/delete saved)]
+            (should= true (:db/delete? deleted))
+            (should-be-nil (api/entity :vectorable (:id saved)))))
+
+        (it "delete-all removes all vectorable entities"
+          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+          (should= 2 (count (api/find :vectorable)))
+          (api/delete-all :vectorable)
+          (should= [] (api/find :vectorable)))
+
+        (it "clear drops and recreates vectorable table"
+          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+          (should= 1 (count (api/find :vectorable)))
+          (api/clear)
+          (should= [] (api/find :vectorable))
+          (let [saved (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})]
+            (should= [0.0 1.0 0.0] (:embedding saved))))
 
         )
 

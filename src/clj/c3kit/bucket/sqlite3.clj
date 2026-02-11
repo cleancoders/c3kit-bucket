@@ -7,7 +7,8 @@
             [clojure.string :as str]
             [next.jdbc])
   (:import (java.nio ByteBuffer ByteOrder)
-           (org.sqlite SQLiteConnection)))
+           (java.sql Connection)
+           (javax.sql DataSource)))
 
 (defmethod jdbc/schema->db-type-map :sqlite3 [_]
   {
@@ -29,8 +30,8 @@
 
 (defmethod jdbc/auto-int-primary-key :sqlite3 [_] "INTEGER PRIMARY KEY AUTOINCREMENT")
 
-(defmethod jdbc/build-insert-sql :sqlite3 [_ t-map entity]
-  (let [[sql & args] (jdbc/build-insert-sql nil t-map entity)]
+(defmethod jdbc/build-insert-sql :sqlite3 [dialect t-map entity]
+  (let [[sql & args] (jdbc/build-insert-sql-default dialect t-map entity)]
     (cons (str sql " RETURNING id") args)))
 
 (defmethod jdbc/->sql-value :sqlite3 [_ type value]
@@ -196,24 +197,48 @@
     (when (sqlite-vec? type db-type)
       db-type)))
 
-(defn- load-extension! [conn path]
-  (log/info "Loading SQLite extension:" path)
-  (try
-    (let [stmt (.prepareStatement conn "SELECT load_extension(?)")]
-      (try
-        (.setString stmt 1 path)
-        (.execute stmt)
-        (finally
-          (.close stmt))))
-    (catch Exception e
-      (throw (ex-info (str "Failed to load SQLite extension: " path) {:path path} e)))))
+(defn- load-extension! [^Connection conn ^String path]
+  (let [stmt (.prepareStatement conn "SELECT load_extension(?)")]
+    (try
+      (.setString stmt 1 path)
+      (.execute stmt)
+      (finally
+        (.close stmt)))))
 
-(defn- enable-and-load-extensions! [ds extensions]
-  (let [conn (.unwrap (next.jdbc/get-connection ds) SQLiteConnection)]
-    (.enableLoadExtension conn true)
-    (doseq [path extensions]
-      (load-extension! conn path))))
+(defn- load-extensions-on-conn! [conn extensions]
+  (doseq [path extensions]
+    (load-extension! conn path)))
+
+(defn- extension-loading-datasource
+  "Wraps a DataSource so that every connection returned has the given
+   SQLite extensions loaded."
+  [^DataSource ds extensions]
+  (reify DataSource
+    (getConnection [_]
+      (let [conn (.getConnection ds)]
+        (load-extensions-on-conn! conn extensions)
+        conn))
+    (getConnection [_ user pass]
+      (let [conn (.getConnection ds user pass)]
+        (load-extensions-on-conn! conn extensions)
+        conn))
+    (getLogWriter [_] (.getLogWriter ds))
+    (setLogWriter [_ w] (.setLogWriter ds w))
+    (getLoginTimeout [_] (.getLoginTimeout ds))
+    (setLoginTimeout [_ t] (.setLoginTimeout ds t))
+    (getParentLogger [_] (.getParentLogger ds))
+    (^boolean isWrapperFor [_ ^Class c] (.isWrapperFor ds c))
+    (unwrap [_ c] (.unwrap ds c))))
+
+(defmethod jdbc/prepare-config :sqlite3 [_ config]
+  (cond-> config
+    (seq (:extensions config)) (assoc :enable_load_extension true)))
 
 (defmethod jdbc/load-extensions :sqlite3 [_ ds config]
-  (when-let [extensions (seq (:extensions config))]
-    (enable-and-load-extensions! ds extensions)))
+  (if-let [extensions (seq (:extensions config))]
+    (do
+      (log/info "Configuring SQLite extensions:" (vec extensions))
+      (with-open [conn (next.jdbc/get-connection ds)]
+        (load-extensions-on-conn! conn extensions))
+      (extension-loading-datasource ds (vec extensions)))
+    ds))
