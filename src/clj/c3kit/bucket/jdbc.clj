@@ -95,10 +95,13 @@
                   (-> spec :db :column)
                   (name key))))
 
-(defn sql-col-type [dialect spec]
-  (let [type (:type spec)]
-    (or (-> spec :db :type)
-        (->sql-type dialect type))))
+(defn default-sql-col-type [dialect spec]
+  (or (-> spec :db :type)
+      (->sql-type dialect (:type spec))))
+
+(defmulti sql-col-type (fn [dialect _spec] dialect))
+(defmethod sql-col-type :default [dialect spec]
+  (default-sql-col-type dialect spec))
 
 (defn sql-table-col [dialect key spec]
   (let [column-name (->safe-name dialect (column-name key spec))
@@ -170,10 +173,14 @@
   (-> (schema->db-type-map dialect)
       (get type)))
 
-(defn ->sql-param [dialect type cast-type]
+(defn default-sql-param [dialect type cast-type]
   (if-let [db-type (or cast-type (dialect-type dialect type))]
     (str "CAST(? AS " db-type ")")
     "?"))
+
+(defmulti ->sql-param (fn [dialect _type _cast-type] dialect))
+(defmethod ->sql-param :default [dialect type cast-type]
+  (default-sql-param dialect type cast-type))
 
 (defn -add-type [dialect result [key spec]] (assoc result key (spec->db-type dialect spec)))
 

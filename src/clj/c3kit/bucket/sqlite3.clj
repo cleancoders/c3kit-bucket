@@ -34,6 +34,7 @@
 
 (defmethod jdbc/->sql-value :sqlite3 [_ type value]
   (cond
+    (= :sqlite-vec type) (when value (str "[" (str/join "," value) "]"))
     (and (jdbc/time? type) value) (time/millis-since-epoch value)
     (= :boolean type) (when (some? value) (if value 1 0))
     :else value))
@@ -131,6 +132,16 @@
 
 (defn- sqlite-vec? [type db-type]
   (and (= :seq type) db-type (str/includes? db-type "vec_f32")))
+
+(defmethod jdbc/->sql-param :sqlite3 [dialect type cast-type]
+  (if (= :sqlite-vec type)
+    "vec_f32(?)"
+    (jdbc/default-sql-param dialect type cast-type)))
+
+(defmethod jdbc/sql-col-type :sqlite3 [dialect spec]
+  (if (sqlite-vec? (:type spec) (-> spec :db :type))
+    "BLOB"
+    (jdbc/default-sql-col-type dialect spec)))
 
 (defmethod jdbc/spec->db-type :sqlite3 [_ spec]
   (let [type    (:type spec)

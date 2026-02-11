@@ -67,6 +67,32 @@
 
       )
 
+    (context "vector serialization"
+
+      (it "->sql-value converts vector to JSON string"
+        (should= "[1.0,0.0,0.0]" (jdbc/->sql-value :sqlite3 :sqlite-vec [1.0 0.0 0.0])))
+
+      (it "->sql-value returns nil for nil vector"
+        (should-be-nil (jdbc/->sql-value :sqlite3 :sqlite-vec nil)))
+
+      (it "->sql-param wraps with vec_f32 for sqlite-vec type"
+        (should= "vec_f32(?)" (jdbc/->sql-param :sqlite3 :sqlite-vec "vec_f32(3)")))
+
+      (it "->sql-param uses default CAST for non-vector types"
+        (should= "CAST(? AS INTEGER)" (jdbc/->sql-param :sqlite3 :long "INTEGER")))
+
+      (it "->sql-param returns plain ? when no dialect type or cast"
+        (should= "?" (jdbc/->sql-param :sqlite3 :unknown-type nil)))
+
+      (it "DDL uses BLOB for vector column type"
+        (should= "BLOB" (jdbc/sql-col-type :sqlite3 {:type :seq :db {:type "vec_f32(3)"}})))
+
+      (it "DDL uses normal type for non-vector columns"
+        (should= "TEXT" (jdbc/sql-col-type :sqlite3 {:type :string}))
+        (should= "varchar(42)" (jdbc/sql-col-type :sqlite3 {:type :string :db {:type "varchar(42)"}})))
+
+      )
+
     (context "extensions"
 
       (it "load-extensions is called during create-db"
