@@ -80,14 +80,16 @@
 
     (context "vector serialization"
 
-      (it "->sql-value converts vector to JSON string"
-        (should= "[1.0,0.0,0.0]" (jdbc/->sql-value :sqlite3 :sqlite-vec [1.0 0.0 0.0])))
+      (it "->sql-value converts vector to float32 byte array"
+        (let [blob (jdbc/->sql-value :sqlite3 :sqlite-vec [1.0 0.0 0.0])]
+          (should (bytes? blob))
+          (should= 12 (alength ^bytes blob))))
 
       (it "->sql-value returns nil for nil vector"
         (should-be-nil (jdbc/->sql-value :sqlite3 :sqlite-vec nil)))
 
-      (it "->sql-param wraps with vec_f32 for sqlite-vec type"
-        (should= "vec_f32(?)" (jdbc/->sql-param :sqlite3 :sqlite-vec "vec_f32(3)")))
+      (it "->sql-param uses plain ? for sqlite-vec type"
+        (should= "?" (jdbc/->sql-param :sqlite3 :sqlite-vec "vec_f32(3)")))
 
       (it "->sql-param uses default CAST for non-vector types"
         (should= "CAST(? AS INTEGER)" (jdbc/->sql-param :sqlite3 :long "INTEGER")))
@@ -133,8 +135,7 @@
                      :key->cast {:embedding "vec_f32(3)"}}
               [sql & args] (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<-> [1.0 0.0 0.0]]})]
           (should-contain "vec_distance_L2" sql)
-          (should-contain "vec_f32(?)" sql)
-          (should= "[1.0,0.0,0.0]" (first args))))
+          (should (bytes? (first args)))))
 
       (it "generates vec_distance_cosine for <=> operator"
         (let [t-map {:table        "vectorable"
@@ -144,7 +145,7 @@
                      :key->distance {:embedding :cosine}}
               [sql & args] (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]})]
           (should-contain "vec_distance_cosine" sql)
-          (should-contain "vec_f32(?)" sql)))
+          (should (bytes? (first args)))))
 
       (it "throws for unsupported <#> operator"
         (let [t-map {:table   "vectorable"
@@ -316,6 +317,20 @@
           (should= [] (api/find :vectorable))
           (let [saved (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})]
             (should= [0.0 1.0 0.0] (:embedding saved))))
+
+        (it "stores and retrieves nil embedding"
+          (let [saved (api/tx {:kind :vectorable :name "empty" :embedding nil})]
+            (should-be-nil (:embedding saved))
+            (let [reloaded (api/entity :vectorable (:id saved))]
+              (should-be-nil (:embedding reloaded)))))
+
+        (it "nil embeddings sort last in vector distance ordering"
+          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+          (api/tx {:kind :vectorable :name "d" :embedding nil})
+          (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]})]
+            (should= ["a" "c" "b" "d"] (map :name results))))
 
         )
 

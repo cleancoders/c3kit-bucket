@@ -34,9 +34,17 @@
   (let [[sql & args] (jdbc/build-insert-sql-default dialect t-map entity)]
     (cons (str sql " RETURNING id") args)))
 
+(defn- vec->float32-blob
+  "Serializes a vector of numbers to a packed little-endian float32 byte array."
+  ^bytes [v]
+  (let [bb (doto (ByteBuffer/allocate (* (count v) Float/BYTES))
+             (.order ByteOrder/LITTLE_ENDIAN))]
+    (doseq [f v] (.putFloat bb (float f)))
+    (.array bb)))
+
 (defmethod jdbc/->sql-value :sqlite3 [_ type value]
   (cond
-    (= :sqlite-vec type) (when value (str "[" (str/join "," value) "]"))
+    (= :sqlite-vec type) (when value (vec->float32-blob value))
     (and (jdbc/time? type) value) (time/millis-since-epoch value)
     (= :boolean type) (when (some? value) (if value 1 0))
     :else value))
@@ -168,7 +176,8 @@
             type       (get key->type field)
             cast-type  (get key->cast field)
             param      (jdbc/->sql-param dialect type cast-type)]
-        [(str distance-fn "(" field-name ", " param ")") (jdbc/->sql-value dialect type query-vec)])
+        [(str "CASE WHEN " field-name " IS NOT NULL THEN " distance-fn "(" field-name ", " param ") END NULLS LAST")
+         (jdbc/->sql-value dialect type query-vec)])
       (throw (ex-info (str "Unsupported vector operator on sqlite3: " op) {:operator op})))))
 
 (defn- sqlite-vec? [type db-type]
@@ -176,7 +185,7 @@
 
 (defmethod jdbc/->sql-param :sqlite3 [dialect type cast-type]
   (if (= :sqlite-vec type)
-    "vec_f32(?)"
+    "?"
     (jdbc/default-sql-param dialect type cast-type)))
 
 (defmethod jdbc/sql-col-type :sqlite3 [dialect spec]
