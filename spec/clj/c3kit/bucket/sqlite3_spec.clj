@@ -9,7 +9,8 @@
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
             [c3kit.bucket.sqlite3]
-            [speclj.core :refer :all]))
+            [speclj.core :refer :all])
+  (:import (java.nio ByteBuffer ByteOrder)))
 
 (def config {:impl    :jdbc
              :dialect :sqlite3
@@ -90,6 +91,26 @@
       (it "DDL uses normal type for non-vector columns"
         (should= "TEXT" (jdbc/sql-col-type :sqlite3 {:type :string}))
         (should= "varchar(42)" (jdbc/sql-col-type :sqlite3 {:type :string :db {:type "varchar(42)"}})))
+
+      )
+
+    (context "vector deserialization"
+
+      (it "decodes float32 BLOB to vector of doubles"
+        (let [bb    (doto (ByteBuffer/allocate 12)
+                      (.order ByteOrder/LITTLE_ENDIAN)
+                      (.putFloat (float 1.0))
+                      (.putFloat (float 0.0))
+                      (.putFloat (float 0.0)))
+              blob  (.array bb)]
+          (should= [1.0 0.0 0.0] (jdbc/<-sql-value-for-dialect :sqlite3 :sqlite-vec blob))))
+
+      (it "returns nil for nil value"
+        (should-be-nil (jdbc/<-sql-value-for-dialect :sqlite3 :sqlite-vec nil)))
+
+      (it "passes through non-vector types unchanged"
+        (should= "hello" (jdbc/<-sql-value-for-dialect :sqlite3 :string "hello"))
+        (should= 42 (jdbc/<-sql-value-for-dialect :sqlite3 :long 42)))
 
       )
 

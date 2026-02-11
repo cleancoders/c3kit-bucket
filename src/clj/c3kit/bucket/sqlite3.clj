@@ -6,7 +6,8 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [next.jdbc])
-  (:import (org.sqlite SQLiteConnection)))
+  (:import (java.nio ByteBuffer ByteOrder)
+           (org.sqlite SQLiteConnection)))
 
 (defmethod jdbc/schema->db-type-map :sqlite3 [_]
   {
@@ -38,6 +39,19 @@
     (and (jdbc/time? type) value) (time/millis-since-epoch value)
     (= :boolean type) (when (some? value) (if value 1 0))
     :else value))
+
+(defn- parse-float32-blob [^bytes blob]
+  (let [bb (doto (ByteBuffer/wrap blob) (.order ByteOrder/LITTLE_ENDIAN))
+        n  (/ (alength blob) Float/BYTES)]
+    (loop [i 0 result (transient [])]
+      (if (< i n)
+        (recur (inc i) (conj! result (double (.getFloat bb))))
+        (persistent! result)))))
+
+(defmethod jdbc/<-sql-value-for-dialect :sqlite3 [_ type value]
+  (if (= :sqlite-vec type)
+    (when value (parse-float32-blob value))
+    value))
 
 (defmethod jdbc/build-upsert-sql :sqlite3 [dialect t-map {:keys [id] :as entity}]
   (let [{:keys [table key->col key->type key->cast]} t-map
