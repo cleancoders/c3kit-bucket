@@ -129,6 +129,22 @@
       seq
       boolean))
 
+(defn- sqlite-vec? [type db-type]
+  (and (= :seq type) db-type (str/includes? db-type "vec_f32")))
+
+(defmethod jdbc/spec->db-type :sqlite3 [_ spec]
+  (let [type    (:type spec)
+        db-type (-> spec :db :type)]
+    (if (sqlite-vec? type db-type)
+      :sqlite-vec
+      type)))
+
+(defmethod jdbc/spec->db-cast :sqlite3 [_ spec]
+  (let [type    (:type spec)
+        db-type (-> spec :db :type)]
+    (when (sqlite-vec? type db-type)
+      db-type)))
+
 (defn- load-extension! [conn path]
   (log/info "Loading SQLite extension:" path)
   (try

@@ -46,6 +46,27 @@
     (around [it] (api/with-safety-off (it)))
     (with-stubs)
 
+    (context "vector type detection"
+
+      (it "spec->db-type returns :sqlite-vec for vec_f32 spec"
+        (should= :sqlite-vec (jdbc/spec->db-type :sqlite3 {:type :seq :db {:type "vec_f32(3)"}})))
+
+      (it "spec->db-type returns :sqlite-vec for vec_f32 without dimension"
+        (should= :sqlite-vec (jdbc/spec->db-type :sqlite3 {:type :seq :db {:type "vec_f32"}})))
+
+      (it "spec->db-type returns default type for non-vector spec"
+        (should= :string (jdbc/spec->db-type :sqlite3 {:type :string :db {:type "TEXT"}}))
+        (should= :long (jdbc/spec->db-type :sqlite3 {:type :long :db {:type "INTEGER"}})))
+
+      (it "spec->db-cast returns db type for vector fields"
+        (should= "vec_f32(3)" (jdbc/spec->db-cast :sqlite3 {:type :seq :db {:type "vec_f32(3)"}})))
+
+      (it "spec->db-cast returns nil for non-vector fields"
+        (should-be-nil (jdbc/spec->db-cast :sqlite3 {:type :string :db {:type "TEXT"}}))
+        (should-be-nil (jdbc/spec->db-cast :sqlite3 {:type :long})))
+
+      )
+
     (context "extensions"
 
       (it "load-extensions is called during create-db"
