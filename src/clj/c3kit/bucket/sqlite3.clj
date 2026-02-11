@@ -101,7 +101,8 @@
           (str/starts-with? lower-type "text")) [:string type]
       (str/starts-with? (str/lower-case type) "int") [:long type]
       (str/starts-with? type "numeric(") [:bigdec type]
-      (= lower-type "real") [:float type])))
+      (= lower-type "real") [:float type]
+      (= lower-type "blob") [:bytes type])))
 
 (defn column->spec [indices {:keys [name type notnull dflt_value pk]}]
   (let [[schema-type db-type] (type-spec type)
@@ -181,7 +182,9 @@
       (throw (ex-info (str "Unsupported vector operator on sqlite3: " op) {:operator op})))))
 
 (defn- sqlite-vec? [type db-type]
-  (and (= :seq type) db-type (str/includes? db-type "vec_f32")))
+  (and (or (= :seq type) (sequential? type))
+       db-type
+       (str/includes? db-type "vec_f32")))
 
 (defmethod jdbc/->sql-param :sqlite3 [dialect type cast-type]
   (if (= :sqlite-vec type)

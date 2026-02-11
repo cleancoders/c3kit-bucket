@@ -481,6 +481,18 @@
             (should-not-contain :color (:bibelot new-legend))
             (should= :string (get-in new-legend [:bibelot :hue :type]))))
 
+        (it "add-attribute! for vector column creates BLOB"
+          (let [_      (migrator/-install-schema! @db jdbc-spec/bibelot)
+                _      (migrator/-add-attribute! @db :bibelot :embedding {:type [:float] :db {:type "vec_f32(3)"}})
+                result (migrator/-installed-schema-legend @db {:bibelot jdbc-spec/bibelot})]
+            (should-not-be-nil (-> result :bibelot :embedding))
+            (should= "BLOB" (-> result :bibelot :embedding :db :type))))
+
+        (it "install-schema! with vector column"
+          (let [_      (migrator/-install-schema! @db vectorable)
+                result (migrator/-installed-schema-legend @db {:vectorable vectorable})]
+            (should= "BLOB" (-> result :vectorable :embedding :db :type))))
+
         (context "schema translation"
 
           (it "integer"
