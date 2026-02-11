@@ -273,6 +273,13 @@
           (should-throw Exception
             (api/create-db bad-config []))))
 
+      (it "error message includes the bad extension path"
+        (try
+          (api/create-db (assoc config :extensions ["/bad/path/vec0"]) [])
+          (should-fail "Expected exception")
+          (catch Exception e
+            (should-contain "/bad/path/vec0" (.getMessage e)))))
+
       )
 
     (context "slow"
