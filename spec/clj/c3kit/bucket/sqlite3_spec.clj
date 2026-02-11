@@ -114,6 +114,37 @@
 
       )
 
+    (context "vector ORDER BY SQL generation"
+
+      (it "generates vec_distance_L2 for <-> operator"
+        (let [t-map {:table   "vectorable"
+                     :key->col  {:embedding "embedding"}
+                     :key->type {:embedding :sqlite-vec}
+                     :key->cast {:embedding "vec_f32(3)"}}
+              [sql & args] (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<-> [1.0 0.0 0.0]]})]
+          (should-contain "vec_distance_L2" sql)
+          (should-contain "vec_f32(?)" sql)
+          (should= "[1.0,0.0,0.0]" (first args))))
+
+      (it "generates vec_distance_cosine for <=> operator"
+        (let [t-map {:table   "vectorable"
+                     :key->col  {:embedding "embedding"}
+                     :key->type {:embedding :sqlite-vec}
+                     :key->cast {:embedding "vec_f32(3)"}}
+              [sql & args] (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]})]
+          (should-contain "vec_distance_cosine" sql)
+          (should-contain "vec_f32(?)" sql)))
+
+      (it "throws for unsupported <#> operator"
+        (let [t-map {:table   "vectorable"
+                     :key->col  {:embedding "embedding"}
+                     :key->type {:embedding :sqlite-vec}
+                     :key->cast {:embedding "vec_f32(3)"}}]
+          (should-throw Exception "Unsupported vector operator on sqlite3: <#>"
+            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<#> [1.0 0.0 0.0]]}))))
+
+      )
+
     (context "extensions"
 
       (it "load-extensions is called during create-db"

@@ -144,6 +144,19 @@
       seq
       boolean))
 
+(def ^:private vector-distance-fns
+  {'<-> "vec_distance_L2"
+   '<=> "vec_distance_cosine"})
+
+(defmethod jdbc/build-vector-order-clause :sqlite3 [dialect {:keys [key->type key->cast] :as t-map} field op query-vec]
+  (if-let [distance-fn (vector-distance-fns op)]
+    (let [field-name (jdbc/->field-name dialect t-map field)
+          type       (get key->type field)
+          cast-type  (get key->cast field)
+          param      (jdbc/->sql-param dialect type cast-type)]
+      [(str distance-fn "(" field-name ", " param ")") (jdbc/->sql-value dialect type query-vec)])
+    (throw (ex-info (str "Unsupported vector operator on sqlite3: " op) {:operator op}))))
+
 (defn- sqlite-vec? [type db-type]
   (and (= :seq type) db-type (str/includes? db-type "vec_f32")))
 

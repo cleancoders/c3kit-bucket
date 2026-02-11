@@ -132,7 +132,7 @@
         sql     (sql-create-table dialect schema)]
     (execute-conn! ds [sql])))
 
-(defn- ->field-name [dialect {:keys [table key->col]} k]
+(defn ->field-name [dialect {:keys [table key->col]} k]
   (cond->> (->safe-name dialect (get key->col k))
            (not (namespace k))
            (str (->safe-name dialect table) \.)))
@@ -457,34 +457,42 @@
 
 (def ^:private vector-operators #{'<-> '<=> '<#>})
 
+(defn vector-op? [direction-or-op]
+  (and (sequential? direction-or-op)
+       (vector-operators (first direction-or-op))))
+
+(defmulti build-vector-order-clause
+  "Build a vector similarity ORDER BY clause. Returns [sql-fragment & args].
+   Dispatches on dialect to allow different SQL syntax per database."
+  (fn [dialect _t-map _field _op _query-vec] dialect))
+
+(defmethod build-vector-order-clause :default [dialect {:keys [key->type key->cast] :as t-map} field op query-vec]
+  (let [field-name (->field-name dialect t-map field)
+        op-str     (name op)
+        type       (get key->type field)
+        cast-type  (get key->cast field)
+        param      (->sql-param dialect type cast-type)]
+    [(str field-name " " op-str " " param) (->sql-value dialect type query-vec)]))
+
 (defn- build-order-clause
   "Build a single ORDER BY clause. Returns [sql-fragment & args].
    direction-or-op can be:
    - :asc or :desc for standard ordering
    - ['<-> vector] or ['<=> vector] or ['<#> vector] for vector similarity"
-  [dialect {:keys [key->type key->cast] :as t-map} field direction-or-op]
-  (let [field-name (->field-name dialect t-map field)]
-    (cond
-      ;; Vector similarity: ['<=> [0.1 0.2 ...]]
-      (and (sequential? direction-or-op)
-           (vector-operators (first direction-or-op)))
-      (let [[op query-vec] direction-or-op
-            op-str    (name op)
-            type      (get key->type field)
-            cast-type (get key->cast field)
-            param     (->sql-param dialect type cast-type)]
-        [(str field-name " " op-str " " param) (->sql-value dialect type query-vec)])
+  [dialect t-map field direction-or-op]
+  (cond
+    (vector-op? direction-or-op)
+    (let [[op query-vec] direction-or-op]
+      (build-vector-order-clause dialect t-map field op query-vec))
 
-      ;; Standard: :asc / :desc
-      (= :desc direction-or-op)
-      [(str field-name " DESC")]
+    (= :desc direction-or-op)
+    [(str (->field-name dialect t-map field) " DESC")]
 
-      (= :asc direction-or-op)
-      [(str field-name " ASC")]
+    (= :asc direction-or-op)
+    [(str (->field-name dialect t-map field) " ASC")]
 
-      ;; Default ascending
-      :else
-      [(str field-name " ASC")])))
+    :else
+    [(str (->field-name dialect t-map field) " ASC")]))
 
 (defn -build-order-by
   "Build ORDER BY clause from order-by option. Returns [sql-fragment & args].
