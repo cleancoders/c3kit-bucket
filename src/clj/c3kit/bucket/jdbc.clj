@@ -61,7 +61,11 @@
 (defmulti ->safe-name (fn [dialect _name] dialect))
 (defmethod ->safe-name :default [_ name] (str \" name \"))
 
+(defmulti before-drop-table! (fn [db _table-name] (dialect db)))
+(defmethod before-drop-table! :default [_ _])
+
 (defn drop-table [db table-name]
+  (before-drop-table! db table-name)
   (execute-conn! (.-ds db) [(str "DROP TABLE IF EXISTS " (->safe-name (dialect db) table-name))]))
 
 (defn- drop-table-from-schema [db schema]
@@ -126,11 +130,15 @@
          (str/join "," col-specs)
          ")")))
 
+(defmulti after-create-table! (fn [db _schema] (dialect db)))
+(defmethod after-create-table! :default [_ _])
+
 (defn create-table-from-schema [db schema]
   (let [dialect (.-dialect db)
         ds      (.-ds db)
         sql     (sql-create-table dialect schema)]
-    (execute-conn! ds [sql])))
+    (execute-conn! ds [sql])
+    (after-create-table! db schema)))
 
 (defn ->field-name [dialect {:keys [table key->col]} k]
   (cond->> (->safe-name dialect (get key->col k))
@@ -445,14 +453,19 @@
 (defmethod upsert-by-id-strategy :pre-populated [db conn t-map entity]
   (upsert-entity db conn t-map entity))
 
+(defmulti after-tx! (fn [db _conn _t-map _original _result] (dialect db)))
+(defmethod after-tx! :default [_ _ _ _ _])
+
 (defn- do-tx [db conn entity]
   (let [kind  (:kind entity)
-        t-map (key-map db kind)]
-    (if (api/delete? entity)
-      (delete-entity (.-dialect db) conn t-map entity)
-      (if-let [cas (api/-get-cas entity)]
-        (update-entity db conn t-map entity cas)
-        (upsert-by-id-strategy db conn t-map entity)))))
+        t-map (key-map db kind)
+        result (if (api/delete? entity)
+                 (delete-entity (.-dialect db) conn t-map entity)
+                 (if-let [cas (api/-get-cas entity)]
+                   (update-entity db conn t-map entity cas)
+                   (upsert-by-id-strategy db conn t-map entity)))]
+    (after-tx! db conn t-map entity result)
+    result))
 
 (defn tx [db entity] (do-tx db (.-ds db) entity))
 
@@ -573,12 +586,16 @@
     (drop-table-from-schema db schema)
     (create-table-from-schema db schema)))
 
+(defmulti after-delete-all! (fn [db _kind] (dialect db)))
+(defmethod after-delete-all! :default [_ _])
+
 (defn delete-all [db kind]
   (api/-assert-safety-off! "delete")
   (let [{:keys [table]} (key-map db kind)
         table (->safe-name (dialect db) table)
         sql   (str "DELETE FROM " table " WHERE 1 = 1")]
-    (execute-one-conn! (.-ds db) [sql])))
+    (execute-one-conn! (.-ds db) [sql])
+    (after-delete-all! db kind)))
 
 (defn build-table-schema [db name->key result table]
   (let [columns (table-column-specs db table)

@@ -312,6 +312,65 @@
 
         )
 
+      (context "vec0 shadow tables"
+        (helper/with-schemas vec-config [vectorable])
+
+        (it "creates vec0 shadow table when schema has vector columns"
+          (let [tables (->> (jdbc/execute! @api/impl ["SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'vec_%'"])
+                            (map :sqlite_master/name))]
+            (should-contain "vec_vectorable_embedding" tables)))
+
+        (it "mirrors insert into vec0 table"
+          (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid, * FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+            (should= 1 (count vec0-rows))))
+
+        (it "does not insert into vec0 when embedding is nil"
+          (let [saved (api/tx {:kind :vectorable :name "b" :embedding nil})
+                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+            (should= 0 (count vec0-rows))))
+
+        (it "mirrors update to vec0 table"
+          (let [saved   (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+                _       (api/tx (assoc saved :embedding [0.0 1.0 0.0]))
+                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+            (should= 1 (count vec0-rows))))
+
+        (it "removes from vec0 when embedding updated to nil"
+          (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+                _     (api/tx (assoc saved :embedding nil))
+                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+            (should= 0 (count vec0-rows))))
+
+        (it "removes from vec0 on delete"
+          (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+                _     (api/delete saved)
+                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+            (should= 0 (count vec0-rows))))
+
+        (it "clears vec0 on delete-all"
+          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+          (api/delete-all :vectorable)
+          (let [vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding"])]
+            (should= 0 (count vec0-rows))))
+
+        (it "uses vec0 MATCH for KNN queries with take"
+          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+          (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
+            (should= ["a" "c"] (map :name results))))
+
+        (it "vec0 KNN with WHERE filter"
+          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+          (let [results (api/find :vectorable :where {:name "a"} :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
+            (should= ["a"] (map :name results))))
+
+        )
+
       (context "vector CRUD"
         (helper/with-schemas vec-config [vectorable])
 
