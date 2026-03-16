@@ -58,11 +58,6 @@
     (legend/for-kind @(.-legend db) kind)
     (really-do-find cursor options kind)))
 
-(defn- ensure-full-entity-and-meta [db e]
-  (let [meta (meta e)] (with-meta (merge (entity db (:id e)) e) meta)))
-(defn- ensure-entity-or-id [db {:keys [id] :as e}]
-  (if id (ensure-full-entity-and-meta db e) (memory/ensure-id e)))
-
 (deftype ReMemoryDB [legend store]
   api/DB
   (-clear [this] (memory/clear this))
@@ -83,8 +78,12 @@
   (-remove-attribute! [this kind attr] (memory/do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (memory/do-rename-attribute! this kind attr new-kind new-attr)))
 
+(defn- clear-slice-db-cache! []
+  (set! (.-reagReactionCache slice-db) nil))
+
 (defmethod api/-create-impl :re-memory [config schemas]
   (let [store (or (:store config) (r/atom {}))]
+    (clear-slice-db-cache!)
     (ReMemoryDB. (atom (legend/build schemas)) store)))
 
 (defn do-select-find [kind keyseq options]
@@ -140,6 +139,13 @@
 (defn select-count-by [kind & kvs]
   (let [[keyseq options] (->keyseq-and-options kvs)]
     (core-count (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
+
+(defn- ensure-full-entity-and-meta [db e]
+  (let [meta (meta e)
+        full (get-in @(.-store db) [:all (:id e)])]
+    (with-meta (merge full e) meta)))
+(defn- ensure-entity-or-id [db {:keys [id] :as e}]
+  (if id (ensure-full-entity-and-meta db e) (memory/ensure-id e)))
 
 (defn select-tx- [db & args]
   (let [e (ccc/->options args)
