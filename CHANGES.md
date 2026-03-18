@@ -1,3 +1,9 @@
+### 2.10.0
+* Updated ReMemory for compatibility with React 18 / Reagent 2 (backwards compatible with React 17 / Reagent 1.x)
+    * Upgraded test dependencies to reagent 2.0.1, cljsjs/react 18.3.1-1, and cljsjs/react-dom 18.3.1-1
+    * `ensure-full-entity-and-meta` now reads directly from the store instead of calling `entity`
+    * Added `clear-slice-db-cache!` to clear the Reagent reaction cache when creating a new ReMemory impl
+
 ### 2.9.0
 * Adds support for vector searching (embeddings) for postgres and memory implementations
 * Formalizes :order-by option for find-by
