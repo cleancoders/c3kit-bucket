@@ -47,6 +47,11 @@ jobs:
       - name: Install SQLite3
         run: sudo apt-get install -y sqlite3
 
+      - name: Install sqlite-vec extension
+        run: |
+          pip install sqlite-vec
+          echo "SQLITE_VEC_PATH=$(python3 -c 'import sqlite_vec; print(sqlite_vec.loadable_path())')" >> $GITHUB_ENV
+
       - name: Install sqlcmd
         run: |
           curl https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc

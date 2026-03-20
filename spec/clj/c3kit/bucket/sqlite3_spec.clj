@@ -17,7 +17,7 @@
              :dbtype  "sqlite"
              :dbname  "sqlite_test.db"})
 
-(def vec-extension-path "/Users/micahmartin/Library/Python/3.9/lib/python/site-packages/sqlite_vec/vec0")
+(def vec-extension-path (System/getenv "SQLITE_VEC_PATH"))
 
 (def vec-config (assoc config :extensions [vec-extension-path]))
 
@@ -312,158 +312,6 @@
 
         )
 
-      (context "vec0 shadow tables"
-        (helper/with-schemas vec-config [vectorable])
-
-        (it "creates vec0 shadow table when schema has vector columns"
-          (let [tables (->> (jdbc/execute! @api/impl ["SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'vec_%'"])
-                            (map :sqlite_master/name))]
-            (should-contain "vec_vectorable_embedding" tables)))
-
-        (it "mirrors insert into vec0 table"
-          (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid, * FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
-            (should= 1 (count vec0-rows))))
-
-        (it "does not insert into vec0 when embedding is nil"
-          (let [saved (api/tx {:kind :vectorable :name "b" :embedding nil})
-                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
-            (should= 0 (count vec0-rows))))
-
-        (it "mirrors update to vec0 table"
-          (let [saved   (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-                _       (api/tx (assoc saved :embedding [0.0 1.0 0.0]))
-                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
-            (should= 1 (count vec0-rows))))
-
-        (it "removes from vec0 when embedding updated to nil"
-          (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-                _     (api/tx (assoc saved :embedding nil))
-                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
-            (should= 0 (count vec0-rows))))
-
-        (it "removes from vec0 on delete"
-          (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-                _     (api/delete saved)
-                vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
-            (should= 0 (count vec0-rows))))
-
-        (it "clears vec0 on delete-all"
-          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
-          (api/delete-all :vectorable)
-          (let [vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding"])]
-            (should= 0 (count vec0-rows))))
-
-        (it "uses vec0 MATCH for KNN queries with take"
-          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
-          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
-          (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
-            (should= ["a" "c"] (map :name results))))
-
-        (it "vec0 KNN with WHERE filter"
-          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
-          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
-          (let [results (api/find :vectorable :where {:name "a"} :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
-            (should= ["a"] (map :name results))))
-
-        )
-
-      (context "vector CRUD"
-        (helper/with-schemas vec-config [vectorable])
-
-        (it "roundtrip: stores and retrieves vector entity"
-          (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})]
-            (should= "a" (:name saved))
-            (should= [1.0 0.0 0.0] (:embedding saved))
-            (let [reloaded (api/entity :vectorable (:id saved))]
-              (should= [1.0 0.0 0.0] (:embedding reloaded)))))
-
-        (it "deletes a single vectorable entity"
-          (let [saved    (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-                deleted  (api/delete saved)]
-            (should= true (:db/delete? deleted))
-            (should-be-nil (api/entity :vectorable (:id saved)))))
-
-        (it "delete-all removes all vectorable entities"
-          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
-          (should= 2 (count (api/find :vectorable)))
-          (api/delete-all :vectorable)
-          (should= [] (api/find :vectorable)))
-
-        (it "clear drops and recreates vectorable table"
-          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-          (should= 1 (count (api/find :vectorable)))
-          (api/clear)
-          (should= [] (api/find :vectorable))
-          (let [saved (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})]
-            (should= [0.0 1.0 0.0] (:embedding saved))))
-
-        (it "stores and retrieves nil embedding"
-          (let [saved (api/tx {:kind :vectorable :name "empty" :embedding nil})]
-            (should-be-nil (:embedding saved))
-            (let [reloaded (api/entity :vectorable (:id saved))]
-              (should-be-nil (:embedding reloaded)))))
-
-        (it "nil embeddings sort last in vector distance ordering"
-          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
-          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
-          (api/tx {:kind :vectorable :name "d" :embedding nil})
-          (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]})]
-            (should= ["a" "c" "b" "d"] (map :name results))))
-
-        (it "mixed vector and scalar ORDER BY"
-          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
-          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
-          (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]] :name :desc})]
-            (should= 3 (count results))
-            ;; primary sort: vector distance; secondary: name desc
-            (should= "a" (:name (first results)))))
-
-        (it "vector distance with take"
-          (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
-          (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
-          (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
-          (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
-            (should= ["a" "c"] (map :name results))))
-
-        )
-
-      (context "multiple vector columns"
-        (helper/with-schemas vec-config [multi-vectorable])
-
-        (it "stores and retrieves entity with two vector columns"
-          (let [saved (api/tx {:kind :multi-vectorable :name "doc"
-                               :title-embedding [1.0 0.0 0.0]
-                               :body-embedding  [0.5 0.5]})]
-            (should= "doc" (:name saved))
-            (should= [1.0 0.0 0.0] (:title-embedding saved))
-            (should= [0.5 0.5] (:body-embedding saved))
-            (let [reloaded (api/entity :multi-vectorable (:id saved))]
-              (should= [1.0 0.0 0.0] (:title-embedding reloaded))
-              (should= [0.5 0.5] (:body-embedding reloaded)))))
-
-        (it "orders by title-embedding distance"
-          (api/tx {:kind :multi-vectorable :name "a" :title-embedding [1.0 0.0 0.0] :body-embedding [1.0 0.0]})
-          (api/tx {:kind :multi-vectorable :name "b" :title-embedding [0.0 1.0 0.0] :body-embedding [0.0 1.0]})
-          (api/tx {:kind :multi-vectorable :name "c" :title-embedding [0.9 0.1 0.0] :body-embedding [0.5 0.5]})
-          (let [results (api/find :multi-vectorable :order-by {:title-embedding ['<-> [1.0 0.0 0.0]]})]
-            (should= ["a" "c" "b"] (map :name results))))
-
-        (it "orders by body-embedding distance (cosine)"
-          (api/tx {:kind :multi-vectorable :name "a" :title-embedding [1.0 0.0 0.0] :body-embedding [1.0 0.0]})
-          (api/tx {:kind :multi-vectorable :name "b" :title-embedding [0.0 1.0 0.0] :body-embedding [0.0 1.0]})
-          (api/tx {:kind :multi-vectorable :name "c" :title-embedding [0.9 0.1 0.0] :body-embedding [0.9 0.1]})
-          (let [results (api/find :multi-vectorable :order-by {:body-embedding ['<=> [1.0 0.0]]})]
-            (should= ["a" "c" "b"] (map :name results))))
-
-        )
-
       (context "->sql-type"
         (test-type-conversion :bigdec "REAL")
         (test-type-conversion :boolean "INTEGER")
@@ -590,5 +438,158 @@
           )
         )
       )
+    )
+  )
+
+(when vec-extension-path
+  (describe "sqlite3 vec0"
+
+    (tags :slow)
+
+    (context "vec0 shadow tables"
+      (helper/with-schemas vec-config [vectorable])
+
+      (it "creates vec0 shadow table when schema has vector columns"
+        (let [tables (->> (jdbc/execute! @api/impl ["SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'vec_%'"])
+                          (map :sqlite_master/name))]
+          (should-contain "vec_vectorable_embedding" tables)))
+
+      (it "mirrors insert into vec0 table"
+        (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+              vec0-rows (jdbc/execute! @api/impl ["SELECT rowid, * FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+          (should= 1 (count vec0-rows))))
+
+      (it "does not insert into vec0 when embedding is nil"
+        (let [saved (api/tx {:kind :vectorable :name "b" :embedding nil})
+              vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+          (should= 0 (count vec0-rows))))
+
+      (it "mirrors update to vec0 table"
+        (let [saved   (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+              _       (api/tx (assoc saved :embedding [0.0 1.0 0.0]))
+              vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+          (should= 1 (count vec0-rows))))
+
+      (it "removes from vec0 when embedding updated to nil"
+        (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+              _     (api/tx (assoc saved :embedding nil))
+              vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+          (should= 0 (count vec0-rows))))
+
+      (it "removes from vec0 on delete"
+        (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+              _     (api/delete saved)
+              vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding WHERE rowid = ?" (:id saved)])]
+          (should= 0 (count vec0-rows))))
+
+      (it "clears vec0 on delete-all"
+        (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+        (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+        (api/delete-all :vectorable)
+        (let [vec0-rows (jdbc/execute! @api/impl ["SELECT rowid FROM vec_vectorable_embedding"])]
+          (should= 0 (count vec0-rows))))
+
+      (it "uses vec0 MATCH for KNN queries with take"
+        (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+        (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+        (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+        (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
+          (should= ["a" "c"] (map :name results))))
+
+      (it "vec0 KNN with WHERE filter"
+        (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+        (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+        (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+        (let [results (api/find :vectorable :where {:name "a"} :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
+          (should= ["a"] (map :name results)))))
+
+    (context "vector CRUD"
+      (helper/with-schemas vec-config [vectorable])
+
+      (it "roundtrip: stores and retrieves vector entity"
+        (let [saved (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})]
+          (should= "a" (:name saved))
+          (should= [1.0 0.0 0.0] (:embedding saved))
+          (let [reloaded (api/entity :vectorable (:id saved))]
+            (should= [1.0 0.0 0.0] (:embedding reloaded)))))
+
+      (it "deletes a single vectorable entity"
+        (let [saved    (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+              deleted  (api/delete saved)]
+          (should= true (:db/delete? deleted))
+          (should-be-nil (api/entity :vectorable (:id saved)))))
+
+      (it "delete-all removes all vectorable entities"
+        (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+        (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+        (should= 2 (count (api/find :vectorable)))
+        (api/delete-all :vectorable)
+        (should= [] (api/find :vectorable)))
+
+      (it "clear drops and recreates vectorable table"
+        (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+        (should= 1 (count (api/find :vectorable)))
+        (api/clear)
+        (should= [] (api/find :vectorable))
+        (let [saved (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})]
+          (should= [0.0 1.0 0.0] (:embedding saved))))
+
+      (it "stores and retrieves nil embedding"
+        (let [saved (api/tx {:kind :vectorable :name "empty" :embedding nil})]
+          (should-be-nil (:embedding saved))
+          (let [reloaded (api/entity :vectorable (:id saved))]
+            (should-be-nil (:embedding reloaded)))))
+
+      (it "nil embeddings sort last in vector distance ordering"
+        (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+        (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+        (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+        (api/tx {:kind :vectorable :name "d" :embedding nil})
+        (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]})]
+          (should= ["a" "c" "b" "d"] (map :name results))))
+
+      (it "mixed vector and scalar ORDER BY"
+        (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+        (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+        (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+        (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]] :name :desc})]
+          (should= 3 (count results))
+          ;; primary sort: vector distance; secondary: name desc
+          (should= "a" (:name (first results)))))
+
+      (it "vector distance with take"
+        (api/tx {:kind :vectorable :name "a" :embedding [1.0 0.0 0.0]})
+        (api/tx {:kind :vectorable :name "b" :embedding [0.0 1.0 0.0]})
+        (api/tx {:kind :vectorable :name "c" :embedding [0.9 0.1 0.0]})
+        (let [results (api/find :vectorable :order-by {:embedding ['<-> [1.0 0.0 0.0]]} :take 2)]
+          (should= ["a" "c"] (map :name results)))))
+
+    (context "multiple vector columns"
+      (helper/with-schemas vec-config [multi-vectorable])
+
+      (it "stores and retrieves entity with two vector columns"
+        (let [saved (api/tx {:kind :multi-vectorable :name "doc"
+                             :title-embedding [1.0 0.0 0.0]
+                             :body-embedding  [0.5 0.5]})]
+          (should= "doc" (:name saved))
+          (should= [1.0 0.0 0.0] (:title-embedding saved))
+          (should= [0.5 0.5] (:body-embedding saved))
+          (let [reloaded (api/entity :multi-vectorable (:id saved))]
+            (should= [1.0 0.0 0.0] (:title-embedding reloaded))
+            (should= [0.5 0.5] (:body-embedding reloaded)))))
+
+      (it "orders by title-embedding distance"
+        (api/tx {:kind :multi-vectorable :name "a" :title-embedding [1.0 0.0 0.0] :body-embedding [1.0 0.0]})
+        (api/tx {:kind :multi-vectorable :name "b" :title-embedding [0.0 1.0 0.0] :body-embedding [0.0 1.0]})
+        (api/tx {:kind :multi-vectorable :name "c" :title-embedding [0.9 0.1 0.0] :body-embedding [0.5 0.5]})
+        (let [results (api/find :multi-vectorable :order-by {:title-embedding ['<-> [1.0 0.0 0.0]]})]
+          (should= ["a" "c" "b"] (map :name results))))
+
+      (it "orders by body-embedding distance (cosine)"
+        (api/tx {:kind :multi-vectorable :name "a" :title-embedding [1.0 0.0 0.0] :body-embedding [1.0 0.0]})
+        (api/tx {:kind :multi-vectorable :name "b" :title-embedding [0.0 1.0 0.0] :body-embedding [0.0 1.0]})
+        (api/tx {:kind :multi-vectorable :name "c" :title-embedding [0.9 0.1 0.0] :body-embedding [0.9 0.1]})
+        (let [results (api/find :multi-vectorable :order-by {:body-embedding ['<=> [1.0 0.0]]})]
+          (should= ["a" "c" "b"] (map :name results)))))
     )
   )
