@@ -1,78 +1,8 @@
 (ns c3kit.bucket.idb
   (:refer-clojure :rename {reduce core-reduce})
-  (:require [cljs.reader]
-            [c3kit.bucket.api :as api]
+  (:require [c3kit.bucket.api :as api]
+            [c3kit.bucket.idb-common :as common]
             [c3kit.bucket.memory :as memory]))
-
-;region Schema Hashing
-
-(defn schema-hash [legend]
-  (hash (into (sorted-map)
-              (map (fn [[k v]] [k (into (sorted-map) v)]))
-              legend)))
-
-;endregion
-
-;region Version Management
-
-(defn idb-version [db-name legend]
-  (let [current-hash (str (schema-hash legend))
-        hash-key     (str db-name "-schema-hash")
-        ver-key      (str db-name "-schema-ver")
-        stored-hash  (.getItem js/localStorage hash-key)
-        stored-ver   (or (some-> (.getItem js/localStorage ver-key) js/parseInt) 0)]
-    (if (= current-hash stored-hash)
-      stored-ver
-      (let [new-ver (inc stored-ver)]
-        (.setItem js/localStorage hash-key current-hash)
-        (.setItem js/localStorage ver-key (str new-ver))
-        new-ver))))
-
-;endregion
-
-;region Database Operations
-
-(defn- ensure-object-stores [db legend]
-  (let [existing (set (array-seq (.-objectStoreNames db)))
-        expected (conj (set (map name (keys legend))) "_meta")]
-    (doseq [store-name expected]
-      (when-not (contains? existing store-name)
-        (.createObjectStore db store-name #js {:keyPath "id"})))
-    (doseq [store-name existing]
-      (when-not (contains? expected store-name)
-        (.deleteObjectStore db store-name)))))
-
-(defn open [db-name legend]
-  (let [version (idb-version db-name legend)]
-    (js/Promise.
-     (fn [resolve reject]
-       (let [request (.open js/indexedDB db-name version)]
-         (set! (.-onupgradeneeded request)
-               (fn [event]
-                 (let [db (.-result (.-target event))]
-                   (ensure-object-stores db legend))))
-         (set! (.-onsuccess request)
-               (fn [event]
-                 (resolve (.-result (.-target event)))))
-         (set! (.-onerror request)
-               (fn [event]
-                 (reject (.-error (.-target event))))))))))
-
-(defn close [db]
-  (when db (.close db)))
-
-;endregion
-
-;region Serialization
-
-(defn clj->js-entity [entity]
-  #js {:id (:id entity) :data (pr-str entity)})
-
-(defn js->clj-entity [js-obj]
-  (when js-obj
-    (cljs.reader/read-string (.-data js-obj))))
-
-;endregion
 
 ;region Entity Operations
 
@@ -82,7 +12,7 @@
      (let [store-name (name (:kind entity))
            tx         (.transaction idb #js [store-name] "readwrite")
            store      (.objectStore tx store-name)
-           request    (.put store (clj->js-entity entity))]
+           request    (.put store (common/clj->js-entity entity))]
        (set! (.-onsuccess request) (fn [_] (resolve entity)))
        (set! (.-onerror request) (fn [event] (reject (.-error (.-target event)))))))))
 
@@ -98,7 +28,7 @@
            (set! (.-onabort tx) (fn [event] (reject (.-error (.-target event)))))
            (doseq [entity entities]
              (let [store (.objectStore tx (name (:kind entity)))]
-               (.put store (clj->js-entity entity))))))))))
+               (.put store (common/clj->js-entity entity))))))))))
 
 (defn delete-entity [idb kind id]
   (js/Promise.
@@ -133,25 +63,12 @@
            (doseq [store-name store-names]
              (.clear (.objectStore tx store-name)))))))))
 
-(defn- read-store [idb store-name]
-  (js/Promise.
-   (fn [resolve reject]
-     (let [tx      (.transaction idb #js [store-name] "readonly")
-           store   (.objectStore tx store-name)
-           request (.getAll store)]
-       (set! (.-onsuccess request)
-             (fn [event]
-               (resolve (map js->clj-entity (array-seq (.-result (.-target event)))))))
-       (set! (.-onerror request)
-             (fn [event]
-               (reject (.-error (.-target event)))))))))
-
 (defn rehydrate [idb kinds tx-fn]
   (let [store-names (if (seq kinds)
                       (map name kinds)
                       (->> (array-seq (.-objectStoreNames idb))
                            (remove #(= "_meta" %))))]
-    (-> (js/Promise.all (clj->js (map #(read-store idb %) store-names)))
+    (-> (js/Promise.all (clj->js (map #(common/read-store idb %) store-names)))
         (.then (fn [results]
                  (let [all-entities (mapcat identity (array-seq results))]
                    (when (seq all-entities)
@@ -214,7 +131,7 @@
    Must be called and awaited before using the db.
    Returns a js/Promise resolving to the db instance."
   [db & kinds]
-  (-> (open (.-db-name db) @(.-legend db))
+  (-> (common/open (.-db-name db) @(.-legend db))
       (.then (fn [idb-instance]
                (reset! (.-idb-atom db) idb-instance)
                db))
