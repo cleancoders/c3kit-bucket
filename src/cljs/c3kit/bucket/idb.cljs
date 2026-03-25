@@ -76,6 +76,41 @@
 
 ;endregion
 
+;region Dirty Set Operations
+
+(defn read-dirty-set [idb]
+  (js/Promise.
+   (fn [resolve reject]
+     (let [tx      (.transaction idb #js ["_meta"] "readonly")
+           store   (.objectStore tx "_meta")
+           request (.get store "dirty")]
+       (set! (.-onsuccess request)
+             (fn [event]
+               (let [result (.-result (.-target event))]
+                 (resolve (if result (:data (common/js->clj-entity result)) #{})))))
+       (set! (.-onerror request)
+             (fn [event]
+               (reject (.-error (.-target event)))))))))
+
+(defn- write-dirty-set! [idb dirty-set]
+  (js/Promise.
+   (fn [resolve reject]
+     (let [tx      (.transaction idb #js ["_meta"] "readwrite")
+           store   (.objectStore tx "_meta")
+           request (.put store (common/clj->js-entity {:id "dirty" :data dirty-set}))]
+       (set! (.-onsuccess request) (fn [_] (resolve dirty-set)))
+       (set! (.-onerror request) (fn [event] (reject (.-error (.-target event)))))))))
+
+(defn add-to-dirty-set! [idb ids]
+  (-> (read-dirty-set idb)
+      (.then (fn [current] (write-dirty-set! idb (into current ids))))))
+
+(defn remove-from-dirty-set! [idb ids]
+  (-> (read-dirty-set idb)
+      (.then (fn [current] (write-dirty-set! idb (reduce disj current ids))))))
+
+;endregion
+
 ;region Shared Transaction Helpers
 
 (defn- prepare-entity
