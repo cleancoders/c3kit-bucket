@@ -141,7 +141,7 @@ A minimal namespace for reading and clearing dirty data from IDB in a service wo
 
 ### API
 
-- `(idb-reader/open db-name legend)` — Opens an IDB connection using shared version/schema logic.
+- `(common/open db-name legend)` — Opens an IDB connection using shared version/schema logic. (From `idb-common`, not `idb-reader`.)
 - `(idb-reader/dirty-entities idb)` — Reads dirty set from `_meta`, fetches those entities from IDB, deserializes. Returns a promise resolving to a vector.
 - `(idb-reader/clear-dirty! idb ids)` — Removes specific IDs from the dirty set and deletes their entities from IDB. Returns a promise.
 
@@ -149,15 +149,16 @@ A minimal namespace for reading and clearing dirty data from IDB in a service wo
 
 ```clojure
 (ns my-app.service-worker
-  (:require [c3kit.bucket.idb-reader :as reader]))
+  (:require [c3kit.bucket.idb-common :as common]
+            [c3kit.bucket.idb-reader :as reader]))
 
 (defn on-sync [legend]
-  (-> (reader/open "my-app" legend)
+  (-> (common/open "my-app" legend)
       (.then (fn [idb]
                (-> (reader/dirty-entities idb)
                    (.then (fn [entities]
                             (-> (post-to-server! entities)
-                                (.then #(reader/clear-dirty! idb (map :id entities)))))))))))
+                                (.then #(reader/clear-dirty! idb (set (map :id entities))))))))))))
 ```
 
 ## New/Modified Namespaces
