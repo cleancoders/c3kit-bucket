@@ -160,7 +160,7 @@
             (and delete? (neg? id)) (-> (delete-entity idb (:kind entity) id)
                                         (.then (fn [_] (remove-from-dirty-set! idb #{id})))
                                         (.catch (fn [_] (reset! (.-store db) old-store))))
-            delete?                 (-> (put-entity idb (assoc result :tombstone? true))
+            delete?                 (-> (put-entity idb result)
                                         (.then (fn [_] (add-to-dirty-set! idb #{id})))
                                         (.catch (fn [_] (reset! (.-store db) old-store))))
             :else                   (-> (put-entity idb result)
