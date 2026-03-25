@@ -11,7 +11,7 @@
 
 ;region ReIndexedDB deftype
 
-(deftype ReIndexedDB [legend store idb-atom db-name]
+(deftype ReIndexedDB [legend store idb-atom db-name online-fn]
   api/DB
   (-clear [this]
     (memory/clear this)
@@ -43,7 +43,8 @@
   (let [legend   (atom (legend/build schemas))
         store    (or (:store config) (r/atom {}))
         idb-atom (atom nil)
-        db-name  (or (:db-name config) "c3kit-bucket")]
-    (ReIndexedDB. legend store idb-atom db-name)))
+        db-name    (or (:db-name config) "c3kit-bucket")
+        online-fn  (or (:online? config) (constantly true))]
+    (ReIndexedDB. legend store idb-atom db-name online-fn)))
 
 ;endregion

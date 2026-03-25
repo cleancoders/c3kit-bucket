@@ -128,6 +128,20 @@
                      (.deleteDatabase js/indexedDB "test-idb-6"))))))
     )
 
+  (context "online-fn"
+
+    (it "defaults to (constantly true) when :online? not provided"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-online-1"} [bibelot])]
+        (should= true ((.-online-fn db)))))
+
+    (it "uses the provided :online? callback"
+      (let [online? (atom true)
+            db      (api/create-db {:impl :indexeddb :db-name "test-idb-online-2" :online? #(deref online?)} [bibelot])]
+        (should= true ((.-online-fn db)))
+        (reset! online? false)
+        (should= false ((.-online-fn db)))))
+    )
+
   (context "rollback on IDB failure"
 
     (it "rolls back store on failed tx"

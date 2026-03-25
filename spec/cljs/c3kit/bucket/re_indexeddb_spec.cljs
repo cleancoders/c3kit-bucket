@@ -107,6 +107,20 @@
                      (.deleteDatabase js/indexedDB "test-reidb-5"))))))
     )
 
+  (context "online-fn"
+
+    (it "defaults to (constantly true) when :online? not provided"
+      (let [db (api/create-db {:impl :re-indexeddb :db-name "test-reidb-online-1"} [bibelot])]
+        (should= true ((.-online-fn db)))))
+
+    (it "uses the provided :online? callback"
+      (let [online? (atom true)
+            db      (api/create-db {:impl :re-indexeddb :db-name "test-reidb-online-2" :online? #(deref online?)} [bibelot])]
+        (should= true ((.-online-fn db)))
+        (reset! online? false)
+        (should= false ((.-online-fn db)))))
+    )
+
   (context "rollback on IDB failure"
 
     (it "rolls back reagent store on failed tx"

@@ -9,7 +9,7 @@
 
 ;region IndexedDB deftype
 
-(deftype IndexedDB [legend store idb-atom db-name]
+(deftype IndexedDB [legend store idb-atom db-name online-fn]
   api/DB
   (-clear [this]
     (memory/clear this)
@@ -41,7 +41,8 @@
   (let [legend   (atom (legend/build schemas))
         store    (or (:store config) (atom {}))
         idb-atom (atom nil)
-        db-name  (or (:db-name config) "c3kit-bucket")]
-    (IndexedDB. legend store idb-atom db-name)))
+        db-name    (or (:db-name config) "c3kit-bucket")
+        online-fn  (or (:online? config) (constantly true))]
+    (IndexedDB. legend store idb-atom db-name online-fn)))
 
 ;endregion
