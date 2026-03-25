@@ -142,6 +142,80 @@
         (should= false ((.-online-fn db)))))
     )
 
+  (context "offline tx"
+
+    (before (reset! idb/offline-id-counter 0))
+
+    (it "offline create assigns negative ID and marks dirty"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-offline-1" :online? (constantly false)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [saved (api/-tx db {:kind :bibelot :name "offline-widget"})]
+                       (should= -1 (:id saved))
+                       (should= "offline-widget" (:name saved))
+                       (idb/read-dirty-set @(.-idb-atom db)))))
+            (.then (fn [dirty]
+                     (should= #{-1} dirty)
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-offline-1"))))))
+
+    (it "online create uses positive ID with no dirty tracking"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-offline-2"} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [saved (api/-tx db {:kind :bibelot :name "online-widget"})]
+                       (should (pos? (:id saved)))
+                       (idb/read-dirty-set @(.-idb-atom db)))))
+            (.then (fn [dirty]
+                     (should= #{} dirty)
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-offline-2"))))))
+
+    (it "offline update marks existing entity dirty"
+      (let [online? (atom true)
+            db      (api/create-db {:impl :indexeddb :db-name "test-idb-offline-3" :online? #(deref online?)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [saved (api/-tx db {:kind :bibelot :name "widget" :size 5})]
+                       (reset! online? false)
+                       (api/-tx db (assoc saved :size 10))
+                       (idb/read-dirty-set @(.-idb-atom db)))))
+            (.then (fn [dirty]
+                     (should= 1 (count dirty))
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-offline-3"))))))
+
+    (it "offline delete of server-known entity creates tombstone and marks dirty"
+      (let [online? (atom true)
+            db      (api/create-db {:impl :indexeddb :db-name "test-idb-offline-4" :online? #(deref online?)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [saved (api/-tx db {:kind :bibelot :name "widget" :size 5})]
+                       (reset! online? false)
+                       (api/-tx db (assoc saved :db/delete? true))
+                       (should= 0 (count (api/find-by- db :bibelot :name "widget")))
+                       (idb/read-dirty-set @(.-idb-atom db)))))
+            (.then (fn [dirty]
+                     (should= 1 (count dirty))
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-offline-4"))))))
+
+    (it "offline delete of offline-created entity cleans up without dirty tracking"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-offline-5" :online? (constantly false)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [saved (api/-tx db {:kind :bibelot :name "offline-widget"})]
+                       (should= -1 (:id saved))
+                       (api/-tx db (assoc saved :db/delete? true))
+                       (should= 0 (count (api/find-by- db :bibelot :name "offline-widget")))
+                       (idb/read-dirty-set @(.-idb-atom db)))))
+            (.then (fn [dirty]
+                     (should= #{} dirty)
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-offline-5"))))))
+
+    )
+
   (context "rollback on IDB failure"
 
     (it "rolls back store on failed tx"

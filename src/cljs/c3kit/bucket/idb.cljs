@@ -129,11 +129,14 @@
 
 ;region Shared Transaction Helpers
 
+(defn- offline? [db] (not ((.-online-fn db))))
+
 (defn- prepare-entity
   "Computes new store state with entity applied, without mutating.
    Returns [new-store coerced-entity-or-soft-delete]."
   [db entity]
-  (let [entity    (memory/ensure-id entity)
+  (let [online-fn (.-online-fn db)
+        entity    (offline-ensure-id online-fn entity)
         new-store (memory/tx-entity @(.-legend db) @(.-store db) entity)
         result    (if (api/delete? entity)
                     (api/soft-delete entity)
@@ -142,16 +145,31 @@
 
 (defn idb-tx
   "Updates in-memory store optimistically, then persists to IDB in the background.
+   When offline, tracks dirty entities and handles tombstones for deletes.
    Returns the saved entity synchronously. Rolls back memory on IDB failure."
   [db entity]
   (let [old-store @(.-store db)
         [new-store result] (prepare-entity db entity)]
     (reset! (.-store db) new-store)
     (when @(.-idb-atom db)
-      (-> (if (api/delete? entity)
-            (delete-entity @(.-idb-atom db) (:kind entity) (:id entity))
-            (put-entity @(.-idb-atom db) result))
-          (.catch (fn [_] (reset! (.-store db) old-store)))))
+      (if (offline? db)
+        (let [idb    @(.-idb-atom db)
+              id     (:id result)
+              delete? (api/delete? entity)]
+          (cond
+            (and delete? (neg? id)) (-> (delete-entity idb (:kind entity) id)
+                                        (.then (fn [_] (remove-from-dirty-set! idb #{id})))
+                                        (.catch (fn [_] (reset! (.-store db) old-store))))
+            delete?                 (-> (put-entity idb (assoc result :tombstone? true))
+                                        (.then (fn [_] (add-to-dirty-set! idb #{id})))
+                                        (.catch (fn [_] (reset! (.-store db) old-store))))
+            :else                   (-> (put-entity idb result)
+                                        (.then (fn [_] (add-to-dirty-set! idb #{id})))
+                                        (.catch (fn [_] (reset! (.-store db) old-store))))))
+        (-> (if (api/delete? entity)
+              (delete-entity @(.-idb-atom db) (:kind entity) (:id entity))
+              (put-entity @(.-idb-atom db) result))
+            (.catch (fn [_] (reset! (.-store db) old-store))))))
     result))
 
 (defn idb-tx*
