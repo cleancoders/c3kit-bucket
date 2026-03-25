@@ -4,6 +4,22 @@
             [c3kit.bucket.idb-common :as common]
             [c3kit.bucket.memory :as memory]))
 
+;region Offline ID Generation
+
+(def offline-id-counter (atom 0))
+
+(defn ensure-offline-id [entity]
+  (if (:id entity)
+    entity
+    (assoc entity :id (swap! offline-id-counter dec))))
+
+(defn offline-ensure-id [online-fn entity]
+  (if (online-fn)
+    (memory/ensure-id entity)
+    (ensure-offline-id entity)))
+
+;endregion
+
 ;region Entity Operations
 
 (defn put-entity [idb entity]
