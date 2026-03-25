@@ -121,6 +121,38 @@
         (should= false ((.-online-fn db)))))
     )
 
+  (context "offline tx"
+
+    (before (reset! idb/offline-id-counter 0))
+
+    (it "assigns negative ID and marks dirty on offline create"
+      (let [online? (atom false)
+            db      (api/create-db {:impl :re-indexeddb :db-name "test-reidb-offline-1" :online? #(deref online?)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [saved (api/-tx db {:kind :bibelot :name "offline-widget"})]
+                       (should= -1 (:id saved))
+                       (idb/read-dirty-set @(.-idb-atom db)))))
+            (.then (fn [dirty]
+                     (should= #{-1} dirty)
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-reidb-offline-1"))))))
+
+    (it "sync-complete! works with reagent store"
+      (let [online? (atom false)
+            db      (api/create-db {:impl :re-indexeddb :db-name "test-reidb-offline-2" :online? #(deref online?)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (api/-tx db {:kind :bibelot :name "offline-widget"})
+                     (idb/sync-complete! db #{-1} [{:kind :bibelot :id 9001 :name "offline-widget"}])))
+            (.then (fn [_]
+                     (should= 0 (count (api/find-by- db :bibelot :id -1)))
+                     (let [found (api/entity- db :bibelot 9001)]
+                       (should= "offline-widget" (:name found)))
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-reidb-offline-2"))))))
+    )
+
   (context "rollback on IDB failure"
 
     (it "rolls back reagent store on failed tx"
