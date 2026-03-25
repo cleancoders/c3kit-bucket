@@ -127,6 +127,46 @@
 
 ;endregion
 
+;region Sync Lifecycle
+
+(defn sync! [db callback]
+  (let [idb @(.-idb-atom db)]
+    (-> (read-dirty-set idb)
+        (.then (fn [dirty-ids]
+                 (if (empty? dirty-ids)
+                   (callback [])
+                   (let [store-names (->> (array-seq (.-objectStoreNames idb))
+                                          (remove #(= "_meta" %)))]
+                     (-> (js/Promise.all (clj->js (map #(common/read-store idb %) store-names)))
+                         (.then (fn [results]
+                                  (let [all-entities (mapcat identity (array-seq results))
+                                        dirty-entities (filterv #(contains? dirty-ids (:id %)) all-entities)]
+                                    (callback dirty-entities))))))))))))
+
+(defn sync-complete! [db dirty-ids server-entities]
+  (let [idb    @(.-idb-atom db)
+        neg-ids (filter neg? dirty-ids)]
+    (doseq [neg-id neg-ids]
+      (when-let [entity (get-in @(.-store db) [:all neg-id])]
+        (swap! (.-store db) #(memory/tx-entity @(.-legend db) % (api/soft-delete entity)))))
+    (when (seq server-entities)
+      (memory/tx* db server-entities))
+    (let [store-names (->> (array-seq (.-objectStoreNames idb))
+                           (remove #(= "_meta" %)))]
+      (-> (js/Promise.all (clj->js (map #(common/read-store idb %) store-names)))
+          (.then (fn [results]
+                   (let [all-entities  (mapcat identity (array-seq results))
+                         to-delete     (filter #(contains? dirty-ids (:id %)) all-entities)
+                         delete-promises (map #(delete-entity idb (:kind %) (:id %)) to-delete)]
+                     (js/Promise.all (clj->js delete-promises)))))
+          (.then (fn [_] (remove-from-dirty-set! idb dirty-ids)))
+          (.then (fn [_]
+                   (if (seq server-entities)
+                     (put-entities idb server-entities)
+                     (js/Promise.resolve nil))))))))
+
+;endregion
+
 ;region Shared Transaction Helpers
 
 (defn- offline? [db] (not ((.-online-fn db))))

@@ -243,6 +243,90 @@
 
     )
 
+  (context "sync lifecycle"
+
+    (before (reset! idb/offline-id-counter 0))
+
+    (it "sync! provides dirty entities to callback"
+      (let [db       (api/create-db {:impl :indexeddb :db-name "test-idb-sync-1" :online? (constantly false)} [bibelot])
+            received (atom nil)]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (api/-tx db {:kind :bibelot :name "w1" :size 1})
+                     (api/-tx db {:kind :bibelot :name "w2" :size 2})
+                     (idb/sync! db (fn [entities] (reset! received entities)))))
+            (.then (fn [_]
+                     (should= 2 (count @received))
+                     (should= #{-1 -2} (into #{} (map :id) @received))
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-sync-1"))))))
+
+    (it "sync! includes tombstones for offline-deleted server entities"
+      (let [online?  (atom true)
+            db       (api/create-db {:impl :indexeddb :db-name "test-idb-sync-2" :online? #(deref online?)} [bibelot])
+            received (atom nil)]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [saved (api/-tx db {:kind :bibelot :name "widget" :size 5})]
+                       (reset! online? false)
+                       (api/-tx db (assoc saved :db/delete? true))
+                       (idb/sync! db (fn [entities] (reset! received entities))))))
+            (.then (fn [_]
+                     (should= 1 (count @received))
+                     (should (:db/delete? (first @received)))
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-sync-2"))))))
+
+    (it "sync! returns empty vector when nothing is dirty"
+      (let [db       (api/create-db {:impl :indexeddb :db-name "test-idb-sync-3"} [bibelot])
+            received (atom nil)]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (api/-tx db {:kind :bibelot :name "widget" :size 5})
+                     (idb/sync! db (fn [entities] (reset! received entities)))))
+            (.then (fn [_]
+                     (should= 0 (count @received))
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-sync-3"))))))
+
+    (it "sync-complete! clears dirty state and replaces temp entities"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-sync-4" :online? (constantly false)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})
+                     (idb/sync-complete! db #{-1} [{:kind :bibelot :id 9001 :name "offline-widget" :size 5}])))
+            (.then (fn [_]
+                     (should= 0 (count (api/find-by- db :bibelot :id -1)))
+                     (let [found (api/entity- db :bibelot 9001)]
+                       (should= "offline-widget" (:name found)))
+                     (idb/read-dirty-set @(.-idb-atom db))))
+            (.then (fn [dirty]
+                     (should= #{} dirty)
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-sync-4"))))))
+
+    (it "sync-complete! clears tombstones from IDB"
+      (let [online? (atom true)
+            db      (api/create-db {:impl :indexeddb :db-name "test-idb-sync-5" :online? #(deref online?)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [saved (api/-tx db {:kind :bibelot :name "widget" :size 5})]
+                       (reset! online? false)
+                       (api/-tx db (assoc saved :db/delete? true))
+                       (idb/sync-complete! db #{(:id saved)} []))))
+            (.then (fn [_]
+                     (idb/read-dirty-set @(.-idb-atom db))))
+            (.then (fn [dirty]
+                     (should= #{} dirty)
+                     (reset! (.-store db) {:all {}})
+                     (idb/rehydrate! db)))
+            (.then (fn [db]
+                     (should= 0 (count (api/find-by- db :bibelot :name "widget")))
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-sync-5"))))))
+
+    )
+
   (context "rollback on IDB failure"
 
     (it "rolls back store on failed tx"
