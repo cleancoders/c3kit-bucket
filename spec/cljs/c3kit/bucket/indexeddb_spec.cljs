@@ -214,6 +214,33 @@
                      (api/close db)
                      (.deleteDatabase js/indexedDB "test-idb-offline-5"))))))
 
+    (it "offline batch create assigns negative IDs and marks dirty"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-offline-6" :online? (constantly false)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [results (api/-tx* db [{:kind :bibelot :name "w1"} {:kind :bibelot :name "w2"}])]
+                       (should= -1 (:id (first results)))
+                       (should= -2 (:id (second results)))
+                       (idb/read-dirty-set @(.-idb-atom db)))))
+            (.then (fn [dirty]
+                     (should= #{-1 -2} dirty)
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-offline-6"))))))
+
+    (it "mixed creates and deletes in offline batch"
+      (let [online? (atom true)
+            db      (api/create-db {:impl :indexeddb :db-name "test-idb-offline-7" :online? #(deref online?)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (let [saved (api/-tx db {:kind :bibelot :name "existing"})]
+                       (reset! online? false)
+                       (api/-tx* db [{:kind :bibelot :name "new-offline"} (assoc saved :db/delete? true)])
+                       (idb/read-dirty-set @(.-idb-atom db)))))
+            (.then (fn [dirty]
+                     (should= 2 (count dirty))
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-offline-7"))))))
+
     )
 
   (context "rollback on IDB failure"

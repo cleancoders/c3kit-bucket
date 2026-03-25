@@ -174,25 +174,41 @@
 
 (defn idb-tx*
   "Updates in-memory store optimistically, then persists to IDB in the background.
+   When offline, tracks dirty entities and handles tombstones for deletes.
    Returns the results synchronously. Rolls back memory on IDB failure."
   [db entities]
   (let [old-store  @(.-store db)
-        entities   (map memory/ensure-id entities)
+        entities   (map (partial offline-ensure-id (.-online-fn db)) entities)
         new-store  (core-reduce #(memory/tx-entity @(.-legend db) %1 %2) @(.-store db) entities)
         results    (mapv (fn [e]
                            (if (api/delete? e)
                              (api/soft-delete e)
                              (get-in new-store [:all (:id e)])))
-                         entities)
-        to-persist (remove api/delete? results)
-        to-delete  (filter api/delete? entities)]
+                         entities)]
     (reset! (.-store db) new-store)
     (when @(.-idb-atom db)
-      (-> (js/Promise.all
-            (clj->js (cond-> []
-                       (seq to-persist) (conj (put-entities @(.-idb-atom db) to-persist))
-                       (seq to-delete)  (into (map #(delete-entity @(.-idb-atom db) (:kind %) (:id %)) to-delete)))))
-          (.catch (fn [_] (reset! (.-store db) old-store)))))
+      (if (offline? db)
+        (let [idb                @(.-idb-atom db)
+              offline-deletes-neg (filterv #(and (api/delete? %) (neg? (:id %))) entities)
+              offline-deletes-pos (filterv #(and (:db/delete? %) (pos? (:id %))) results)
+              to-persist          (filterv #(not (:db/delete? %)) results)
+              dirty-add-ids      (into #{} (map :id) (concat to-persist offline-deletes-pos))
+              dirty-remove-ids   (into #{} (map :id) offline-deletes-neg)]
+          (-> (js/Promise.all
+                (clj->js (cond-> []
+                           (seq to-persist) (conj (put-entities idb to-persist))
+                           (seq offline-deletes-pos) (conj (put-entities idb offline-deletes-pos))
+                           (seq offline-deletes-neg) (into (map #(delete-entity idb (:kind %) (:id %)) offline-deletes-neg))
+                           (seq dirty-add-ids) (conj (add-to-dirty-set! idb dirty-add-ids))
+                           (seq dirty-remove-ids) (conj (remove-from-dirty-set! idb dirty-remove-ids)))))
+              (.catch (fn [_] (reset! (.-store db) old-store)))))
+        (let [to-persist (remove api/delete? results)
+              to-delete  (filter api/delete? entities)]
+          (-> (js/Promise.all
+                (clj->js (cond-> []
+                           (seq to-persist) (conj (put-entities @(.-idb-atom db) to-persist))
+                           (seq to-delete)  (into (map #(delete-entity @(.-idb-atom db) (:kind %) (:id %)) to-delete)))))
+              (.catch (fn [_] (reset! (.-store db) old-store)))))))
     results))
 
 (defn init!
