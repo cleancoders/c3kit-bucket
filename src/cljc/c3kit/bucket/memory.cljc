@@ -133,7 +133,7 @@
         :else
         (sort-by field entities)))))
 
-(defn- do-find [db kind options]
+(defn do-find [db kind options]
   (ensure-schema! @(.-legend db) kind)
   (let [es (or (vals (get @(.-store db) kind)) [])]
     (->> (ccc/find-by es (:where options))

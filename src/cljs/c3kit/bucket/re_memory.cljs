@@ -53,7 +53,7 @@
   (->> (ccc/find-by @cursor (conj (:where options) [:kind kind]))
        (api/-apply-drop-take options)))
 
-(defn- do-find [db kind options]
+(defn do-find [db kind options]
   (let [cursor (r/cursor slice-db [(->kind-or-ids (:where options) kind) []])]
     (legend/for-kind @(.-legend db) kind)
     (really-do-find cursor options kind)))
