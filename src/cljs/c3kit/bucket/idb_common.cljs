@@ -1,6 +1,7 @@
 (ns c3kit.bucket.idb-common
   (:refer-clojure :rename {reduce core-reduce})
-  (:require [c3kit.bucket.api :as api]
+  (:require [c3kit.apron.log :as log]
+            [c3kit.bucket.api :as api]
             [c3kit.bucket.idb-io :as io]
             [c3kit.bucket.memory :as memory]))
 
@@ -23,7 +24,9 @@
 ;region Entity Operations
 
 (defn- with-rollback [promise store-atom old-store]
-  (.catch promise (fn [_] (reset! store-atom old-store))))
+  (.catch promise (fn [e]
+                    (log/warn "IDB write failed, rolling back in-memory store:" e)
+                    (reset! store-atom old-store))))
 
 (defn put-entity [idb entity]
   (io/rw-request idb (name (:kind entity))
