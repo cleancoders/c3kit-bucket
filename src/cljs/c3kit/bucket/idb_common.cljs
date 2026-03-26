@@ -267,7 +267,4 @@
                  (fn [entities] (memory/tx* db entities)))
       (.then (fn [_] db))))
 
-(defn close [idb]
-  (when idb (.close idb)))
-
 ;endregion
