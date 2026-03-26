@@ -144,7 +144,8 @@
 
   (context "offline tx"
 
-    (before (reset! idb/offline-id-counter 0))
+    (before (reset! idb/offline-id-counter 0)
+            (reset! idb/dirty-chain (js/Promise.resolve nil)))
 
     (it "offline create assigns negative ID and marks dirty"
       (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-offline-1" :online? (constantly false)} [bibelot])]
@@ -155,7 +156,7 @@
                        (should= "offline-widget" (:name saved))
                        (idb/read-dirty-set @(.-idb-atom db)))))
             (.then (fn [dirty]
-                     (should= #{-1} dirty)
+                     (should= {-1 :bibelot} dirty)
                      (api/close db)
                      (.deleteDatabase js/indexedDB "test-idb-offline-1"))))))
 
@@ -167,7 +168,7 @@
                        (should (pos? (:id saved)))
                        (idb/read-dirty-set @(.-idb-atom db)))))
             (.then (fn [dirty]
-                     (should= #{} dirty)
+                     (should= {} dirty)
                      (api/close db)
                      (.deleteDatabase js/indexedDB "test-idb-offline-2"))))))
 
@@ -210,7 +211,7 @@
                        (should= 0 (count (api/find-by- db :bibelot :name "offline-widget")))
                        (idb/read-dirty-set @(.-idb-atom db)))))
             (.then (fn [dirty]
-                     (should= #{} dirty)
+                     (should= {} dirty)
                      (api/close db)
                      (.deleteDatabase js/indexedDB "test-idb-offline-5"))))))
 
@@ -223,7 +224,7 @@
                        (should= -2 (:id (second results)))
                        (idb/read-dirty-set @(.-idb-atom db)))))
             (.then (fn [dirty]
-                     (should= #{-1 -2} dirty)
+                     (should= {-1 :bibelot -2 :bibelot} dirty)
                      (api/close db)
                      (.deleteDatabase js/indexedDB "test-idb-offline-6"))))))
 
@@ -245,7 +246,8 @@
 
   (context "sync lifecycle"
 
-    (before (reset! idb/offline-id-counter 0))
+    (before (reset! idb/offline-id-counter 0)
+            (reset! idb/dirty-chain (js/Promise.resolve nil)))
 
     (it "sync! provides dirty entities to callback"
       (let [db       (api/create-db {:impl :indexeddb :db-name "test-idb-sync-1" :online? (constantly false)} [bibelot])
@@ -301,7 +303,7 @@
                        (should= "offline-widget" (:name found)))
                      (idb/read-dirty-set @(.-idb-atom db))))
             (.then (fn [dirty]
-                     (should= #{} dirty)
+                     (should= {} dirty)
                      (api/close db)
                      (.deleteDatabase js/indexedDB "test-idb-sync-4"))))))
 
@@ -317,7 +319,7 @@
             (.then (fn [_]
                      (idb/read-dirty-set @(.-idb-atom db))))
             (.then (fn [dirty]
-                     (should= #{} dirty)
+                     (should= {} dirty)
                      (reset! (.-store db) {:all {}})
                      (idb/rehydrate! db)))
             (.then (fn [db]

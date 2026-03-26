@@ -178,12 +178,13 @@
 
 (defn- persist-offline! [idb entity result]
   (let [id      (:id result)
+        kind    (:kind entity)
         delete? (api/delete? entity)]
     (if (and delete? (neg? id))
-      (-> (delete-entity idb (:kind entity) id)
+      (-> (delete-entity idb kind id)
           (.then (fn [_] (remove-from-dirty-set! idb #{id}))))
       (-> (put-entity idb result)
-          (.then (fn [_] (add-to-dirty-set! idb #{id})))))))
+          (.then (fn [_] (add-to-dirty-set! idb {id kind})))))))
 
 (defn- persist-online! [idb entity result]
   (if (api/delete? entity)
@@ -210,7 +211,7 @@
   (let [neg-deletes  (filterv #(and (api/delete? %) (neg? (:id %))) entities)
         pos-deletes  (filterv #(and (:db/delete? %) (pos? (:id %))) results)
         to-persist   (filterv #(not (:db/delete? %)) results)
-        dirty-add    (into #{} (map :id) (concat to-persist pos-deletes))
+        dirty-add    (into {} (map (juxt :id :kind)) (concat to-persist pos-deletes))
         dirty-remove (into #{} (map :id) neg-deletes)]
     (js/Promise.all
       (clj->js (cond-> []

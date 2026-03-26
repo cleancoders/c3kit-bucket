@@ -123,7 +123,8 @@
 
   (context "offline tx"
 
-    (before (reset! idb/offline-id-counter 0))
+    (before (reset! idb/offline-id-counter 0)
+            (reset! idb/dirty-chain (js/Promise.resolve nil)))
 
     (it "assigns negative ID and marks dirty on offline create"
       (let [online? (atom false)
@@ -134,7 +135,7 @@
                        (should= -1 (:id saved))
                        (idb/read-dirty-set @(.-idb-atom db)))))
             (.then (fn [dirty]
-                     (should= #{-1} dirty)
+                     (should= {-1 :bibelot} dirty)
                      (api/close db)
                      (.deleteDatabase js/indexedDB "test-reidb-offline-1"))))))
 
