@@ -3,7 +3,7 @@
   (:require [c3kit.bucket.idb-io :as sut]
             [speclj.core]))
 
-(describe "IDB Common"
+(describe "IDB IO"
 
   (context "schema-hash"
     (it "produces a consistent hash from a legend"
