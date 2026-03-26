@@ -327,6 +327,39 @@
 
     )
 
+  (context "refresh!"
+
+    (before (reset! idb/offline-id-counter 0))
+
+    (it "purges negative-ID entities and loads fresh data"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-refresh-1"} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (api/-tx db {:kind :bibelot :id -1 :name "offline-widget" :size 5})
+                     (api/-tx db {:kind :bibelot :id 100 :name "server-widget" :size 10})
+                     (idb/refresh! db [{:kind :bibelot :id 200 :name "fresh-widget" :size 20}])))
+            (.then (fn [_]
+                     (should= 0 (count (filter #(neg? (:id %)) (api/find-by- db :bibelot :name "offline-widget"))))
+                     (let [e100 (api/entity- db :bibelot 100)]
+                       (should= "server-widget" (:name e100)))
+                     (let [e200 (api/entity- db :bibelot 200)]
+                       (should= "fresh-widget" (:name e200)))
+                     (api/close db)
+                     (.deleteDatabase js/indexedDB "test-idb-refresh-1"))))))
+
+    (it "returns empty list for empty input"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-refresh-2" :online? (constantly false)} [bibelot])]
+        (-> (idb/init! db)
+            (.then (fn [db]
+                     (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})
+                     (let [result (idb/refresh! db [])]
+                       (should= [] result)
+                       (should= 1 (count (api/find-by- db :bibelot :name "offline-widget")))
+                       (api/close db)
+                       (.deleteDatabase js/indexedDB "test-idb-refresh-2")))))))
+
+    )
+
   (context "rollback on IDB failure"
 
     (it "rolls back store on failed tx"

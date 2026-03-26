@@ -149,8 +149,7 @@
     (doseq [neg-id neg-ids]
       (when-let [entity (get-in @(.-store db) [:all neg-id])]
         (swap! (.-store db) #(memory/tx-entity @(.-legend db) % (api/soft-delete entity)))))
-    (when (seq server-entities)
-      (memory/tx* db server-entities))
+    (when (seq server-entities) (memory/tx* db server-entities))
     (let [store-names (->> (array-seq (.-objectStoreNames idb))
                            (remove #(= "_meta" %)))]
       (-> (js/Promise.all (clj->js (map #(common/read-store idb %) store-names)))
@@ -164,6 +163,35 @@
                    (if (seq server-entities)
                      (put-entities idb server-entities)
                      (js/Promise.resolve nil))))))))
+
+;endregion
+
+(defn refresh!
+  "Purges all negative-ID entities for the kinds present in server-entities
+   from both memory and IDB, then tx*s the server data as clean (not dirty-tracked).
+   Use when receiving fresh server data that replaces offline-created entities."
+  [db server-entities]
+  (if (empty? server-entities)
+    []
+    (let [idb         @(.-idb-atom db)
+          kinds       (set (map :kind server-entities))
+          neg-entries (for [kind kinds
+                           entity (memory/do-find db kind {})
+                           :when (neg? (:id entity))]
+                       entity)]
+      ;; Purge negative-ID entities from memory
+      (doseq [entity neg-entries]
+        (swap! (.-store db) #(memory/tx-entity @(.-legend db) % (api/soft-delete (:kind entity) (:id entity)))))
+      ;; tx* server entities into memory (bypassing idb-tx to avoid dirty tracking)
+      (let [result (memory/tx* db server-entities)]
+        ;; Async: clean up IDB
+        (when idb
+          (-> (js/Promise.all
+                (clj->js (cond-> []
+                           (seq neg-entries) (into (map #(delete-entity idb (:kind %) (:id %)) neg-entries))
+                           (seq server-entities) (conj (put-entities idb server-entities)))))
+              (.catch (fn [_] nil))))
+        result))))
 
 ;endregion
 
