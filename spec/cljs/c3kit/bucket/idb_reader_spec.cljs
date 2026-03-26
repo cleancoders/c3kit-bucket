@@ -6,13 +6,13 @@
 
 (def legend {:bibelot {:id {:type :long} :name {:type :string} :size {:type :long}}})
 
-(defn- seed-entity-and-dirty! [idb entities dirty-ids]
+(defn- seed-entity-and-dirty! [idb entities dirty-entries]
   (let [tx    (.transaction idb #js ["bibelot" "_meta"] "readwrite")
         store (.objectStore tx "bibelot")
         meta  (.objectStore tx "_meta")]
     (doseq [entity entities]
       (.put store (io/clj->js-entity entity)))
-    (.put meta (io/clj->js-entity {:id "dirty" :data (set dirty-ids)}))
+    (.put meta (io/clj->js-entity {:id "dirty" :data dirty-entries}))
     (js/Promise.
      (fn [resolve _]
        (set! (.-oncomplete tx) #(resolve idb))))))
@@ -24,7 +24,7 @@
     (it "reads dirty entities from IDB"
       (-> (io/open "test-reader-1" legend)
           (.then (fn [idb]
-                   (seed-entity-and-dirty! idb [{:id -1 :kind :bibelot :name "offline" :size 5}] [-1])))
+                   (seed-entity-and-dirty! idb [{:id -1 :kind :bibelot :name "offline" :size 5}] {-1 :bibelot})))
           (.then (fn [idb]
                    (-> (sut/dirty-entities idb)
                        (.then (fn [result]
@@ -51,11 +51,11 @@
                    (seed-entity-and-dirty! idb
                                            [{:id -1 :kind :bibelot :name "first" :size 1}
                                             {:id -2 :kind :bibelot :name "second" :size 2}]
-                                           [-1 -2])))
+                                           {-1 :bibelot -2 :bibelot})))
           (.then (fn [idb]
                    (-> (sut/clear-dirty! idb #{-1})
                        (.then (fn [_]
-                                ;; Check dirty set is now #{-2}
+                                ;; Check dirty set is now {-2 :bibelot}
                                 (let [tx      (.transaction idb #js ["_meta"] "readonly")
                                       store   (.objectStore tx "_meta")
                                       request (.get store "dirty")]
@@ -64,7 +64,7 @@
                                      (set! (.-onsuccess request)
                                            (fn [event]
                                              (let [result (io/js->clj-entity (.-result (.-target event)))]
-                                               (should= #{-2} (:data result))
+                                               (should= {-2 :bibelot} (:data result))
                                                (resolve idb)))))))))
                        (.then (fn [idb]
                                 ;; Check entity -1 is gone
