@@ -100,34 +100,39 @@
 (defn sync! [db callback]
   (let [idb @(.-idb-atom db)]
     (-> (io/read-dirty-set idb)
-        (.then (fn [dirty-ids]
-                 (if (empty? dirty-ids)
+        (.then (fn [dirty-entries]
+                 (if (empty? dirty-entries)
                    (callback [])
-                   (-> (io/read-all-entities idb)
-                       (.then (fn [all-entities]
-                                (callback (filterv #(contains? dirty-ids (:id %)) all-entities)))))))))))
+                   (-> (js/Promise.all
+                         (clj->js (map (fn [[id kind]] (io/read-entity idb (name kind) id)) dirty-entries)))
+                       (.then (fn [results]
+                                (callback (vec (remove nil? (array-seq results)))))))))))))
 
 (defn- soft-delete-neg-ids! [db dirty-ids]
   (doseq [neg-id (filter neg? dirty-ids)]
     (when-let [entity (get-in @(.-store db) [:all neg-id])]
       (swap! (.-store db) #(memory/tx-entity @(.-legend db) % (api/soft-delete entity))))))
 
-(defn- delete-dirty-entities [idb dirty-ids]
-  (-> (io/read-all-entities idb)
-      (.then (fn [all-entities]
-               (let [to-delete (filter #(contains? dirty-ids (:id %)) all-entities)]
-                 (js/Promise.all (clj->js (map #(delete-entity idb (:kind %) (:id %)) to-delete))))))))
+(defn- delete-dirty-entities [idb dirty-entries]
+  (if (empty? dirty-entries)
+    (js/Promise.resolve nil)
+    (js/Promise.all
+      (clj->js (map (fn [[id kind]] (delete-entity idb kind id)) dirty-entries)))))
 
 (defn sync-complete! [db dirty-ids server-entities]
-  (let [idb @(.-idb-atom db)]
+  (let [idb    @(.-idb-atom db)
+        id-set (set dirty-ids)]
     (soft-delete-neg-ids! db dirty-ids)
     (when (seq server-entities) (memory/tx* db server-entities))
-    (-> (delete-dirty-entities idb dirty-ids)
-        (.then (fn [_] (remove-from-dirty-set! idb dirty-ids)))
-        (.then (fn [_]
-                 (if (seq server-entities)
-                   (put-entities idb server-entities)
-                   (js/Promise.resolve nil)))))))
+    (-> (io/read-dirty-set idb)
+        (.then (fn [dirty-entries]
+                 (let [entries-to-delete (select-keys dirty-entries id-set)]
+                   (-> (delete-dirty-entities idb entries-to-delete)
+                       (.then (fn [_] (remove-from-dirty-set! idb id-set)))
+                       (.then (fn [_]
+                                (if (seq server-entities)
+                                  (put-entities idb server-entities)
+                                  (js/Promise.resolve nil)))))))))))
 
 (defn- purge-neg-entities-from-memory! [db kinds]
   (let [neg-entries (for [kind kinds
