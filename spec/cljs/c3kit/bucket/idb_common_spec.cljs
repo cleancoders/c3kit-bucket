@@ -1,51 +1,85 @@
 (ns c3kit.bucket.idb-common-spec
-  (:require-macros [speclj.core :refer [before context describe it should should= should-not=]])
+  (:require-macros [speclj.core :refer [before context describe it should= with-stubs]])
   (:require [c3kit.bucket.idb-common :as sut]
+            [c3kit.bucket.idb-io :as io]
+            [c3kit.bucket.memory :as memory]
             [speclj.core]))
 
-(describe "IDB Common"
+(def legend {:bibelot {:id {:type :long} :name {:type :string}}})
 
-  (context "schema-hash"
-    (it "produces a consistent hash from a legend"
-      (let [legend {:user {:id {:type :long} :name {:type :string}}}]
-        (should= (sut/schema-hash legend) (sut/schema-hash legend))))
+(describe "IDB"
 
-    (it "produces different hashes for different legends"
-      (let [legend-1 {:user {:id {:type :long} :name {:type :string}}}
-            legend-2 {:user {:id {:type :long} :name {:type :string} :email {:type :string}}}]
-        (should-not= (sut/schema-hash legend-1) (sut/schema-hash legend-2)))))
+  (context "dirty set"
 
-  (context "idb-version"
-    (before (.removeItem js/localStorage "test-db-schema-hash")
-            (.removeItem js/localStorage "test-db-schema-ver"))
+    (it "read-dirty-set returns empty set from fresh db"
+      (-> (io/open "test-dirty-1" legend)
+          (.then (fn [idb]
+                   (-> (sut/read-dirty-set idb)
+                       (.then (fn [result]
+                                (should= #{} result)
+                                (io/close idb)
+                                (.deleteDatabase js/indexedDB "test-dirty-1"))))))))
 
-    (it "returns 1 for a new database"
-      (let [legend {:user {:id {:type :long} :name {:type :string}}}]
-        (should= 1 (sut/idb-version "test-db" legend))))
+    (it "add-to-dirty-set! adds IDs to the set"
+      (-> (io/open "test-dirty-2" legend)
+          (.then (fn [idb]
+                   (-> (sut/add-to-dirty-set! idb #{1 2 3})
+                       (.then (fn [_] (sut/read-dirty-set idb)))
+                       (.then (fn [result]
+                                (should= #{1 2 3} result)
+                                (io/close idb)
+                                (.deleteDatabase js/indexedDB "test-dirty-2"))))))))
 
-    (it "returns same version when legend unchanged"
-      (let [legend {:user {:id {:type :long} :name {:type :string}}}]
-        (sut/idb-version "test-db" legend)
-        (should= 1 (sut/idb-version "test-db" legend))))
+    (it "multiple add-to-dirty-set! calls accumulate IDs"
+      (-> (io/open "test-dirty-3" legend)
+          (.then (fn [idb]
+                   (-> (sut/add-to-dirty-set! idb #{1 2})
+                       (.then (fn [_] (sut/add-to-dirty-set! idb #{3 4})))
+                       (.then (fn [_] (sut/read-dirty-set idb)))
+                       (.then (fn [result]
+                                (should= #{1 2 3 4} result)
+                                (io/close idb)
+                                (.deleteDatabase js/indexedDB "test-dirty-3"))))))))
 
-    (it "increments version when legend changes"
-      (let [legend-1 {:user {:id {:type :long} :name {:type :string}}}
-            legend-2 {:user {:id {:type :long} :name {:type :string} :email {:type :string}}}]
-        (sut/idb-version "test-db" legend-1)
-        (should= 2 (sut/idb-version "test-db" legend-2)))))
+    (it "remove-from-dirty-set! removes specific IDs"
+      (-> (io/open "test-dirty-4" legend)
+          (.then (fn [idb]
+                   (-> (sut/add-to-dirty-set! idb #{1 2 3 4})
+                       (.then (fn [_] (sut/remove-from-dirty-set! idb #{2 4})))
+                       (.then (fn [_] (sut/read-dirty-set idb)))
+                       (.then (fn [result]
+                                (should= #{1 3} result)
+                                (io/close idb)
+                                (.deleteDatabase js/indexedDB "test-dirty-4")))))))))
 
-  (context "serialization"
-    (it "round-trips keyword values"
-      (let [entity {:id 1 :kind :bibelot :name "widget" :color "red"}]
-        (should= entity (sut/js->clj-entity (sut/clj->js-entity entity)))))
+  (context "ensure-offline-id"
+    (before (reset! sut/offline-id-counter 0))
 
-    (it "round-trips entities with vector values"
-      (let [entity {:id 2 :kind :doodad :names ["alice" "bob"]}]
-        (should= entity (sut/js->clj-entity (sut/clj->js-entity entity)))))
+    (it "assigns negative decrementing ID to entity without ID"
+      (let [result (sut/ensure-offline-id {:kind :bibelot :name "thing"})]
+        (should= -1 (:id result))))
 
-    (it "round-trips entities with keyword vector values"
-      (let [entity {:id 3 :kind :doodad :letters [:a :b :c]}]
-        (should= entity (sut/js->clj-entity (sut/clj->js-entity entity)))))
+    (it "decrements for each new entity"
+      (sut/ensure-offline-id {:kind :bibelot :name "first"})
+      (let [result (sut/ensure-offline-id {:kind :bibelot :name "second"})]
+        (should= -2 (:id result))))
 
-    (it "round-trips nil for nil input"
-      (should= nil (sut/js->clj-entity nil)))))
+    (it "preserves existing positive ID"
+      (let [result (sut/ensure-offline-id {:kind :bibelot :id 42 :name "existing"})]
+        (should= 42 (:id result))))
+
+    (it "preserves existing negative ID"
+      (let [result (sut/ensure-offline-id {:kind :bibelot :id -5 :name "existing"})]
+        (should= -5 (:id result)))))
+
+  (context "offline-ensure-id"
+    (with-stubs)
+    (before (reset! sut/offline-id-counter 0))
+
+    (it "uses negative ID when offline"
+      (let [result (sut/offline-ensure-id (constantly false) {:kind :bibelot :name "offline"})]
+        (should= -1 (:id result))))
+
+    (it "uses positive ID when online"
+      (let [result (sut/offline-ensure-id (constantly true) {:kind :bibelot :name "online"})]
+        (should= true (pos? (:id result)))))))

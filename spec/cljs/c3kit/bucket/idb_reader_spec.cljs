@@ -1,6 +1,6 @@
 (ns c3kit.bucket.idb-reader-spec
   (:require-macros [speclj.core :refer [describe context it should= should-contain]])
-  (:require [c3kit.bucket.idb-common :as common]
+  (:require [c3kit.bucket.idb-io :as io]
             [c3kit.bucket.idb-reader :as sut]
             [speclj.core]))
 
@@ -11,8 +11,8 @@
         store (.objectStore tx "bibelot")
         meta  (.objectStore tx "_meta")]
     (doseq [entity entities]
-      (.put store (common/clj->js-entity entity)))
-    (.put meta (common/clj->js-entity {:id "dirty" :data (set dirty-ids)}))
+      (.put store (io/clj->js-entity entity)))
+    (.put meta (io/clj->js-entity {:id "dirty" :data (set dirty-ids)}))
     (js/Promise.
      (fn [resolve _]
        (set! (.-oncomplete tx) #(resolve idb))))))
@@ -22,7 +22,7 @@
   (context "dirty-entities"
 
     (it "reads dirty entities from IDB"
-      (-> (common/open "test-reader-1" legend)
+      (-> (io/open "test-reader-1" legend)
           (.then (fn [idb]
                    (seed-entity-and-dirty! idb [{:id -1 :kind :bibelot :name "offline" :size 5}] [-1])))
           (.then (fn [idb]
@@ -31,22 +31,22 @@
                                 (should= 1 (count result))
                                 (should= -1 (:id (first result)))
                                 (should= "offline" (:name (first result)))
-                                (common/close idb)
+                                (io/close idb)
                                 (.deleteDatabase js/indexedDB "test-reader-1"))))))))
 
     (it "returns empty vector when nothing dirty"
-      (-> (common/open "test-reader-2" legend)
+      (-> (io/open "test-reader-2" legend)
           (.then (fn [idb]
                    (-> (sut/dirty-entities idb)
                        (.then (fn [result]
                                 (should= [] result)
-                                (common/close idb)
+                                (io/close idb)
                                 (.deleteDatabase js/indexedDB "test-reader-2")))))))))
 
   (context "clear-dirty!"
 
     (it "removes dirty IDs and their entities from IDB"
-      (-> (common/open "test-reader-3" legend)
+      (-> (io/open "test-reader-3" legend)
           (.then (fn [idb]
                    (seed-entity-and-dirty! idb
                                            [{:id -1 :kind :bibelot :name "first" :size 1}
@@ -63,7 +63,7 @@
                                    (fn [resolve _]
                                      (set! (.-onsuccess request)
                                            (fn [event]
-                                             (let [result (common/js->clj-entity (.-result (.-target event)))]
+                                             (let [result (io/js->clj-entity (.-result (.-target event)))]
                                                (should= #{-2} (:data result))
                                                (resolve idb)))))))))
                        (.then (fn [idb]
@@ -86,8 +86,8 @@
                                    (fn [resolve _]
                                      (set! (.-onsuccess request)
                                            (fn [event]
-                                             (let [entity (common/js->clj-entity (.-result (.-target event)))]
+                                             (let [entity (io/js->clj-entity (.-result (.-target event)))]
                                                (should= "second" (:name entity))
-                                               (common/close idb)
+                                               (io/close idb)
                                                (resolve (.deleteDatabase js/indexedDB "test-reader-3")))))))))))))))
   ))

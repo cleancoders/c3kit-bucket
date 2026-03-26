@@ -2,8 +2,7 @@
   (:refer-clojure :rename {find core-find count core-count reduce core-reduce})
   (:require [c3kit.apron.legend :as legend]
             [c3kit.bucket.api :as api]
-            [c3kit.bucket.idb :as idb]
-            [c3kit.bucket.idb-common :as common]
+            [c3kit.bucket.idb-common :as idb]
             [c3kit.bucket.memory :as memory]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.re-memory :as re-memory]
@@ -16,7 +15,7 @@
   (-clear [this]
     (memory/clear this)
     (when @idb-atom (idb/clear-all @idb-atom)))
-  (close [_this] (common/close @idb-atom))
+  (close [_this] (idb/close @idb-atom))
   (-count [this kind options] (core-count (api/-find this kind options)))
   (-delete-all [this kind]
     (memory/delete-all this kind)

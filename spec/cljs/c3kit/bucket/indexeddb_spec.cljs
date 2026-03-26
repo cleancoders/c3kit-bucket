@@ -2,7 +2,7 @@
   (:require-macros [speclj.core :refer [around around-all before context describe it should should= should-not-be-nil with]]
                    [c3kit.bucket.api :refer [with-safety-off]])
   (:require [c3kit.bucket.api :as api]
-            [c3kit.bucket.idb :as idb]
+            [c3kit.bucket.idb-common :as idb]
             [c3kit.bucket.indexeddb]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.memory-spec :as memory-spec]
