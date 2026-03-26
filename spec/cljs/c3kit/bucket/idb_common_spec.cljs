@@ -9,46 +9,48 @@
 
 (describe "IDB"
 
+  (before (reset! sut/dirty-chain (js/Promise.resolve nil)))
+
   (context "dirty set"
 
-    (it "read-dirty-set returns empty set from fresh db"
+    (it "read-dirty-set returns empty map from fresh db"
       (-> (io/open "test-dirty-1" legend)
           (.then (fn [idb]
                    (-> (sut/read-dirty-set idb)
                        (.then (fn [result]
-                                (should= #{} result)
+                                (should= {} result)
                                 (io/close idb)
                                 (.deleteDatabase js/indexedDB "test-dirty-1"))))))))
 
-    (it "add-to-dirty-set! adds IDs to the set"
+    (it "add-to-dirty-set! adds entries to the map"
       (-> (io/open "test-dirty-2" legend)
           (.then (fn [idb]
-                   (-> (sut/add-to-dirty-set! idb #{1 2 3})
+                   (-> (sut/add-to-dirty-set! idb {1 :bibelot 2 :bibelot 3 :bibelot})
                        (.then (fn [_] (sut/read-dirty-set idb)))
                        (.then (fn [result]
-                                (should= #{1 2 3} result)
+                                (should= {1 :bibelot 2 :bibelot 3 :bibelot} result)
                                 (io/close idb)
                                 (.deleteDatabase js/indexedDB "test-dirty-2"))))))))
 
-    (it "multiple add-to-dirty-set! calls accumulate IDs"
+    (it "multiple add-to-dirty-set! calls accumulate entries"
       (-> (io/open "test-dirty-3" legend)
           (.then (fn [idb]
-                   (-> (sut/add-to-dirty-set! idb #{1 2})
-                       (.then (fn [_] (sut/add-to-dirty-set! idb #{3 4})))
+                   (-> (sut/add-to-dirty-set! idb {1 :bibelot 2 :bibelot})
+                       (.then (fn [_] (sut/add-to-dirty-set! idb {3 :bibelot 4 :bibelot})))
                        (.then (fn [_] (sut/read-dirty-set idb)))
                        (.then (fn [result]
-                                (should= #{1 2 3 4} result)
+                                (should= {1 :bibelot 2 :bibelot 3 :bibelot 4 :bibelot} result)
                                 (io/close idb)
                                 (.deleteDatabase js/indexedDB "test-dirty-3"))))))))
 
     (it "remove-from-dirty-set! removes specific IDs"
       (-> (io/open "test-dirty-4" legend)
           (.then (fn [idb]
-                   (-> (sut/add-to-dirty-set! idb #{1 2 3 4})
+                   (-> (sut/add-to-dirty-set! idb {1 :bibelot 2 :bibelot 3 :bibelot 4 :bibelot})
                        (.then (fn [_] (sut/remove-from-dirty-set! idb #{2 4})))
                        (.then (fn [_] (sut/read-dirty-set idb)))
                        (.then (fn [result]
-                                (should= #{1 3} result)
+                                (should= {1 :bibelot 3 :bibelot} result)
                                 (io/close idb)
                                 (.deleteDatabase js/indexedDB "test-dirty-4")))))))))
 

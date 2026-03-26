@@ -124,7 +124,9 @@
         store   (.objectStore tx "_meta")
         request (.get store "dirty")]
     (request->promise request
-                      (fn [result] (if result (:data (js->clj-entity result)) #{})))))
+                      (fn [result]
+                        (let [data (when result (:data (js->clj-entity result)))]
+                          (if (or (nil? data) (set? data)) {} data))))))
 
 (defn write-dirty-set! [idb dirty-set]
   (rw-request idb "_meta"

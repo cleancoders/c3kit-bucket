@@ -75,14 +75,23 @@
 ;region Dirty Set Operations
 
 (def read-dirty-set io/read-dirty-set)
+(def dirty-chain (atom (js/Promise.resolve nil)))
 
-(defn add-to-dirty-set! [idb ids]
-  (-> (io/read-dirty-set idb)
-      (.then (fn [current] (io/write-dirty-set! idb (into current ids))))))
+(defn add-to-dirty-set! [idb entries]
+  (swap! dirty-chain
+    (fn [chain]
+      (-> chain
+          (.catch (fn [_] nil))
+          (.then (fn [_] (io/read-dirty-set idb)))
+          (.then (fn [current] (io/write-dirty-set! idb (merge current entries))))))))
 
 (defn remove-from-dirty-set! [idb ids]
-  (-> (io/read-dirty-set idb)
-      (.then (fn [current] (io/write-dirty-set! idb (core-reduce disj current ids))))))
+  (swap! dirty-chain
+    (fn [chain]
+      (-> chain
+          (.catch (fn [_] nil))
+          (.then (fn [_] (io/read-dirty-set idb)))
+          (.then (fn [current] (io/write-dirty-set! idb (apply dissoc current ids))))))))
 
 ;endregion
 
