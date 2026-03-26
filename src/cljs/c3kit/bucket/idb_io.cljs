@@ -141,6 +141,14 @@
         request (.getAll store)]
     (request->promise request (fn [result] (map js->clj-entity (array-seq result))))))
 
+(defn read-entity
+  "Reads a single entity by ID from a specific store. Returns a promise of the entity or nil."
+  [idb store-name id]
+  (let [tx      (.transaction idb #js [store-name] "readonly")
+        store   (.objectStore tx store-name)
+        request (.get store id)]
+    (request->promise request js->clj-entity)))
+
 (defn read-all-entities
   "Reads all entities from all non-meta stores. Returns a promise of a flat seq of entities."
   [idb]
