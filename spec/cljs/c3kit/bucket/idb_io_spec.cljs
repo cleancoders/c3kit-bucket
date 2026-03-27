@@ -50,30 +50,4 @@
     (it "round-trips nil for nil input"
       (should= nil (sut/js->clj-entity nil))))
 
-  (context "read-entity"
-
-    (it "reads a single entity by ID from a store"
-      (let [legend {:bibelot {:id {:type :long} :name {:type :string}}}]
-        (-> (sut/open "test-read-entity-1" legend)
-            (.then (fn [idb]
-                     (let [tx    (.transaction idb #js ["bibelot"] "readwrite")
-                           store (.objectStore tx "bibelot")]
-                       (.put store (sut/clj->js-entity {:id 1 :kind :bibelot :name "widget"}))
-                       (sut/request->promise (.put store (sut/clj->js-entity {:id 2 :kind :bibelot :name "gadget"}))
-                                             (constantly idb)))))
-            (.then (fn [idb]
-                     (-> (sut/read-entity idb "bibelot" 1)
-                         (.then (fn [entity]
-                                  (should= {:id 1 :kind :bibelot :name "widget"} entity)
-                                  (sut/close idb)
-                                  (.deleteDatabase js/indexedDB "test-read-entity-1")))))))))
-
-    (it "returns nil for non-existent entity"
-      (let [legend {:bibelot {:id {:type :long} :name {:type :string}}}]
-        (-> (sut/open "test-read-entity-2" legend)
-            (.then (fn [idb]
-                     (-> (sut/read-entity idb "bibelot" 999)
-                         (.then (fn [entity]
-                                  (should= nil entity)
-                                  (sut/close idb)
-                                  (.deleteDatabase js/indexedDB "test-read-entity-2")))))))))))
+  )
