@@ -58,7 +58,7 @@
   (context "sync!"
 
     (it "returns resolved promise with empty callback when idb-atom is nil"
-      (let [db      (indexeddb/->IndexedDB (atom legend) (atom {}) (atom nil) "test" (constantly true))
+      (let [db      (indexeddb/->IndexedDB (atom legend) (atom {}) (atom nil) "test" (constantly true) memory/entity memory/do-find)
             called? (atom false)]
         (-> (sut/sync! db (fn [entities]
                             (reset! called? true)

@@ -99,7 +99,9 @@
 
 (defn sync! [db callback]
   (if-let [idb @(.-idb-atom db)]
-    (-> (io/read-dirty-set idb)
+    (-> @dirty-chain
+        (.catch (fn [_] nil))
+        (.then (fn [_] (io/read-dirty-set idb)))
         (.then (fn [dirty-entries]
                  (if (empty? dirty-entries)
                    (callback [])
@@ -191,10 +193,21 @@
         kind    (:kind entity)
         delete? (api/delete? entity)]
     (if (and delete? (neg? id))
-      (-> (delete-entity idb kind id)
-          (.then (fn [_] (remove-from-dirty-set! idb #{id}))))
-      (-> (put-entity idb result)
-          (.then (fn [_] (add-to-dirty-set! idb {id kind})))))))
+      (swap! dirty-chain
+        (fn [chain]
+          (-> chain
+              (.catch (fn [_] nil))
+              (.then (fn [_] (delete-entity idb kind id)))
+              (.then (fn [_] (io/read-dirty-set idb)))
+              (.then (fn [current] (io/write-dirty-set! idb (apply dissoc current [id])))))))
+      (let [put-promise (put-entity idb result)]
+        (swap! dirty-chain
+          (fn [chain]
+            (-> (js/Promise.all #js [chain put-promise])
+                (.catch (fn [_] nil))
+                (.then (fn [_] (io/read-dirty-set idb)))
+                (.then (fn [current] (io/write-dirty-set! idb (merge current {id kind})))))))))
+    @dirty-chain))
 
 (defn- persist-online! [idb entity result]
   (if (api/delete? entity)

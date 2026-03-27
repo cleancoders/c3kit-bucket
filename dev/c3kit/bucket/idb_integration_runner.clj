@@ -29,13 +29,13 @@
   (let [pw         (Playwright/create)
         browser    (-> pw .chromium .launch)
         page       (-> browser .newContext .newPage)
-        result     (promise)
+        summary    (atom nil)
         errors     (atom [])
         on-console (fn [^ConsoleMessage m]
                      (let [text (.text m)]
                        (println text)
                        (when (re-find #"\d+ failures, \d+ errors" text)
-                         (deliver result text))))
+                         (reset! summary text))))
         on-error   (fn [error]
                      (let [msg (str "ERROR: " error)]
                        (swap! errors conj msg)
@@ -45,14 +45,19 @@
       (.onConsoleMessage page (FnConsumer. on-console))
       (.navigate page (str "file:" (.getAbsolutePath html-file)))
       (.evaluate page "runTests()")
-      (let [summary (deref result 30000 nil)]
-        (cond
-          (nil? summary)
-          (do (println "TIMEOUT: Tests did not complete within 30 seconds.") 1)
+      (let [deadline (+ (System/currentTimeMillis) 30000)]
+        (loop []
+          (cond
+            @summary
+            (if (re-find #"0 failures, 0 errors" @summary) 0 1)
 
-          (re-find #"0 failures, 0 errors" summary) 0
+            (> (System/currentTimeMillis) deadline)
+            (do (println "TIMEOUT: Tests did not complete within 30 seconds.") 1)
 
-          :else 1))
+            :else
+            (do (.evaluate page "null")
+                (Thread/sleep 100)
+                (recur)))))
       (finally
         (.close browser)
         (.close pw)))))
