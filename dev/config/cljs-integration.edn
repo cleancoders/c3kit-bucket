@@ -4,5 +4,5 @@
  :output-to      "target/cljs-integration/idb_integration.js"
  :pretty-print   true
  :source-map     true
- :sources        ["src/cljc" "src/cljs" "spec/cljs"]
+ :sources        ["spec/cljc" "src/cljc" "src/cljs" "spec/cljs"]
  :verbose        false}
