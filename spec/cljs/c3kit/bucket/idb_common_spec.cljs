@@ -2,6 +2,7 @@
   (:require-macros [speclj.core :refer [before context describe it should= with-stubs]])
   (:require [c3kit.bucket.idb-common :as sut]
             [c3kit.bucket.idb-io :as io]
+            [c3kit.bucket.indexeddb :as indexeddb]
             [c3kit.bucket.memory :as memory]
             [speclj.core]))
 
@@ -53,6 +54,16 @@
                                 (should= {1 :bibelot 3 :bibelot} result)
                                 (io/close idb)
                                 (.deleteDatabase js/indexedDB "test-dirty-4")))))))))
+
+  (context "sync!"
+
+    (it "returns resolved promise with empty callback when idb-atom is nil"
+      (let [db      (indexeddb/->IndexedDB (atom legend) (atom {}) (atom nil) "test" (constantly true))
+            called? (atom false)]
+        (-> (sut/sync! db (fn [entities]
+                            (reset! called? true)
+                            (should= [] entities)))
+            (.then (fn [_] (should= true @called?)))))))
 
   (context "ensure-offline-id"
     (before (reset! sut/offline-id-counter 0))

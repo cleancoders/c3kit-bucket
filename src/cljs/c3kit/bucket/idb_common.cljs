@@ -98,7 +98,7 @@
 ;region Sync Lifecycle
 
 (defn sync! [db callback]
-  (let [idb @(.-idb-atom db)]
+  (if-let [idb @(.-idb-atom db)]
     (-> (io/read-dirty-set idb)
         (.then (fn [dirty-entries]
                  (if (empty? dirty-entries)
@@ -106,7 +106,8 @@
                    (-> (js/Promise.all
                          (clj->js (map (fn [[id kind]] (io/read-entity idb (name kind) id)) dirty-entries)))
                        (.then (fn [results]
-                                (callback (vec (remove nil? (array-seq results)))))))))))))
+                                (callback (vec (remove nil? (array-seq results)))))))))))
+    (js/Promise.resolve (callback []))))
 
 (defn- soft-delete-neg-ids! [db dirty-ids]
   (doseq [neg-id (filter neg? dirty-ids)]
