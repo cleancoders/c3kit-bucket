@@ -34,7 +34,7 @@
         on-console (fn [^ConsoleMessage m]
                      (let [text (.text m)]
                        (println text)
-                       (when (re-find #"Ran \d+ tests containing" text)
+                       (when (re-find #"\d+ failures, \d+ errors" text)
                          (deliver result text))))
         on-error   (fn [error]
                      (let [msg (str "ERROR: " error)]
