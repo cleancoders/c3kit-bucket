@@ -9,7 +9,7 @@
 
 ;region IndexedDB deftype
 
-(deftype IndexedDB [legend store idb-atom db-name online-fn]
+(deftype IndexedDB [legend store idb-atom db-name online-fn entity-fn find-fn]
   api/DB
   (-clear [this]
     (memory/clear this)
@@ -19,8 +19,8 @@
   (-delete-all [this kind]
     (memory/delete-all this kind)
     (when @idb-atom (idb/clear-store @idb-atom kind)))
-  (-entity [this kind id] (memory/entity this kind id))
-  (-find [this kind options] (memory/do-find this kind options))
+  (-entity [this kind id] (entity-fn this kind id))
+  (-find [this kind options] (find-fn this kind options))
   (-reduce [this kind f init options] (core-reduce f init (api/-find this kind options)))
   (-tx [this entity] (idb/idb-tx this entity))
   (-tx* [this entities] (idb/idb-tx* this entities))
@@ -38,11 +38,11 @@
 ;region Registration
 
 (defmethod api/-create-impl :indexeddb [config schemas]
-  (let [legend   (atom (legend/build schemas))
-        store    (or (:store config) (atom {}))
-        idb-atom (atom nil)
-        db-name    (or (:db-name config) "c3kit-bucket")
-        online-fn  (or (:online? config) (constantly true))]
-    (IndexedDB. legend store idb-atom db-name online-fn)))
+  (let [legend    (atom (legend/build schemas))
+        store     (or (:store config) (atom {}))
+        idb-atom  (atom nil)
+        db-name   (or (:db-name config) "c3kit-bucket")
+        online-fn (or (:online? config) (constantly true))]
+    (IndexedDB. legend store idb-atom db-name online-fn memory/entity memory/do-find)))
 
 ;endregion
