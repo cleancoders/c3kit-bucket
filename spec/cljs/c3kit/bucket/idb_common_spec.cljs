@@ -1,11 +1,19 @@
 (ns c3kit.bucket.idb-common-spec
-  (:require-macros [speclj.core :refer [before context describe it should= with-stubs]])
-  (:require [c3kit.bucket.idb-common :as sut]
+  (:require-macros [speclj.core :refer [before context describe it should should= with-stubs]]
+                   [c3kit.bucket.api :refer [with-safety-off]])
+  (:require [c3kit.apron.schema :as s]
+            [c3kit.bucket.api :as api]
+            [c3kit.bucket.idb-common :as sut]
             [c3kit.bucket.indexeddb :as indexeddb]
             [c3kit.bucket.memory :as memory]
             [speclj.core]))
 
 (def legend {:bibelot {:id {:type :long} :name {:type :string}}})
+
+(def bibelot
+  {:kind (s/kind :bibelot)
+   :id   {:type :long}
+   :name {:type :string}})
 
 (describe "IDB Common"
 
@@ -18,6 +26,19 @@
                         (reset! called? true)
                         (should= [] entities)))
         (should= true @called?))))
+
+  (context "sync-complete!"
+
+    (before (reset! sut/offline-id-counter 0))
+
+    (it "performs memory effects even when idb-atom is nil"
+      (with-safety-off
+        (let [db (api/create-db {:impl :indexeddb :db-name "test-sync-complete" :online? (constantly false)} [bibelot])]
+          (reset! api/impl db)
+          (sut/idb-tx db {:kind :bibelot :name "offline-widget"})
+          (sut/sync-complete! db #{-1} [{:kind :bibelot :id 9001 :name "offline-widget"}])
+          (should= 0 (count (api/find-by- db :bibelot :id -1)))
+          (should (some? (api/entity- db :bibelot 9001)))))))
 
   (context "ensure-offline-id"
     (before (reset! sut/offline-id-counter 0))

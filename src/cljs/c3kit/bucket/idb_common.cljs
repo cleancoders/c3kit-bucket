@@ -127,19 +127,20 @@
         id-set (set dirty-ids)]
     (soft-delete-neg-ids! db dirty-ids)
     (when (seq server-entities) (memory/tx* db server-entities))
-    (swap! dirty-chain
-      (fn [chain]
-        (-> chain
-            (.catch (fn [_] nil))
-            (.then (fn [_] (io/read-dirty-set idb)))
-            (.then (fn [dirty-entries]
-                     (let [entries-to-delete (select-keys dirty-entries id-set)]
-                       (-> (delete-dirty-entities idb entries-to-delete)
-                           (.then (fn [_] (io/write-dirty-set! idb (apply dissoc dirty-entries id-set))))
-                           (.then (fn [_]
-                                    (if (seq server-entities)
-                                      (put-entities idb server-entities)
-                                      (js/Promise.resolve nil)))))))))))))
+    (when idb
+      (swap! dirty-chain
+        (fn [chain]
+          (-> chain
+              (.catch (fn [_] nil))
+              (.then (fn [_] (io/read-dirty-set idb)))
+              (.then (fn [dirty-entries]
+                       (let [entries-to-delete (select-keys dirty-entries id-set)]
+                         (-> (delete-dirty-entities idb entries-to-delete)
+                             (.then (fn [_] (io/write-dirty-set! idb (apply dissoc dirty-entries id-set))))
+                             (.then (fn [_]
+                                      (if (seq server-entities)
+                                        (put-entities idb server-entities)
+                                        (js/Promise.resolve nil))))))))))))))
 
 (defn- purge-neg-entities-from-memory! [db kinds]
   (let [neg-entries (for [kind kinds
