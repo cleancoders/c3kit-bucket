@@ -90,3 +90,6 @@ jobs:
 
       - name: Run ClojureScript Tests
         run: clojure -M:test:cljs once
+
+      - name: Run IDB Integration Tests
+        run: clojure -M:test:idb-integration
