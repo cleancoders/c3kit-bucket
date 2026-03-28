@@ -16,7 +16,7 @@
                  }
  :ci            {
                  :cache-analysis false
-                 :optimizations  :advanced
+                 :optimizations  :none
                  :output-dir     "target/cljs/"
                  :output-to      "target/cljs/c3kit_bucket.js"
                  :pretty-print   false
