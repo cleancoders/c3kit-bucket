@@ -6,6 +6,53 @@
             [c3kit.bucket.indexeddb]
             [c3kit.apron.schema :as s]))
 
+;region Test Reporter
+
+(def ^:private green "\u001b[32m")
+(def ^:private red "\u001b[31m")
+(def ^:private reset-color "\u001b[0m")
+(def ^:private counters-before (atom {:fail 0 :error 0}))
+(def ^:private failure-messages (atom []))
+
+(defn- report-counters [env]
+  (let [rc (:report-counters env)]
+    {:fail (:fail rc 0) :error (:error rc 0)}))
+
+(defmethod cljs.test/report [:cljs.test/default :begin-test-var] [m]
+  (reset! counters-before (report-counters (cljs.test/get-current-env))))
+
+(defmethod cljs.test/report [:cljs.test/default :end-test-var] [m]
+  (let [after     (report-counters (cljs.test/get-current-env))
+        failed?   (or (> (:fail after) (:fail @counters-before))
+                      (> (:error after) (:error @counters-before)))
+        test-name (-> m :var meta :name str)
+        color     (if failed? red green)]
+    (println (str color test-name reset-color))))
+
+(defmethod cljs.test/report [:cljs.test/default :fail] [m]
+  (cljs.test/inc-report-counter! :fail)
+  (swap! failure-messages conj
+    (str "\nFAIL in " (cljs.test/testing-vars-str m)
+         (when-let [msg (:message m)] (str "\n" msg))
+         "\nexpected: " (pr-str (:expected m))
+         "\n  actual: " (pr-str (:actual m)))))
+
+(defmethod cljs.test/report [:cljs.test/default :error] [m]
+  (cljs.test/inc-report-counter! :error)
+  (swap! failure-messages conj
+    (str "\nERROR in " (cljs.test/testing-vars-str m)
+         (when-let [msg (:message m)] (str "\n" msg))
+         "\nexpected: " (pr-str (:expected m))
+         "\n  actual: " (pr-str (:actual m)))))
+
+(defmethod cljs.test/report [:cljs.test/default :summary] [m]
+  (doseq [msg @failure-messages] (println msg))
+  (println "\nRan" (:test m) "tests containing"
+           (+ (:pass m) (:fail m) (:error m)) "assertions.")
+  (println (:fail m) "failures," (:error m) "errors."))
+
+;endregion
+
 (def bibelot
   {:kind  (s/kind :bibelot)
    :id    {:type :long}
