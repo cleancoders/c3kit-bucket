@@ -201,6 +201,21 @@ New entities created while offline are given negative IDs as temp IDs. Ideally, 
 
 `sync-tx*` strips negative IDs so the database assigns real ones, and returns an `id-map` of `{old-negative-id new-real-id}` for remapping cross-references.
 
+#### Handling Retries with Dedup Keys
+
+If the server crashes mid-sync, the client will retry the entire batch. Without protection, `sync-tx*` would create duplicates for entities already persisted. Pass a dedup-keys-by-kind map to handle this:
+
+```clojure
+(defn handle-sync [{:keys [updates deletions]}]
+  (let [{:keys [entities id-map]} (idbc/sync-tx* updates
+                                    {:activity [:employee-status :date :operation]
+                                     :timecard [:employee :date]})]
+    (run! db/delete deletions)
+    entities))
+```
+
+For each offline entity whose kind appears in the map, `sync-tx*` checks whether an entity with matching attribute values already exists. If so, it updates the existing entity instead of creating a duplicate. Kinds not in the map use the default create behavior.
+
 ### 4. Cleanup
 
 After the server processes the sync and returns entities with real IDs, the client needs to replace the temporary offline entities with the server versions and clear them from the dirty set. `sync-complete!` handles all of this:
@@ -265,8 +280,8 @@ The client generates a deterministic sync ID from the entity data. `claim-sync!`
 | Function | Description |
 |----------|-------------|
 | `offline-id?` | Returns true if an ID is negative (offline-generated) |
-| `sync-tx` | Transacts a single entity, stripping negative IDs |
-| `sync-tx*` | Batch version -- returns `{:entities [...] :id-map {neg-id real-id}}` |
+| `sync-tx` | Transacts a single entity, stripping negative IDs. Optional dedup-keys arg (vector of attrs) checks for existing matches before creating. |
+| `sync-tx*` | Batch version -- returns `{:entities [...] :id-map {neg-id real-id}}`. Optional dedup-keys-by-kind arg (`{kind [attrs]}`) prevents duplicates on retry. |
 | `claim-sync!` | Returns true if sync-id hasn't been processed; prevents duplicates |
 | `reset-sync-state!` | Clears processed sync set (for test isolation) |
 
