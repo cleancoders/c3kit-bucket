@@ -1,3 +1,8 @@
+### 2.12.0
+* Fixed `:cache` strategy `init!` clearing dirty (unsynced) entities from IDB; dirty entities are now preserved across the clear
+* Simplified `idb-common` public API: `init!`, `rehydrate!`, `refresh!`, `sync!`, and `sync-complete!` no longer require a `db` argument (they deref `api/impl` internally)
+* Added optional dedup keys to `sync-tx` and `sync-tx*` for crash-recovery idempotency; prevents duplicate entity creation when offline syncs are retried after partial server failures
+
 ### 2.11.0
 * Added IndexedDB implementations
   * :indexeddb for IndexedDB plus :memory
