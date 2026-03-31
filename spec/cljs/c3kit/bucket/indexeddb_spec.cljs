@@ -67,26 +67,29 @@
     (it "cache strategy clears memory store on init when online"
       (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-strategy-3"
                                :idb-strategy :cache :online? (constantly true)} [bibelot])]
+        (reset! api/impl db)
         (api/-tx db {:kind :bibelot :name "stale-widget" :size 5})
         (should= 1 (count (api/find-by- db :bibelot :name "stale-widget")))
-        (idb/init! db)
+        (idb/init!)
         (should= 0 (count (api/find-by- db :bibelot :name "stale-widget")))))
 
     (it "cache strategy keeps memory store on init when offline"
       (let [online? (atom false)
             db      (api/create-db {:impl :indexeddb :db-name "test-idb-strategy-4"
                                     :idb-strategy :cache :online? #(deref online?)} [bibelot])]
+        (reset! api/impl db)
         (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})
         (should= 1 (count (api/find-by- db :bibelot :name "offline-widget")))
-        (idb/init! db)
+        (idb/init!)
         (should= 1 (count (api/find-by- db :bibelot :name "offline-widget")))))
 
     (it "primary strategy keeps memory store on init when online"
       (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-strategy-5"
                                :idb-strategy :primary :online? (constantly true)} [bibelot])]
+        (reset! api/impl db)
         (api/-tx db {:kind :bibelot :name "primary-widget" :size 5})
         (should= 1 (count (api/find-by- db :bibelot :name "primary-widget")))
-        (idb/init! db)
+        (idb/init!)
         (should= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))))
 
   (context "offline tx (memory effects)"
@@ -150,13 +153,15 @@
     (it "sync! with nil idb invokes callback with empty vector"
       (let [db       (api/create-db {:impl :indexeddb :db-name "test-sync-mem-1"} [bibelot])
             received (atom nil)]
-        (idb/sync! db (fn [entities] (reset! received entities)))
+        (reset! api/impl db)
+        (idb/sync! (fn [entities] (reset! received entities)))
         (should= [] @received)))
 
     (it "sync-complete! soft-deletes negative IDs and adds server entities"
       (let [db (api/create-db {:impl :indexeddb :db-name "test-sync-mem-2" :online? (constantly false)} [bibelot])]
+        (reset! api/impl db)
         (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})
-        (idb/sync-complete! db #{-1} [{:kind :bibelot :id 9001 :name "offline-widget" :size 5}])
+        (idb/sync-complete! #{-1} [{:kind :bibelot :id 9001 :name "offline-widget" :size 5}])
         (should= 0 (count (api/find-by- db :bibelot :id -1)))
         (should= "offline-widget" (:name (api/entity- db :bibelot 9001))))))
 
@@ -168,14 +173,16 @@
       (let [db (api/create-db {:impl :indexeddb :db-name "test-refresh-mem-1"} [bibelot])]
         (api/-tx db {:kind :bibelot :id -1 :name "offline-widget" :size 5})
         (api/-tx db {:kind :bibelot :id 100 :name "server-widget" :size 10})
-        (idb/refresh! db [{:kind :bibelot :id 200 :name "fresh-widget" :size 20}])
+        (reset! api/impl db)
+        (idb/refresh! [{:kind :bibelot :id 200 :name "fresh-widget" :size 20}])
         (should= 0 (count (filter #(neg? (:id %)) (api/find-by- db :bibelot :name "offline-widget"))))
         (should= "server-widget" (:name (api/entity- db :bibelot 100)))
         (should= "fresh-widget" (:name (api/entity- db :bibelot 200)))))
 
     (it "returns empty list for empty input"
       (let [db (api/create-db {:impl :indexeddb :db-name "test-refresh-mem-2" :online? (constantly false)} [bibelot])]
+        (reset! api/impl db)
         (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})
-        (let [result (idb/refresh! db [])]
+        (let [result (idb/refresh! [])]
           (should= [] result)
           (should= 1 (count (api/find-by- db :bibelot :name "offline-widget"))))))))

@@ -60,7 +60,9 @@ Use this when your app has **no server-side database** -- IndexedDB is the only 
 
 ### `:cache`
 
-IDB supplements a server-side database (e.g., Datomic, Postgres). On `init!`, if `:online?` returns true, IDB and the memory store are cleared. The app then fetches fresh data from the server.
+IDB supplements a server-side database (e.g., Datomic, Postgres). On `init!`, if `:online?` returns true, IDB entity stores and the memory store are cleared so stale cached data doesn't shadow server state. The app then fetches fresh data from the server.
+
+**Dirty entities are preserved across the clear.** If the user created or edited entities while offline, those unsynced changes survive `init!` -- only clean (non-dirty) cached data is discarded. The dirty set in `_meta` and the entity data it references are both retained so that `sync!` can still read and send them to the server.
 
 When offline, IDB retains data normally -- it becomes the temporary source of truth until connectivity returns and the app syncs.
 
@@ -71,6 +73,14 @@ Use this when your app has a **server-side database** that is authoritative when
 ```
 
 **Why this matters:** Without `:cache`, entities deleted server-side would reappear on page reload because IDB still has them. With `:cache`, the IDB is cleared on every online page load, and server data repopulates it through normal fetch/sync operations.
+
+**Important:** After `init!` returns, the app is responsible for calling `sync!` to flush any preserved dirty entities to the server. Do not rely solely on the `"online"` event listener -- if the user refreshes the page while already online, the `"online"` event won't fire but dirty entities may still be waiting. Call `sync!` after every `init!` to handle this case:
+
+```clojure
+(-> (idb/init!)
+    (.then (fn [_] (sync-offline-data!)))
+    (.then (fn [_] (render-app))))
+```
 
 ## The Online Function
 
@@ -98,19 +108,19 @@ After creating the database, call `init!` to open the IDB connection and load da
 (require '[c3kit.bucket.idb-common :as idb])
 
 ;; Initialize -- opens IDB, rehydrates or clears based on strategy
-(-> (idb/init! @db/impl)
+(-> (idb/init!)
     (.then (fn [_] (log/info "IndexedDB initialized"))))
 ```
 
 `init!` returns a `js/Promise`. It:
 1. Opens the IndexedDB database (creating/migrating object stores based on schema)
-2. If `:cache` + online: clears IDB and memory store
+2. If `:cache` + online: clears IDB entity stores and memory store, preserving any dirty (unsynced) entities
 3. If `:primary` or offline: rehydrates memory from IDB
 
 You can pass specific entity kinds to rehydrate only a subset:
 
 ```clojure
-(idb/init! @db/impl :user :activity)  ;; only rehydrate these kinds
+(idb/init! :user :activity)  ;; only rehydrate these kinds
 ```
 
 ## Using the Database
@@ -167,11 +177,11 @@ When connectivity returns, your app calls `sync!`:
   (when (seq dirty-entities)
     (send-to-server dirty-entities
       (fn [server-response]
-        (idb/sync-complete! @db/impl
+        (idb/sync-complete!
           (set (map :id dirty-entities))
           (:payload server-response))))))
 
-(idb/sync! @db/impl sync-callback)
+(idb/sync! sync-callback)
 ```
 
 `sync!` reads the dirty set from IDB, fetches the actual entity data, and passes them to your callback.
@@ -193,23 +203,42 @@ New entities created while offline are given negative IDs as temp IDs. Ideally, 
 
 ### 4. Cleanup
 
-`sync-complete!` handles post-sync cleanup:
+After the server processes the sync and returns entities with real IDs, the client needs to replace the temporary offline entities with the server versions and clear them from the dirty set. `sync-complete!` handles all of this:
 
 ```clojure
-(idb/sync-complete! @db/impl dirty-id-set server-entities)
+(idb/sync-complete! dirty-id-set server-entities)
 ```
 
-This:
-- Soft-deletes negative-ID entities from memory
-- Transacts server-returned entities (with real IDs) into both memory and IDB
-- Removes synced entries from the dirty set
+| Argument | Type | Description |
+|----------|------|-------------|
+| `dirty-id-set` | set of IDs | The IDs that were sent to the server (including negative offline IDs) |
+| `server-entities` | seq of entities | The server's response -- entities with real (positive) IDs assigned by the server DB |
+
+`sync-complete!` does three things in order:
+1. **Removes offline entities from memory** -- soft-deletes entities with negative IDs so the UI no longer shows duplicates
+2. **Loads server entities** -- transacts the server-returned entities (with real IDs) into both the in-memory store and IDB, making them the canonical versions
+3. **Clears the dirty set** -- removes the synced IDs from the dirty set in IDB's `_meta` store and deletes the old entity data from IDB, so they won't be synced again
+
+Putting it together with the sync callback:
+
+```clojure
+(defn sync-callback [dirty-entities]
+  (when (seq dirty-entities)
+    (let [dirty-ids (set (map :id dirty-entities))]
+      (send-to-server dirty-entities
+        (fn [server-response]
+          ;; server-response contains the same entities with real IDs
+          (idb/sync-complete! dirty-ids (:payload server-response)))))))
+
+(idb/sync! sync-callback)
+```
 
 ### 5. Refresh
 
 When receiving fresh server data (e.g., after navigating to a page), use `refresh!` to replace stale offline entities:
 
 ```clojure
-(idb/refresh! @db/impl server-entities)
+(idb/refresh! server-entities)
 ```
 
 This purges negative-ID entities for the relevant kinds and loads the server data as clean entities.
@@ -341,7 +370,7 @@ Usage in a service worker:
                                 (reader/clear-dirty! idb (map :id entities)))))))))))
 ```
 
-**Why not use `idb-common/sync!`?** The `idb-common` functions operate on a full bucket DB instance (with an in-memory store, schema, and config). A service worker has none of that -- it just needs raw IDB reads and writes. `idb-reader` depends only on `idb-io`, keeping the service worker's dependency footprint minimal.
+**Why not use `idb-common/sync!`?** The `idb-common` functions operate on the `api/impl` DB instance (with an in-memory store, schema, and config). A service worker has none of that -- it just needs raw IDB reads and writes. `idb-reader` depends only on `idb-io`, keeping the service worker's dependency footprint minimal.
 
 The service worker opens the same IDB database using `idb-io/open`. However, service workers cannot access `localStorage`, so the schema versioning mechanism (which uses localStorage) returns `nil` and the database is opened at its current version without triggering a schema upgrade. The main app is responsible for schema migrations.
 
@@ -401,21 +430,20 @@ Version tracking uses localStorage (`<db-name>-schema-hash` and `<db-name>-schem
 
 ;; main.cljs
 (ns my-app.main
-  (:require [c3kit.bucket.api :as db]
-            [c3kit.bucket.idb-common :as idb]
+  (:require [c3kit.bucket.idb-common :as idb]
             [my-app.init :as init]))
 
 (defn ^:export main []
   (init/install-db!)
-  (-> (idb/init! @db/impl)
+  (-> (idb/init!)
+      (.then (fn [_] (sync-offline-data!)))  ;; flush any dirty entities from a previous offline session
       (.then (fn [_] (render-app))))
   (.addEventListener js/window "online"
     (fn [] (sync-offline-data!))))
 
 ;; sync.cljs
 (ns my-app.sync
-  (:require [c3kit.bucket.api :as db]
-            [c3kit.bucket.idb-common :as idb]))
+  (:require [c3kit.bucket.idb-common :as idb]))
 
 (defn sync-callback [dirty-entities]
   (when (seq dirty-entities)
@@ -423,12 +451,12 @@ Version tracking uses localStorage (`<db-name>-schema-hash` and `<db-name>-schem
           deletes (filter :db/delete? dirty-entities)]
       (send-to-server {:updates updates :deletions deletes}
         (fn [response]
-          (idb/sync-complete! @db/impl
+          (idb/sync-complete!
             (set (map :id dirty-entities))
             (:payload response)))))))
 
 (defn sync-offline-data! []
-  (idb/sync! @db/impl sync-callback))
+  (idb/sync! sync-callback))
 
 ;; server_sync.clj
 (ns my-app.server-sync

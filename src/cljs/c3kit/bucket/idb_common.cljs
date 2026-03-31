@@ -97,19 +97,20 @@
 
 ;region Sync Lifecycle
 
-(defn sync! [db callback]
-  (if-let [idb @(.-idb-atom db)]
-    (-> @dirty-chain
-        (.catch (fn [_] nil))
-        (.then (fn [_] (io/read-dirty-set idb)))
-        (.then (fn [dirty-entries]
-                 (if (empty? dirty-entries)
-                   (callback [])
-                   (-> (js/Promise.all
-                         (clj->js (map (fn [[id kind]] (io/read-entity idb (name kind) id)) dirty-entries)))
-                       (.then (fn [results]
-                                (callback (vec (remove nil? (array-seq results)))))))))))
-    (js/Promise.resolve (callback []))))
+(defn sync! [callback]
+  (let [db @api/impl]
+    (if-let [idb @(.-idb-atom db)]
+      (-> @dirty-chain
+          (.catch (fn [_] nil))
+          (.then (fn [_] (io/read-dirty-set idb)))
+          (.then (fn [dirty-entries]
+                   (if (empty? dirty-entries)
+                     (callback [])
+                     (-> (js/Promise.all
+                           (clj->js (map (fn [[id kind]] (io/read-entity idb (name kind) id)) dirty-entries)))
+                         (.then (fn [results]
+                                  (callback (vec (remove nil? (array-seq results)))))))))))
+      (js/Promise.resolve (callback [])))))
 
 (defn- soft-delete-neg-ids! [db dirty-ids]
   (doseq [neg-id (filter neg? dirty-ids)]
@@ -122,8 +123,9 @@
     (js/Promise.all
       (clj->js (map (fn [[id kind]] (delete-entity idb kind id)) dirty-entries)))))
 
-(defn sync-complete! [db dirty-ids server-entities]
-  (let [idb    @(.-idb-atom db)
+(defn sync-complete! [dirty-ids server-entities]
+  (let [db     @api/impl
+        idb    @(.-idb-atom db)
         id-set (set dirty-ids)]
     (soft-delete-neg-ids! db dirty-ids)
     (when (seq server-entities) (memory/tx* db server-entities))
@@ -162,10 +164,11 @@
   "Purges all negative-ID entities for the kinds present in server-entities
    from both memory and IDB, then tx*s the server data as clean (not dirty-tracked).
    Use when receiving fresh server data that replaces offline-created entities."
-  [db server-entities]
+  [server-entities]
   (if (empty? server-entities)
     []
-    (let [idb         @(.-idb-atom db)
+    (let [db          @api/impl
+          idb         @(.-idb-atom db)
           neg-entries (purge-neg-entities-from-memory! db (set (map :kind server-entities)))
           result      (memory/tx* db server-entities)]
       (when idb (sync-idb-after-refresh! idb neg-entries server-entities))
@@ -283,14 +286,28 @@
   (and (= :cache (.-strategy db))
        ((.-online-fn db))))
 
+(defn- preserve-dirty-and-clear [idb]
+  (-> (io/read-dirty-set idb)
+      (.then (fn [dirty-entries]
+               (if (empty? dirty-entries)
+                 (clear-all idb)
+                 (-> (js/Promise.all
+                       (clj->js (map (fn [[id kind]] (io/read-entity idb (name kind) id)) dirty-entries)))
+                     (.then (fn [results]
+                              (let [entities (vec (remove nil? (array-seq results)))]
+                                (-> (clear-all idb)
+                                    (.then (fn [_] (put-entities idb entities)))))))))))))
+
 (defn init!
   "Opens the IDB database and optionally rehydrates the in-memory store.
    When :idb-strategy is :cache and online, clears IDB and memory store
-   so server data takes precedence on next fetch.
+   so server data takes precedence on next fetch. Dirty (unsynced) entities
+   are preserved across the clear.
    Must be called and awaited before using the db.
    Returns a js/Promise resolving to the db instance."
-  [db & kinds]
-  (let [clear? (cache-and-online? db)]
+  [& kinds]
+  (let [db     @api/impl
+        clear? (cache-and-online? db)]
     (when clear? (reset! (.-store db) {:all {}}))
     (-> (io/open (.-db-name db) @(.-legend db))
         (.then (fn [idb-instance]
@@ -298,7 +315,7 @@
                  db))
         (.then (fn [db]
                  (if clear?
-                   (clear-all @(.-idb-atom db))
+                   (preserve-dirty-and-clear @(.-idb-atom db))
                    (rehydrate @(.-idb-atom db) (seq kinds)
                               (fn [entities] (memory/tx* db entities))))))
         (.then (fn [_] db)))))
@@ -306,9 +323,10 @@
 (defn rehydrate!
   "Rehydrates the in-memory store from IDB. Use after init! has been called.
    Returns a js/Promise resolving to the db instance."
-  [db & kinds]
-  (-> (rehydrate @(.-idb-atom db) (seq kinds)
-                 (fn [entities] (memory/tx* db entities)))
-      (.then (fn [_] db))))
+  [& kinds]
+  (let [db @api/impl]
+    (-> (rehydrate @(.-idb-atom db) (seq kinds)
+                   (fn [entities] (memory/tx* db entities)))
+        (.then (fn [_] db)))))
 
 ;endregion

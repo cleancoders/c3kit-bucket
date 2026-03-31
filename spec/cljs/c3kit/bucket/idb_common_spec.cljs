@@ -22,9 +22,10 @@
     (it "invokes callback with empty vector when idb-atom is nil"
       (let [db      (indexeddb/->IndexedDB (atom legend) (atom {}) (atom nil) "test" (constantly true) memory/entity memory/do-find)
             called? (atom false)]
-        (sut/sync! db (fn [entities]
-                        (reset! called? true)
-                        (should= [] entities)))
+        (reset! api/impl db)
+        (sut/sync! (fn [entities]
+                     (reset! called? true)
+                     (should= [] entities)))
         (should= true @called?))))
 
   (context "sync-complete!"
@@ -36,7 +37,7 @@
         (let [db (api/create-db {:impl :indexeddb :db-name "test-sync-complete" :online? (constantly false)} [bibelot])]
           (reset! api/impl db)
           (sut/idb-tx db {:kind :bibelot :name "offline-widget"})
-          (sut/sync-complete! db #{-1} [{:kind :bibelot :id 9001 :name "offline-widget"}])
+          (sut/sync-complete! #{-1} [{:kind :bibelot :id 9001 :name "offline-widget"}])
           (should= 0 (count (api/find-by- db :bibelot :id -1)))
           (should (some? (api/entity- db :bibelot 9001)))))))
 

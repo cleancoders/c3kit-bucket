@@ -76,6 +76,6 @@
             db      (api/create-db {:impl :re-indexeddb :db-name "test-reidb-mem-2" :online? #(deref online?)} [bibelot])
             _       (reset! api/impl db)]
         (api/-tx db {:kind :bibelot :name "offline-widget"})
-        (idb/sync-complete! db #{-1} [{:kind :bibelot :id 9001 :name "offline-widget"}])
+        (idb/sync-complete! #{-1} [{:kind :bibelot :id 9001 :name "offline-widget"}])
         (should= 0 (count (api/find-by- db :bibelot :id -1)))
         (should= "offline-widget" (:name (api/entity- db :bibelot 9001)))))))

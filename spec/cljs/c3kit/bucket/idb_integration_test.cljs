@@ -69,13 +69,14 @@
 (deftest persistence-round-trip
   (async done
     (let [db (api/create-db {:impl :indexeddb :db-name "integration-persist-1"} [bibelot])]
-      (-> (idb/init! db)
+      (reset! api/impl db)
+      (-> (idb/init!)
           (.then (fn [db] (api/-tx db {:kind :bibelot :name "widget" :size 5})))
           (.then (fn [saved]
                    (is (= "widget" (:name saved)))
                    (is (some? (:id saved)))
                    (reset! (.-store db) {:all {}})
-                   (idb/rehydrate! db)))
+                   (idb/rehydrate!)))
           (.then (fn [db]
                    (let [found (api/find-by- db :bibelot :name "widget")]
                      (is (= 1 (count found)))
@@ -113,18 +114,19 @@
   (async done
     (let [db       (api/create-db {:impl :indexeddb :db-name "integration-sync-1" :online? (constantly false)} [bibelot])
           received (atom nil)]
+      (reset! api/impl db)
       (reset! idb/offline-id-counter 0)
       (reset! idb/dirty-chain (js/Promise.resolve nil))
-      (-> (idb/init! db)
+      (-> (idb/init!)
           (.then (fn [db]
                    (api/-tx db {:kind :bibelot :name "w1" :size 1})
                    (api/-tx db {:kind :bibelot :name "w2" :size 2})
-                   (idb/sync! db (fn [entities] (reset! received entities)))))
+                   (idb/sync! (fn [entities] (reset! received entities)))))
           (.then (fn [_]
                    (is (= 2 (count @received)))
                    (is (= #{-1 -2} (into #{} (map :id) @received)))
-                   (idb/sync-complete! db #{-1 -2} [{:kind :bibelot :id 9001 :name "w1" :size 1}
-                                                     {:kind :bibelot :id 9002 :name "w2" :size 2}])))
+                   (idb/sync-complete! #{-1 -2} [{:kind :bibelot :id 9001 :name "w1" :size 1}
+                                                  {:kind :bibelot :id 9002 :name "w2" :size 2}])))
           (.then (fn [_]
                    (is (= 0 (count (api/find-by- db :bibelot :id -1))))
                    (is (= 0 (count (api/find-by- db :bibelot :id -2))))
@@ -141,19 +143,20 @@
 (deftest refresh-purges-and-replaces
   (async done
     (let [db (api/create-db {:impl :indexeddb :db-name "integration-refresh-1"} [bibelot])]
+      (reset! api/impl db)
       (reset! idb/offline-id-counter 0)
-      (-> (idb/init! db)
+      (-> (idb/init!)
           (.then (fn [db]
                    (api/-tx db {:kind :bibelot :id -1 :name "offline-widget" :size 5})
                    (api/-tx db {:kind :bibelot :id 100 :name "server-widget" :size 10})
-                   (idb/refresh! db [{:kind :bibelot :id 200 :name "fresh-widget" :size 20}])))
+                   (idb/refresh! [{:kind :bibelot :id 200 :name "fresh-widget" :size 20}])))
           (.then (fn [_]
                    (is (= 0 (count (filter #(neg? (:id %)) (api/find-by- db :bibelot :name "offline-widget")))))
                    (is (= "server-widget" (:name (api/entity- db :bibelot 100))))
                    (is (= "fresh-widget" (:name (api/entity- db :bibelot 200))))
                    ;; Rehydrate to verify IDB state matches memory
                    (reset! (.-store db) {:all {}})
-                   (idb/rehydrate! db)))
+                   (idb/rehydrate!)))
           (.then (fn [db]
                    (is (= 0 (count (filter #(neg? (:id %)) (api/find-by- db :bibelot :name "offline-widget")))))
                    (is (some? (api/entity- db :bibelot 100)))
@@ -167,21 +170,52 @@
   (async done
     (let [db (api/create-db {:impl :indexeddb :db-name "integration-cache-1"
                              :idb-strategy :cache :online? (constantly true)} [bibelot])]
-      (-> (idb/init! db)
+      (reset! api/impl db)
+      (-> (idb/init!)
           (.then (fn [db] (api/-tx db {:kind :bibelot :name "cached-widget" :size 5})))
           (.then (fn [_]
                    ;; Verify data is persisted in IDB
                    (reset! (.-store db) {:all {}})
-                   (idb/rehydrate! db)))
+                   (idb/rehydrate!)))
           (.then (fn [db]
                    (is (= 1 (count (api/find-by- db :bibelot :name "cached-widget"))))
                    ;; Close and re-init — should clear because online + cache strategy
                    (api/close db)
-                   (idb/init! db)))
+                   (idb/init!)))
           (.then (fn [db]
                    (is (= 0 (count (api/find-by- db :bibelot :name "cached-widget"))))
                    (api/close db)
                    (.deleteDatabase js/indexedDB "integration-cache-1")))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
+(deftest cache-strategy-preserves-dirty-entities-on-init-when-online
+  (async done
+    (let [online? (atom false)
+          db      (api/create-db {:impl :indexeddb :db-name "integration-cache-dirty-1"
+                                  :idb-strategy :cache :online? #(deref online?)} [bibelot])
+          synced  (atom nil)]
+      (reset! api/impl db)
+      (reset! idb/offline-id-counter 0)
+      (reset! idb/dirty-chain (js/Promise.resolve nil))
+      (-> (idb/init!)
+          (.then (fn [db]
+                   ;; Create entities while offline — these become dirty
+                   (api/-tx db {:kind :bibelot :name "dirty-widget" :size 42})
+                   @idb/dirty-chain))
+          (.then (fn [_]
+                   ;; Go online and re-init (simulates page refresh after reconnect)
+                   (reset! online? true)
+                   (api/close db)
+                   (idb/init!)))
+          (.then (fn [db]
+                   ;; Sync should still find the dirty entity
+                   (idb/sync! (fn [entities] (reset! synced entities)))))
+          (.then (fn [_]
+                   (is (= 1 (count @synced)) "dirty entity should survive cache clear")
+                   (is (= "dirty-widget" (:name (first @synced))))
+                   (api/close db)
+                   (.deleteDatabase js/indexedDB "integration-cache-dirty-1")))
           (.then (fn [_] (done)))
           (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
@@ -190,20 +224,21 @@
     (let [online? (atom false)
           db      (api/create-db {:impl :indexeddb :db-name "integration-cache-2"
                                   :idb-strategy :cache :online? #(deref online?)} [bibelot])]
-      (-> (idb/init! db)
+      (reset! api/impl db)
+      (-> (idb/init!)
           (.then (fn [db]
                    (reset! online? true)
                    (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})))
           (.then (fn [_]
                    ;; Persist to IDB, then clear memory
                    (reset! (.-store db) {:all {}})
-                   (idb/rehydrate! db)))
+                   (idb/rehydrate!)))
           (.then (fn [db]
                    (is (= 1 (count (api/find-by- db :bibelot :name "offline-widget"))))
                    ;; Re-init while offline — should keep data
                    (reset! online? false)
                    (api/close db)
-                   (idb/init! db)))
+                   (idb/init!)))
           (.then (fn [db]
                    (is (= 1 (count (api/find-by- db :bibelot :name "offline-widget"))))
                    (api/close db)
@@ -215,15 +250,16 @@
   (async done
     (let [db (api/create-db {:impl :indexeddb :db-name "integration-primary-1"
                              :idb-strategy :primary :online? (constantly true)} [bibelot])]
-      (-> (idb/init! db)
+      (reset! api/impl db)
+      (-> (idb/init!)
           (.then (fn [db] (api/-tx db {:kind :bibelot :name "primary-widget" :size 5})))
           (.then (fn [_]
                    (reset! (.-store db) {:all {}})
-                   (idb/rehydrate! db)))
+                   (idb/rehydrate!)))
           (.then (fn [db]
                    (is (= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))
                    (api/close db)
-                   (idb/init! db)))
+                   (idb/init!)))
           (.then (fn [db]
                    (is (= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))
                    (api/close db)
