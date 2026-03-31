@@ -19,20 +19,20 @@
     (before (.removeItem js/localStorage "test-db-schema-hash")
             (.removeItem js/localStorage "test-db-schema-ver"))
 
-    (it "returns 1 for a new database"
+    (it "returns 100 for a new database"
       (let [legend {:user {:id {:type :long} :name {:type :string}}}]
-        (should= 1 (sut/idb-version "test-db" legend))))
+        (should= 100 (sut/idb-version "test-db" legend))))
 
     (it "returns same version when legend unchanged"
       (let [legend {:user {:id {:type :long} :name {:type :string}}}]
         (sut/idb-version "test-db" legend)
-        (should= 1 (sut/idb-version "test-db" legend))))
+        (should= 100 (sut/idb-version "test-db" legend))))
 
     (it "increments version when legend changes"
       (let [legend-1 {:user {:id {:type :long} :name {:type :string}}}
             legend-2 {:user {:id {:type :long} :name {:type :string} :email {:type :string}}}]
         (sut/idb-version "test-db" legend-1)
-        (should= 2 (sut/idb-version "test-db" legend-2)))))
+        (should= 101 (sut/idb-version "test-db" legend-2)))))
 
   (context "serialization"
     (it "round-trips keyword values"

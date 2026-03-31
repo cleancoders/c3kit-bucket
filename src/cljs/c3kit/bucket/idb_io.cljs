@@ -13,17 +13,21 @@
 ;region Version Management
 
 (defn idb-version [db-name legend]
-  (let [current-hash (str (schema-hash legend))
-        hash-key     (str db-name "-schema-hash")
-        ver-key      (str db-name "-schema-ver")
-        stored-hash  (.getItem js/localStorage hash-key)
-        stored-ver   (or (some-> (.getItem js/localStorage ver-key) js/parseInt) 0)]
-    (if (= current-hash stored-hash)
-      stored-ver
-      (let [new-ver (inc stored-ver)]
-        (.setItem js/localStorage hash-key current-hash)
-        (.setItem js/localStorage ver-key (str new-ver))
-        new-ver))))
+  (try
+    (let [current-hash (str (schema-hash legend))
+          hash-key     (str db-name "-schema-hash")
+          ver-key      (str db-name "-schema-ver")
+          stored-hash  (.getItem js/localStorage hash-key)
+          ;; Floor at 99 so first version (100) exceeds any pre-existing DB version
+          stored-ver   (or (some-> (.getItem js/localStorage ver-key) js/parseInt) 99)]
+      (if (= current-hash stored-hash)
+        stored-ver
+        (let [new-ver (inc stored-ver)]
+          (.setItem js/localStorage hash-key current-hash)
+          (.setItem js/localStorage ver-key (str new-ver))
+          new-ver)))
+    ;; localStorage unavailable (e.g., service worker) — force IDB upgrade
+    (catch :default _ 999999)))
 
 ;endregion
 
