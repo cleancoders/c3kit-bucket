@@ -1,3 +1,11 @@
+### 2.11.0
+* Added IndexedDB implementations
+  * :indexeddb for IndexedDB plus :memory
+  * :re-indexeddb for IndexedDB plus :re-memory
+* Includes `idbc.cljc` namespace for server-side helper functions to make sync endpoints idempotent
+* Includes lightweight `idb-reader.cljs` for service workers
+* Developer guide to using Bucket IndexedDB at docs/indexeddb-guide.md
+
 ### 2.10.0
 * Updated ReMemory for compatibility with React 18 / Reagent 2 (backwards compatible with React 17 / Reagent 1.x)
     * Upgraded test dependencies to reagent 2.0.1, cljsjs/react 18.3.1-1, and cljsjs/react-dom 18.3.1-1

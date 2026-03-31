@@ -307,7 +307,41 @@ When the page is open, **both** the main app and the service worker could try to
 - **Page open** -- Main app handles sync (it has the live IDB connection and can update the UI)
 - **Page closed** -- Service worker handles sync (the only process that can)
 
-### Service Worker IDB Access
+### Service Worker IDB Access with `idb-reader`
+
+Service workers need to read dirty entities from IDB and clear them after syncing, but they **cannot** use the full `api/DB` implementation -- that requires an in-memory store, schema setup, and (for `:re-indexeddb`) Reagent, none of which belong in a service worker context.
+
+The `c3kit.bucket.idb-reader` namespace exists for this purpose. It provides lightweight, promise-based functions that operate directly on IDB without any of the bucket infrastructure:
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `dirty-entities` | `(dirty-entities idb)` | Reads the dirty set from IDB's `_meta` store, then fetches and returns the actual entities as a js/Promise of a vector |
+| `clear-dirty!` | `(clear-dirty! idb ids-to-clear)` | Removes the given IDs from the dirty set and deletes their entities from IDB |
+
+Usage in a service worker:
+
+```clojure
+(ns my-app.service-worker
+  (:require [c3kit.bucket.idb-io :as idb-io]
+            [c3kit.bucket.idb-reader :as reader]))
+
+(def idb-atom (atom nil))
+
+(defn init-idb! []
+  (-> (idb-io/open "my-app" nil)  ;; nil version -- opens at current version
+      (.then #(reset! idb-atom %))))
+
+(defn sync-and-clear! []
+  (when-let [idb @idb-atom]
+    (-> (reader/dirty-entities idb)
+        (.then (fn [entities]
+                 (when (seq entities)
+                   (-> (send-to-server entities)
+                       (.then (fn [_]
+                                (reader/clear-dirty! idb (map :id entities)))))))))))
+```
+
+**Why not use `idb-common/sync!`?** The `idb-common` functions operate on a full bucket DB instance (with an in-memory store, schema, and config). A service worker has none of that -- it just needs raw IDB reads and writes. `idb-reader` depends only on `idb-io`, keeping the service worker's dependency footprint minimal.
 
 The service worker opens the same IDB database using `idb-io/open`. However, service workers cannot access `localStorage`, so the schema versioning mechanism (which uses localStorage) returns `nil` and the database is opened at its current version without triggering a schema upgrade. The main app is responsible for schema migrations.
 
