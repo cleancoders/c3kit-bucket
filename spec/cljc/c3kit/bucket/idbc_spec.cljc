@@ -46,7 +46,33 @@
     (it "creates entity when id is nil"
       (let [result (sut/sync-tx {:kind :bibelot :name "no-id"})]
         (should (pos? (:id result)))
-        (should= "no-id" (:name result)))))
+        (should= "no-id" (:name result))))
+
+    (it "strips negative id and creates new entity with dedup keys when no match exists"
+      (let [result (sut/sync-tx {:kind :bibelot :id -1 :name "offline" :size 5} [:name :size])]
+        (should (pos? (:id result)))
+        (should= "offline" (:name result))
+        (should= 5 (:size result))
+        (should= result (db/entity (:id result)))))
+
+    (it "upserts when dedup keys match an existing entity"
+      (let [existing (db/tx :kind :bibelot :name "offline" :size 5 :color "red")
+            result   (sut/sync-tx {:kind :bibelot :id -1 :name "offline" :size 5 :color "blue"} [:name :size])]
+        (should= (:id existing) (:id result))
+        (should= "blue" (:color result))
+        (should= "blue" (:color (db/entity (:id existing))))))
+
+    (it "positive id bypasses dedup keys and updates directly"
+      (let [existing (db/tx :kind :bibelot :name "original" :size 5)
+            result   (sut/sync-tx (assoc existing :name "updated") [:name :size])]
+        (should= (:id existing) (:id result))
+        (should= "updated" (:name result))))
+
+    (it "preserves existing fields not present in the offline entity during upsert"
+      (let [existing (db/tx :kind :bibelot :name "offline" :size 5 :color "red")
+            result   (sut/sync-tx {:kind :bibelot :id -1 :name "offline" :size 5} [:name :size])]
+        (should= (:id existing) (:id result))
+        (should= "red" (:color result)))))
 
   (context "sync-tx*"
     (helper/with-schemas [impl-spec/bibelot])

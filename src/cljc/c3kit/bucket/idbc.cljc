@@ -8,11 +8,17 @@
 
 (defn sync-tx
   "Transacts an entity from offline sync. Strips offline IDs so the
-   database assigns real ones. Returns the persisted entity."
-  [entity]
-  (if (offline-id? (:id entity))
-    (db/tx (dissoc entity :id))
-    (db/tx entity)))
+   database assigns real ones. When dedup-keys are provided and the entity
+   has an offline ID, checks for an existing entity matching those attributes
+   and upserts instead of creating a duplicate."
+  ([entity] (sync-tx entity nil))
+  ([entity dedup-keys]
+   (if (offline-id? (:id entity))
+     (if-let [existing (when (seq dedup-keys)
+                         (apply db/ffind-by (:kind entity) (mapcat (fn [k] [k (get entity k)]) dedup-keys)))]
+       (db/tx (merge existing (dissoc entity :id)))
+       (db/tx (dissoc entity :id)))
+     (db/tx entity))))
 
 (defn sync-tx*
   "Batch sync-tx. Returns {:entities [...] :id-map {old-neg-id new-real-id}}
