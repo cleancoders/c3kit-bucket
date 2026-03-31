@@ -1,5 +1,5 @@
 (ns c3kit.bucket.idb-io-spec
-  (:require-macros [speclj.core :refer [before context describe it should should= should-not=]])
+  (:require-macros [speclj.core :refer [before context describe it should should= should-not= should-be-nil with-stubs]])
   (:require [c3kit.bucket.idb-io :as sut]
             [speclj.core]))
 
@@ -32,7 +32,12 @@
       (let [legend-1 {:user {:id {:type :long} :name {:type :string}}}
             legend-2 {:user {:id {:type :long} :name {:type :string} :email {:type :string}}}]
         (sut/idb-version "test-db" legend-1)
-        (should= 101 (sut/idb-version "test-db" legend-2)))))
+        (should= 101 (sut/idb-version "test-db" legend-2))))
+
+    (it "returns nil when localStorage is unavailable"
+      (let [legend {:user {:id {:type :long} :name {:type :string}}}]
+        (with-redefs [sut/get-local-storage (fn [] (throw (js/Error. "not available")))]
+          (should-be-nil (sut/idb-version "test-db" legend))))))
 
   (context "serialization"
     (it "round-trips keyword values"

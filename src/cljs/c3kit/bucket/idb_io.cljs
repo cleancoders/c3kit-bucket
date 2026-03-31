@@ -12,22 +12,25 @@
 
 ;region Version Management
 
+(defn get-local-storage [] js/localStorage)
+
 (defn idb-version [db-name legend]
   (try
-    (let [current-hash (str (schema-hash legend))
+    (let [storage      (get-local-storage)
+          current-hash (str (schema-hash legend))
           hash-key     (str db-name "-schema-hash")
           ver-key      (str db-name "-schema-ver")
-          stored-hash  (.getItem js/localStorage hash-key)
+          stored-hash  (.getItem storage hash-key)
           ;; Floor at 99 so first version (100) exceeds any pre-existing DB version
-          stored-ver   (or (some-> (.getItem js/localStorage ver-key) js/parseInt) 99)]
+          stored-ver   (or (some-> (.getItem storage ver-key) js/parseInt) 99)]
       (if (= current-hash stored-hash)
         stored-ver
         (let [new-ver (inc stored-ver)]
-          (.setItem js/localStorage hash-key current-hash)
-          (.setItem js/localStorage ver-key (str new-ver))
+          (.setItem storage hash-key current-hash)
+          (.setItem storage ver-key (str new-ver))
           new-ver)))
-    ;; localStorage unavailable (e.g., service worker) — force IDB upgrade
-    (catch :default _ 999999)))
+    ;; localStorage unavailable (e.g., service worker) — open at current version
+    (catch :default _ nil)))
 
 ;endregion
 
@@ -83,7 +86,9 @@
 
 (defn open [db-name legend]
   (let [version (idb-version db-name legend)
-        request (.open js/indexedDB db-name version)]
+        request (if version
+                  (.open js/indexedDB db-name version)
+                  (.open js/indexedDB db-name))]
     (set! (.-onupgradeneeded request)
           (fn [event] (ensure-object-stores (event-result event) legend)))
     (request->promise request identity)))
