@@ -103,7 +103,26 @@
     (it "handles empty input"
       (let [{:keys [entities id-map]} (sut/sync-tx* [])]
         (should= [] entities)
-        (should= {} id-map))))
+        (should= {} id-map)))
+
+    (it "deduplicates offline entities using per-kind dedup keys"
+      (let [existing (db/tx :kind :bibelot :name "w1" :size 1 :color "red")
+            entities [{:kind :bibelot :id -1 :name "w1" :size 1 :color "blue"}
+                      {:kind :bibelot :id -2 :name "w2" :size 2}]
+            {:keys [entities id-map]} (sut/sync-tx* entities {:bibelot [:name :size]})]
+        (should= 2 (count entities))
+        (should= (:id existing) (:id (first entities)))
+        (should= "blue" (:color (first entities)))
+        (should (pos? (:id (second entities))))
+        (should= (:id existing) (get id-map -1))
+        (should= (:id (second entities)) (get id-map -2))))
+
+    (it "kinds not in dedup map use existing behavior"
+      (let [entities [{:kind :bibelot :id -1 :name "w1" :size 1}]
+            {:keys [entities id-map]} (sut/sync-tx* entities {:thingy [:name]})]
+        (should= 1 (count entities))
+        (should (pos? (:id (first entities))))
+        (should= (:id (first entities)) (get id-map -1)))))
 
   (context "claim-sync!"
 

@@ -22,17 +22,21 @@
 
 (defn sync-tx*
   "Batch sync-tx. Returns {:entities [...] :id-map {old-neg-id new-real-id}}
-   so callers can remap cross-references between synced entities."
-  [entities]
-  (reduce (fn [{:keys [entities id-map]} entity]
-            (let [old-id (:id entity)
-                  result (sync-tx entity)]
-              {:entities (conj entities result)
-               :id-map   (if (offline-id? old-id)
-                           (assoc id-map old-id (:id result))
-                           id-map)}))
-          {:entities [] :id-map {}}
-          entities))
+   so callers can remap cross-references between synced entities.
+   When dedup-keys-by-kind is provided (a map of {kind [attr-keys]}),
+   offline entities are checked for duplicates before creating."
+  ([entities] (sync-tx* entities nil))
+  ([entities dedup-keys-by-kind]
+   (reduce (fn [{:keys [entities id-map]} entity]
+             (let [old-id     (:id entity)
+                   dedup-keys (get dedup-keys-by-kind (:kind entity))
+                   result     (sync-tx entity dedup-keys)]
+               {:entities (conj entities result)
+                :id-map   (if (offline-id? old-id)
+                            (assoc id-map old-id (:id result))
+                            id-map)}))
+           {:entities [] :id-map {}}
+           entities)))
 
 (def ^:private processed-syncs (atom #{}))
 (def max-processed-syncs 100)
