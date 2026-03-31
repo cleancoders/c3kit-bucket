@@ -78,4 +78,22 @@
       (let [{:keys [entities id-map]} (sut/sync-tx* [])]
         (should= [] entities)
         (should= {} id-map))))
+
+  (context "claim-sync!"
+
+    (it "returns true for new sync-id"
+      (should (sut/claim-sync! "sync-1")))
+
+    (it "returns false for duplicate sync-id"
+      (sut/claim-sync! "sync-2")
+      (should-not (sut/claim-sync! "sync-2")))
+
+    (it "returns true for nil sync-id (always processes)"
+      (should (sut/claim-sync! nil))
+      (should (sut/claim-sync! nil)))
+
+    (it "trims processed set when exceeding max"
+      (doseq [i (range 105)]
+        (sut/claim-sync! (str "trim-" i)))
+      (should (sut/claim-sync! "trim-0"))))
   )

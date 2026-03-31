@@ -27,3 +27,26 @@
                            id-map)}))
           {:entities [] :id-map {}}
           entities))
+
+(def ^:private processed-syncs (atom #{}))
+(def max-processed-syncs 100)
+
+(defn- trim-processed-syncs! []
+  (when (> (count @processed-syncs) max-processed-syncs)
+    (reset! processed-syncs #{})))
+
+(defn claim-sync!
+  "Returns true if this sync-id hasn't been processed yet. Thread-safe.
+   Prevents duplicate sync requests from creating duplicate entities.
+   Always returns true for nil sync-id."
+  [sync-id]
+  (if-not sync-id
+    true
+    (let [claimed? (atom false)]
+      (swap! processed-syncs
+        (fn [syncs]
+          (if (contains? syncs sync-id)
+            (do (reset! claimed? false) syncs)
+            (do (reset! claimed? true) (conj syncs sync-id)))))
+      (trim-processed-syncs!)
+      @claimed?)))
