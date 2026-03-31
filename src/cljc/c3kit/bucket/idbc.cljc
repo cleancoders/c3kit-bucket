@@ -35,6 +35,11 @@
   (when (> (count @processed-syncs) max-processed-syncs)
     (reset! processed-syncs #{})))
 
+(defn reset-sync-state!
+  "Resets the processed sync set. Useful for test isolation."
+  []
+  (reset! processed-syncs #{}))
+
 (defn claim-sync!
   "Returns true if this sync-id hasn't been processed yet. Thread-safe.
    Prevents duplicate sync requests from creating duplicate entities.
