@@ -13,3 +13,17 @@
   (if (offline-id? (:id entity))
     (db/tx (dissoc entity :id))
     (db/tx entity)))
+
+(defn sync-tx*
+  "Batch sync-tx. Returns {:entities [...] :id-map {old-neg-id new-real-id}}
+   so callers can remap cross-references between synced entities."
+  [entities]
+  (reduce (fn [{:keys [entities id-map]} entity]
+            (let [old-id (:id entity)
+                  result (sync-tx entity)]
+              {:entities (conj entities result)
+               :id-map   (if (offline-id? old-id)
+                           (assoc id-map old-id (:id result))
+                           id-map)}))
+          {:entities [] :id-map {}}
+          entities))

@@ -47,4 +47,35 @@
       (let [result (sut/sync-tx {:kind :bibelot :name "no-id"})]
         (should (pos? (:id result)))
         (should= "no-id" (:name result)))))
+
+  (context "sync-tx*"
+    (helper/with-schemas [impl-spec/bibelot])
+
+    (it "processes mixed positive and negative ids"
+      (let [existing (db/tx :kind :bibelot :name "existing")
+            entities [{:kind :bibelot :id -1 :name "offline-1"}
+                      {:kind :bibelot :id -2 :name "offline-2"}
+                      (assoc existing :name "updated")]
+            {:keys [entities id-map]} (sut/sync-tx* entities)]
+        (should= 3 (count entities))
+        (should= "offline-1" (:name (first entities)))
+        (should= "offline-2" (:name (second entities)))
+        (should= "updated" (:name (nth entities 2)))
+        (should (pos? (:id (first entities))))
+        (should (pos? (:id (second entities))))
+        (should= (:id existing) (:id (nth entities 2)))
+        (should= (:id (first entities)) (get id-map -1))
+        (should= (:id (second entities)) (get id-map -2))
+        (should-not (contains? id-map (:id existing)))))
+
+    (it "returns empty id-map when no negative ids"
+      (let [existing (db/tx :kind :bibelot :name "existing")
+            {:keys [entities id-map]} (sut/sync-tx* [(assoc existing :name "updated")])]
+        (should= 1 (count entities))
+        (should= {} id-map)))
+
+    (it "handles empty input"
+      (let [{:keys [entities id-map]} (sut/sync-tx* [])]
+        (should= [] entities)
+        (should= {} id-map))))
   )
