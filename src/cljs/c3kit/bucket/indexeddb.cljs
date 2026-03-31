@@ -9,7 +9,7 @@
 
 ;region IndexedDB deftype
 
-(deftype IndexedDB [legend store idb-atom db-name online-fn entity-fn find-fn]
+(deftype IndexedDB [legend store idb-atom db-name online-fn strategy entity-fn find-fn]
   api/DB
   (-clear [this]
     (memory/clear this)
@@ -42,7 +42,8 @@
         store     (or (:store config) (atom {}))
         idb-atom  (atom nil)
         db-name   (or (:db-name config) "c3kit-bucket")
-        online-fn (or (:online? config) (constantly true))]
-    (IndexedDB. legend store idb-atom db-name online-fn memory/entity memory/do-find)))
+        online-fn (or (:online? config) (constantly true))
+        strategy  (or (:idb-strategy config) :primary)]
+    (IndexedDB. legend store idb-atom db-name online-fn strategy memory/entity memory/do-find)))
 
 ;endregion

@@ -10,5 +10,6 @@
         store     (or (:store config) (r/atom {}))
         idb-atom  (atom nil)
         db-name   (or (:db-name config) "c3kit-bucket")
-        online-fn (or (:online? config) (constantly true))]
-    (idb/->IndexedDB legend store idb-atom db-name online-fn re-memory/entity re-memory/do-find)))
+        online-fn (or (:online? config) (constantly true))
+        strategy  (or (:idb-strategy config) :primary)]
+    (idb/->IndexedDB legend store idb-atom db-name online-fn strategy re-memory/entity re-memory/do-find)))

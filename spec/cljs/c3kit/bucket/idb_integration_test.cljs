@@ -163,6 +163,74 @@
           (.then (fn [_] (done)))
           (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
+(deftest cache-strategy-clears-on-init-when-online
+  (async done
+    (let [db (api/create-db {:impl :indexeddb :db-name "integration-cache-1"
+                             :idb-strategy :cache :online? (constantly true)} [bibelot])]
+      (-> (idb/init! db)
+          (.then (fn [db] (api/-tx db {:kind :bibelot :name "cached-widget" :size 5})))
+          (.then (fn [_]
+                   ;; Verify data is persisted in IDB
+                   (reset! (.-store db) {:all {}})
+                   (idb/rehydrate! db)))
+          (.then (fn [db]
+                   (is (= 1 (count (api/find-by- db :bibelot :name "cached-widget"))))
+                   ;; Close and re-init — should clear because online + cache strategy
+                   (api/close db)
+                   (idb/init! db)))
+          (.then (fn [db]
+                   (is (= 0 (count (api/find-by- db :bibelot :name "cached-widget"))))
+                   (api/close db)
+                   (.deleteDatabase js/indexedDB "integration-cache-1")))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
+(deftest cache-strategy-keeps-data-when-offline
+  (async done
+    (let [online? (atom false)
+          db      (api/create-db {:impl :indexeddb :db-name "integration-cache-2"
+                                  :idb-strategy :cache :online? #(deref online?)} [bibelot])]
+      (-> (idb/init! db)
+          (.then (fn [db]
+                   (reset! online? true)
+                   (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})))
+          (.then (fn [_]
+                   ;; Persist to IDB, then clear memory
+                   (reset! (.-store db) {:all {}})
+                   (idb/rehydrate! db)))
+          (.then (fn [db]
+                   (is (= 1 (count (api/find-by- db :bibelot :name "offline-widget"))))
+                   ;; Re-init while offline — should keep data
+                   (reset! online? false)
+                   (api/close db)
+                   (idb/init! db)))
+          (.then (fn [db]
+                   (is (= 1 (count (api/find-by- db :bibelot :name "offline-widget"))))
+                   (api/close db)
+                   (.deleteDatabase js/indexedDB "integration-cache-2")))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
+(deftest primary-strategy-keeps-data-when-online
+  (async done
+    (let [db (api/create-db {:impl :indexeddb :db-name "integration-primary-1"
+                             :idb-strategy :primary :online? (constantly true)} [bibelot])]
+      (-> (idb/init! db)
+          (.then (fn [db] (api/-tx db {:kind :bibelot :name "primary-widget" :size 5})))
+          (.then (fn [_]
+                   (reset! (.-store db) {:all {}})
+                   (idb/rehydrate! db)))
+          (.then (fn [db]
+                   (is (= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))
+                   (api/close db)
+                   (idb/init! db)))
+          (.then (fn [db]
+                   (is (= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))
+                   (api/close db)
+                   (.deleteDatabase js/indexedDB "integration-primary-1")))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
 (deftest rollback-on-idb-failure
   (async done
     (let [db           (api/create-db {:impl :indexeddb :db-name "integration-rollback-1"} [bibelot])

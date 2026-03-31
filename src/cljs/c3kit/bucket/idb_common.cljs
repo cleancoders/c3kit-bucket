@@ -279,19 +279,29 @@
 
 ;region Initialization
 
+(defn- cache-and-online? [db]
+  (and (= :cache (.-strategy db))
+       ((.-online-fn db))))
+
 (defn init!
   "Opens the IDB database and optionally rehydrates the in-memory store.
+   When :idb-strategy is :cache and online, clears IDB and memory store
+   so server data takes precedence on next fetch.
    Must be called and awaited before using the db.
    Returns a js/Promise resolving to the db instance."
   [db & kinds]
-  (-> (io/open (.-db-name db) @(.-legend db))
-      (.then (fn [idb-instance]
-               (reset! (.-idb-atom db) idb-instance)
-               db))
-      (.then (fn [db]
-               (rehydrate @(.-idb-atom db) (seq kinds)
-                          (fn [entities] (memory/tx* db entities)))))
-      (.then (fn [_] db))))
+  (let [clear? (cache-and-online? db)]
+    (when clear? (reset! (.-store db) {:all {}}))
+    (-> (io/open (.-db-name db) @(.-legend db))
+        (.then (fn [idb-instance]
+                 (reset! (.-idb-atom db) idb-instance)
+                 db))
+        (.then (fn [db]
+                 (if clear?
+                   (clear-all @(.-idb-atom db))
+                   (rehydrate @(.-idb-atom db) (seq kinds)
+                              (fn [entities] (memory/tx* db entities))))))
+        (.then (fn [_] db)))))
 
 (defn rehydrate!
   "Rehydrates the in-memory store from IDB. Use after init! has been called.

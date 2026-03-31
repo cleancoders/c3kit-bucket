@@ -54,6 +54,41 @@
         (reset! online? false)
         (should= false ((.-online-fn db))))))
 
+  (context "idb-strategy"
+
+    (it "defaults to :primary when not provided"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-strategy-1"} [bibelot])]
+        (should= :primary (.-strategy db))))
+
+    (it "uses the provided strategy"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-strategy-2" :idb-strategy :cache} [bibelot])]
+        (should= :cache (.-strategy db))))
+
+    (it "cache strategy clears memory store on init when online"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-strategy-3"
+                               :idb-strategy :cache :online? (constantly true)} [bibelot])]
+        (api/-tx db {:kind :bibelot :name "stale-widget" :size 5})
+        (should= 1 (count (api/find-by- db :bibelot :name "stale-widget")))
+        (idb/init! db)
+        (should= 0 (count (api/find-by- db :bibelot :name "stale-widget")))))
+
+    (it "cache strategy keeps memory store on init when offline"
+      (let [online? (atom false)
+            db      (api/create-db {:impl :indexeddb :db-name "test-idb-strategy-4"
+                                    :idb-strategy :cache :online? #(deref online?)} [bibelot])]
+        (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})
+        (should= 1 (count (api/find-by- db :bibelot :name "offline-widget")))
+        (idb/init! db)
+        (should= 1 (count (api/find-by- db :bibelot :name "offline-widget")))))
+
+    (it "primary strategy keeps memory store on init when online"
+      (let [db (api/create-db {:impl :indexeddb :db-name "test-idb-strategy-5"
+                               :idb-strategy :primary :online? (constantly true)} [bibelot])]
+        (api/-tx db {:kind :bibelot :name "primary-widget" :size 5})
+        (should= 1 (count (api/find-by- db :bibelot :name "primary-widget")))
+        (idb/init! db)
+        (should= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))))
+
   (context "offline tx (memory effects)"
 
     (before (reset! idb/offline-id-counter 0))
