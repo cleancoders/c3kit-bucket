@@ -354,5 +354,47 @@
           (.then (fn [_] (done)))
           (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
+(deftest migrates-store-with-wrong-keypath
+  (async done
+    (let [db-name  "integration-keypath-migration"
+          legend   {:bibelot {:id {:type :long} :name {:type :string}}}
+          request  (.open js/indexedDB db-name 1)]
+      (set! (.-onupgradeneeded request)
+            (fn [event]
+              (let [db (.-result (.-target event))]
+                (.createObjectStore db "bibelot" #js {:keyPath "idxId"})
+                (.createObjectStore db "_meta" #js {:keyPath "id"}))))
+      (-> (io/request->promise request identity)
+          (.then (fn [old-db]
+                   (let [tx    (.transaction old-db #js ["bibelot"] "readwrite")
+                         store (.objectStore tx "bibelot")]
+                     (.put store #js {:idxId 1 :id 42 :data "{:kind :bibelot :id 42 :name \"old\"}"})
+                     (js/Promise.
+                       (fn [resolve reject]
+                         (set! (.-oncomplete tx) (fn [_] (resolve old-db)))
+                         (set! (.-onerror tx) (fn [e] (reject e))))))))
+          (.then (fn [old-db]
+                   (.close old-db)
+                   (.removeItem js/localStorage (str db-name "-schema-hash"))
+                   (.removeItem js/localStorage (str db-name "-schema-ver"))
+                   (io/open db-name legend)))
+          (.then (fn [new-db]
+                   (let [tx    (.transaction new-db #js ["bibelot"] "readwrite")
+                         store (.objectStore tx "bibelot")]
+                     (is (= "id" (.-keyPath store)))
+                     (.put store (io/clj->js-entity {:kind :bibelot :id -1 :name "new-widget"}))
+                     (-> (js/Promise.
+                           (fn [resolve reject]
+                             (set! (.-oncomplete tx) (fn [_] (resolve nil)))
+                             (set! (.-onerror tx) (fn [e] (reject e)))))
+                         (.then (fn [_] (io/read-entity new-db "bibelot" -1)))
+                         (.then (fn [entity]
+                                  (is (= -1 (:id entity)))
+                                  (is (= "new-widget" (:name entity)))
+                                  (.close new-db)
+                                  (.deleteDatabase js/indexedDB db-name)))))))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
 (defn ^:export run []
   (cljs.test/run-tests 'c3kit.bucket.idb-integration-test))

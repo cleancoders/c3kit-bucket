@@ -3,10 +3,13 @@
 
 ;region Schema Hashing
 
+(def store-format-version 1)
+
 (defn schema-hash [legend]
-  (hash (into (sorted-map)
-              (map (fn [[k v]] [k (into (sorted-map) v)]))
-              legend)))
+  (hash [store-format-version
+         (into (sorted-map)
+               (map (fn [[k v]] [k (into (sorted-map) v)]))
+               legend)]))
 
 ;endregion
 
@@ -74,11 +77,15 @@
 
 ;region Database Operations
 
-(defn- ensure-object-stores [db legend]
+(defn- ensure-object-stores [db upgrade-tx legend]
   (let [existing (set (array-seq (.-objectStoreNames db)))
         expected (conj (set (map name (keys legend))) "_meta")]
     (doseq [store-name expected]
-      (when-not (contains? existing store-name)
+      (if (contains? existing store-name)
+        (let [store (.objectStore upgrade-tx store-name)]
+          (when-not (= "id" (.-keyPath store))
+            (.deleteObjectStore db store-name)
+            (.createObjectStore db store-name #js {:keyPath "id"})))
         (.createObjectStore db store-name #js {:keyPath "id"})))
     (doseq [store-name existing]
       (when-not (contains? expected store-name)
@@ -90,7 +97,11 @@
                   (.open js/indexedDB db-name version)
                   (.open js/indexedDB db-name))]
     (set! (.-onupgradeneeded request)
-          (fn [event] (ensure-object-stores (event-result event) legend)))
+          (fn [event]
+            (ensure-object-stores
+              (event-result event)
+              (.-transaction (.-target event))
+              legend)))
     (request->promise request identity)))
 
 (defn close [db]
