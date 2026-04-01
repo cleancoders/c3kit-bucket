@@ -219,6 +219,36 @@
           (.then (fn [_] (done)))
           (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
+(deftest cache-strategy-dirty-entities-survive-full-refresh-simulation
+  (async done
+    (let [online? (atom false)
+          db      (api/create-db {:impl :indexeddb :db-name "integration-cache-dirty-refresh"
+                                  :idb-strategy :cache :online? #(deref online?)} [bibelot])
+          synced  (atom nil)]
+      (reset! api/impl db)
+      (reset! idb/offline-id-counter 0)
+      (reset! idb/dirty-chain (js/Promise.resolve nil))
+      (-> (idb/init!)
+          (.then (fn [db]
+                   (api/-tx db {:kind :bibelot :name "dirty-widget" :size 42})
+                   @idb/dirty-chain))
+          (.then (fn [_]
+                   ;; Simulate full page refresh: reset all JS state that would be fresh
+                   (reset! online? true)
+                   (reset! idb/dirty-chain (js/Promise.resolve nil))
+                   (reset! idb/offline-id-counter 0)
+                   (api/close db)
+                   (idb/init!)))
+          (.then (fn [_]
+                   (idb/sync! (fn [entities] (reset! synced entities)))))
+          (.then (fn [_]
+                   (is (= 1 (count @synced)) "dirty entity should survive full refresh simulation")
+                   (is (= "dirty-widget" (:name (first @synced))))
+                   (api/close db)
+                   (.deleteDatabase js/indexedDB "integration-cache-dirty-refresh")))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
 (deftest cache-strategy-keeps-data-when-offline
   (async done
     (let [online? (atom false)
