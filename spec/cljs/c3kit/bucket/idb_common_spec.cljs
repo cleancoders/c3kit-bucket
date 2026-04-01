@@ -39,7 +39,16 @@
           (sut/idb-tx db {:kind :bibelot :name "offline-widget"})
           (sut/sync-complete! #{-1} [{:kind :bibelot :id 9001 :name "offline-widget"}])
           (should= 0 (count (api/find-by- db :bibelot :id -1)))
-          (should (some? (api/entity- db :bibelot 9001)))))))
+          (should (some? (api/entity- db :bibelot 9001))))))
+
+    (it "does not delete dirty entities when server-entities is empty"
+      (with-safety-off
+        (let [db (api/create-db {:impl :indexeddb :db-name "test-sync-empty" :online? (constantly false)} [bibelot])]
+          (reset! api/impl db)
+          (sut/idb-tx db {:kind :bibelot :name "offline-widget"})
+          (should= 1 (count (api/find-by- db :bibelot :name "offline-widget")))
+          (sut/sync-complete! #{-1} [])
+          (should= 1 (count (api/find-by- db :bibelot :name "offline-widget")))))))
 
   (context "ensure-offline-id"
     (before (reset! sut/offline-id-counter 0))
