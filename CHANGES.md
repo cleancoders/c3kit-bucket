@@ -1,3 +1,8 @@
+### 2.12.1
+* Fixed IDB keyPath migration: stores created by old bucket versions with `keyPath: "idxId"` are now detected and recreated with `keyPath: "id"` during `onupgradeneeded`
+* Added `store-format-version` to `schema-hash` to force version bumps when store structure changes
+* Fixed `sync-complete!` silently deleting dirty entities when server returns empty response (e.g., duplicate sync-id rejection); now no-ops to preserve dirty state for retry
+
 ### 2.12.0
 * Fixed `:cache` strategy `init!` clearing dirty (unsynced) entities from IDB; dirty entities are now preserved across the clear
 * Simplified `idb-common` public API: `init!`, `rehydrate!`, `refresh!`, `sync!`, and `sync-complete!` no longer require a `db` argument (they deref `api/impl` internally)
