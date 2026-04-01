@@ -229,7 +229,9 @@ After the server processes the sync and returns entities with real IDs, the clie
 | `dirty-id-set` | set of IDs | The IDs that were sent to the server (including negative offline IDs) |
 | `server-entities` | seq of entities | The server's response -- entities with real (positive) IDs assigned by the server DB |
 
-`sync-complete!` does three things in order:
+`sync-complete!` **no-ops when `server-entities` is empty.** If the server returns an empty response (e.g., a duplicate sync-id was rejected by `claim-sync!`), the function does nothing -- it does not delete local entities or clear the dirty set. The data stays queued for the next sync attempt. This prevents data loss when the server processes a sync but the client never receives the response (e.g., page refresh mid-flight) and retries with the same sync-id.
+
+When `server-entities` is non-empty, `sync-complete!` does three things in order:
 1. **Removes offline entities from memory** -- soft-deletes entities with negative IDs so the UI no longer shows duplicates
 2. **Loads server entities** -- transacts the server-returned entities (with real IDs) into both the in-memory store and IDB, making them the canonical versions
 3. **Clears the dirty set** -- removes the synced IDs from the dirty set in IDB's `_meta` store and deletes the old entity data from IDB, so they won't be synced again
@@ -404,9 +406,10 @@ IDB object stores are created automatically from your entity schemas. Each entit
 When your schema changes (new kinds, new fields), c3kit.bucket detects the change via a hash of the legend and increments the IDB version. This triggers `onupgradeneeded`, which:
 - Creates new object stores for new kinds
 - Deletes object stores for removed kinds
+- Recreates existing stores whose `keyPath` is not `"id"` (fixes stores created by older bucket versions that used a different key path)
 - Existing stores with new fields work automatically (IDB is schemaless within a store)
 
-Version tracking uses localStorage (`<db-name>-schema-hash` and `<db-name>-schema-ver`). 
+Version tracking uses localStorage (`<db-name>-schema-hash` and `<db-name>-schema-ver`). The schema hash includes a `store-format-version` constant so that changes to the store structure (e.g., key path) trigger a version bump even when the entity schema hasn't changed. Increment `store-format-version` in `idb_io.cljs` if the store structure changes in the future. 
 
 ## Complete Example
 
