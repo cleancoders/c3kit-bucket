@@ -315,5 +315,44 @@
           (done))
         100))))
 
+(deftest sync-before-init-completes-returns-empty
+  (async done
+    (let [online? (atom false)
+          db      (api/create-db {:impl :indexeddb :db-name "integration-sync-race-1"
+                                  :idb-strategy :cache :online? #(deref online?)} [bibelot])
+          synced1 (atom nil)
+          synced2 (atom nil)]
+      (reset! api/impl db)
+      (reset! idb/offline-id-counter 0)
+      (reset! idb/dirty-chain (js/Promise.resolve nil))
+      (-> (idb/init!)
+          (.then (fn [db]
+                   ;; Create entity while offline — becomes dirty with negative ID
+                   (api/-tx db {:kind :bibelot :name "race-widget" :size 7})
+                   @idb/dirty-chain))
+          (.then (fn [_]
+                   ;; Go online
+                   (reset! online? true)
+                   ;; Close DB and nil out idb-atom to simulate pre-init state
+                   (api/close db)
+                   (reset! (.-idb-atom db) nil)
+                   ;; sync! BEFORE init! — idb-atom is nil, should get []
+                   (idb/sync! (fn [entities] (reset! synced1 entities)))))
+          (.then (fn [_]
+                   (is (= [] @synced1) "sync before init should return empty vector")
+                   ;; Now init! completes (simulating init finishing after on-online)
+                   (reset! idb/dirty-chain (js/Promise.resolve nil))
+                   (idb/init!)))
+          (.then (fn [_]
+                   ;; sync! AFTER init! — should find the dirty entity
+                   (idb/sync! (fn [entities] (reset! synced2 entities)))))
+          (.then (fn [_]
+                   (is (= 1 (count @synced2)) "sync after init should find dirty entity")
+                   (is (= "race-widget" (:name (first @synced2))))
+                   (api/close db)
+                   (.deleteDatabase js/indexedDB "integration-sync-race-1")))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
 (defn ^:export run []
   (cljs.test/run-tests 'c3kit.bucket.idb-integration-test))
