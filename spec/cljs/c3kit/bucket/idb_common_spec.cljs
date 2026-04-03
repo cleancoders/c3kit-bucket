@@ -72,7 +72,8 @@
 
   (context "offline-ensure-id"
     (with-stubs)
-    (before (reset! sut/offline-id-counter 0))
+    (before (reset! sut/offline-id-counter 0)
+            (reset! sut/force-offline? false))
 
     (it "uses negative ID when offline"
       (let [result (sut/offline-ensure-id (constantly false) {:kind :bibelot :name "offline"})]
@@ -80,4 +81,9 @@
 
     (it "uses positive ID when online"
       (let [result (sut/offline-ensure-id (constantly true) {:kind :bibelot :name "online"})]
-        (should= true (pos? (:id result)))))))
+        (should= true (pos? (:id result)))))
+
+    (it "uses negative ID when force-offline? is true even if online-fn returns true"
+      (reset! sut/force-offline? true)
+      (let [result (sut/offline-ensure-id (constantly true) {:kind :bibelot :name "forced-offline"})]
+        (should= -1 (:id result))))))

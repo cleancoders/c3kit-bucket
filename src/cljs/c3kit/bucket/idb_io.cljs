@@ -102,7 +102,12 @@
               (event-result event)
               (.-transaction (.-target event))
               legend)))
-    (request->promise request identity)))
+    (set! (.-onblocked request)
+          (fn [_] (js/console.warn "[IDB] Upgrade blocked by another connection")))
+    (-> (request->promise request identity)
+        (.then (fn [db]
+                 (set! (.-onversionchange db) (fn [_] (.close db)))
+                 db)))))
 
 (defn close [db]
   (when db (.close db)))

@@ -94,7 +94,8 @@
 
   (context "offline tx (memory effects)"
 
-    (before (reset! idb/offline-id-counter 0))
+    (before (reset! idb/offline-id-counter 0)
+            (reset! idb/force-offline? false))
 
     (it "offline create assigns negative ID"
       (let [db    (api/create-db {:impl :indexeddb :db-name "test-mem-1" :online? (constantly false)} [bibelot])

@@ -8,6 +8,7 @@
 ;region Offline ID Generation
 
 (def offline-id-counter (atom 0))
+(def force-offline? (atom false))
 
 (defn ensure-offline-id [entity]
   (if (:id entity)
@@ -15,7 +16,7 @@
     (assoc entity :id (swap! offline-id-counter dec))))
 
 (defn offline-ensure-id [online-fn entity]
-  (if (online-fn)
+  (if (and (online-fn) (not @force-offline?))
     (memory/ensure-id entity)
     (ensure-offline-id entity)))
 
@@ -176,7 +177,7 @@
 
 ;region Optimistic Transaction Functions
 
-(defn- offline? [db] (not ((.-online-fn db))))
+(defn- offline? [db] (or @force-offline? (not ((.-online-fn db)))))
 
 (defn- prepare-entity
   "Computes new store state with entity applied, without mutating.

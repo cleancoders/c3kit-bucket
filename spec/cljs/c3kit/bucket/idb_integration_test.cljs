@@ -396,5 +396,68 @@
           (.then (fn [_] (done)))
           (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
+(deftest open-sets-onversionchange-to-close-db
+  (async done
+    (let [db-name "integration-versionchange-1"
+          legend  {:bibelot {:id {:type :long} :name {:type :string}}}]
+      (.deleteDatabase js/indexedDB db-name)
+      (-> (io/open db-name legend)
+          (.then (fn [db]
+                   (is (fn? (.-onversionchange db)) "onversionchange should be set after open")
+                   (io/close db)
+                   (.deleteDatabase js/indexedDB db-name)))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
+(deftest version-upgrade-unblocks-when-old-connection-exists
+  (async done
+    (let [db-name "integration-versionchange-2"
+          legend  {:bibelot {:id {:type :long} :name {:type :string}}}]
+      (.deleteDatabase js/indexedDB db-name)
+      ;; Open at version 1 (simulating old service worker)
+      (-> (io/request->promise (.open js/indexedDB db-name 1) identity)
+          (.then (fn [old-db]
+                   ;; Now open via io/open which requests a higher version.
+                   ;; Without onversionchange on old-db, this would block forever.
+                   ;; io/open should set onversionchange on its OWN connections,
+                   ;; but here old-db was opened raw. So we set it manually to
+                   ;; simulate what io/open would do on the SW's connection.
+                   (set! (.-onversionchange old-db) (fn [_] (.close old-db)))
+                   (.removeItem js/localStorage (str db-name "-schema-hash"))
+                   (.removeItem js/localStorage (str db-name "-schema-ver"))
+                   (io/open db-name legend)))
+          (.then (fn [new-db]
+                   (is (some? new-db) "upgrade should succeed after old connection closes")
+                   (is (fn? (.-onversionchange new-db)) "new db should also have onversionchange")
+                   (io/close new-db)
+                   (.deleteDatabase js/indexedDB db-name)))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
+(deftest force-offline-dirty-tracks-when-navigator-online
+  (async done
+    (let [db      (api/create-db {:impl :indexeddb :db-name "integration-force-offline-1" :online? (constantly true)} [bibelot])
+          synced  (atom nil)]
+      (reset! api/impl db)
+      (reset! idb/offline-id-counter 0)
+      (reset! idb/dirty-chain (js/Promise.resolve nil))
+      (-> (idb/init!)
+          (.then (fn [_]
+                   ;; Force offline mode — simulates save-offline! while navigator.onLine is true
+                   (reset! idb/force-offline? true)
+                   (api/-tx db {:kind :bibelot :name "forced-offline-widget" :size 7})
+                   (reset! idb/force-offline? false)
+                   @idb/dirty-chain))
+          (.then (fn [_]
+                   (idb/sync! (fn [entities] (reset! synced entities)))))
+          (.then (fn [_]
+                   (is (= 1 (count @synced)) "entity should be dirty-tracked")
+                   (is (= -1 (:id (first @synced))) "entity should have negative offline ID")
+                   (is (= "forced-offline-widget" (:name (first @synced))))
+                   (api/close db)
+                   (.deleteDatabase js/indexedDB "integration-force-offline-1")))
+          (.then (fn [_] (done)))
+          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+
 (defn ^:export run []
   (cljs.test/run-tests 'c3kit.bucket.idb-integration-test))

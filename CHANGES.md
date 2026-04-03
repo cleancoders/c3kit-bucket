@@ -1,3 +1,8 @@
+### 2.13.0
+* Added `onversionchange` handler to IDB connections opened via `io/open`; connections now close automatically when another context requests a version upgrade, preventing blocked upgrades during service worker transitions
+* Added `onblocked` handler to `io/open` requests to log when an upgrade is waiting on another connection to close
+* Added `force-offline?` atom to `idb-common`; when set to `true`, `idb-tx`/`idb-tx*` use offline ID generation and dirty tracking regardless of the `online?` config function — allows callers to force offline mode when the app detects connectivity loss through means other than `navigator.onLine` (e.g., WebSocket disconnection)
+
 ### 2.12.1
 * Fixed IDB keyPath migration: stores created by old bucket versions with `keyPath: "idxId"` are now detected and recreated with `keyPath: "id"` during `onupgradeneeded`
 * Added `store-format-version` to `schema-hash` to force version bumps when store structure changes
