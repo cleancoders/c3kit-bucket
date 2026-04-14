@@ -60,9 +60,9 @@ Use this when your app has **no server-side database** -- IndexedDB is the only 
 
 ### `:cache`
 
-IDB supplements a server-side database (e.g., Datomic, Postgres). On `init!`, if `:online?` returns true, IDB entity stores and the memory store are cleared so stale cached data doesn't shadow server state. The app then fetches fresh data from the server.
+IDB supplements a server-side database (e.g., Datomic, Postgres). On `init!`, if `:online?` returns true, stale cached data is cleared from IDB entity stores and the memory store -- but **dirty entities (unsynced offline changes) are preserved.** Bucket reads the dirty set first, wipes the stores, then re-inserts only the dirty entities back into IDB. The dirty set in `_meta` and the entity data it references are both retained so that `sync!` can still read and send them to the server.
 
-**Dirty entities are preserved across the clear.** If the user created or edited entities while offline, those unsynced changes survive `init!` -- only clean (non-dirty) cached data is discarded. The dirty set in `_meta` and the entity data it references are both retained so that `sync!` can still read and send them to the server.
+After the clear, the memory store is empty and IDB only contains dirty entities. The app then fetches fresh data from the server through its normal data-loading flow.
 
 When offline, IDB retains data normally -- it becomes the temporary source of truth until connectivity returns and the app syncs.
 
