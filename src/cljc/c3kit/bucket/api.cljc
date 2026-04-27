@@ -317,8 +317,3 @@ Requires the *safety* be turned off."
 
 #?(:clj (def service (app/service 'c3kit.bucket.api/-start-service 'c3kit.bucket.api/-stop-service)))
 
-;; TODO - MDM:
-;;  2) middleware for saving and loading. timestamps is a saving middleware
-;;  3) apply to test data.  Bring in entity and for-kind features
-;;  4) seeding entity
-;;  7) datomic specific features

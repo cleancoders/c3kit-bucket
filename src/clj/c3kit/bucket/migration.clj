@@ -247,7 +247,6 @@
     (log/warn (str kind " - kind missing. Creating."))
     (maybe-install-schema config schema)))
 
-;; TODO - MDM: Handle name translation here.
 (defn- sync-kind [{:keys [-installed-legend] :as config} schema]
   (let [kind            (db/-schema-kind schema)
         installed-attrs (get -installed-legend kind)]

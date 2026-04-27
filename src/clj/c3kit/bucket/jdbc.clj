@@ -609,7 +609,6 @@
   (let [table-name (table-name schema)]
     (table-exists? db table-name)))
 
-;; TODO - MDM: don't do name translation here, let migration handle it.
 (defn build-installed-schema-legend [db legend]
   (let [db-names->schema-keys (core-reduce (fn [result [kind schema]]
                                              (let [table  (table-name schema)
