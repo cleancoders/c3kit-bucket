@@ -67,6 +67,6 @@
 (defn rename-attribute!-
   "rename-attribute! with explicit db"
   [db kind attr new-kind new-attr]
-  [kind attr new-kind new-attr] (-rename-attribute! db kind attr new-kind new-attr))
+  (-rename-attribute! db kind attr new-kind new-attr))
 
 ;; ^^^^^ API ^^^^^
