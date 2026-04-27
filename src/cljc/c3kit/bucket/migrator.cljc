@@ -61,7 +61,7 @@
   (-remove-attribute! db kind attr))
 
 (defn rename-attribute!
-  "Add an attribute to the database schema."
+  "Rename an attribute in the database schema."
   [kind attr new-kind new-attr] (-rename-attribute! @api/impl kind attr new-kind new-attr))
 
 (defn rename-attribute!-
