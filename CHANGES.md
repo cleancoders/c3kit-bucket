@@ -1,3 +1,13 @@
+### 2.13.1
+* Fixed `c3kit.bucket.migrator/rename-attribute!-` (explicit-db arity); previous body had a stranded vector literal that would have prevented future modifications from working correctly
+* Replaced unconditional `println` calls in `c3kit.bucket.seed` with `log/info` so callers can silence them via standard log config
+* Dropped the dead `find core-file` entry from `:refer-clojure :rename` in `memory.cljc`, `re_memory.cljs`, and `jdbc.clj`
+* Added docstrings to the `c3kit.bucket.bg` public API (`start`, `stop`, `task`, `schedule`, `cancel-task`, `start-scheduled-tasks`, `stop-scheduled-tasks`)
+* Added docstrings to the backend-plugin SPI in `c3kit.bucket.api` (`-create-impl`, `-start-service`, `-stop-service`, `-check-cas!`)
+* Removed `;; TODO - MDM` developer notes from `api.cljc`, `migration.clj`, and `jdbc.clj`
+* Replaced `(comment "Nothing to do here")` no-op bodies with explicit `nil` in close methods across `memory.cljc`, `re_memory.cljs`, `datomic.clj`, and `datomic_cloud.clj`
+* Deleted empty placeholder namespace `c3kit.bucket.sql`
+
 ### 2.13.0
 * Added `onversionchange` handler to IDB connections opened via `io/open`; connections now close automatically when another context requests a version upgrade, preventing blocked upgrades during service worker transitions
 * Added `onblocked` handler to `io/open` requests to log when an upgrade is waiting on another connection to close
