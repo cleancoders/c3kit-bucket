@@ -18,3 +18,5 @@ package-lock.json
 pom.xml
 pom.xml.asc
 sqlite_test.db
+.worktrees/
+.beads/

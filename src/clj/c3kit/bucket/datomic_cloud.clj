@@ -142,7 +142,7 @@
 
 (deftype DatomicCloudDB [db-schema legend config api]
   api/DB
-  (close [_this] (comment "Nothing to do here"))
+  (close [_this] nil)
   (-clear [this] (common-api/clear this))
   (-delete-all [this kind] (common-api/delete-all this kind))
   (-count [this kind options] (common-api/do-count this kind options))

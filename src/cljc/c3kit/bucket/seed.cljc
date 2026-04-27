@@ -1,5 +1,6 @@
 (ns c3kit.bucket.seed
-  (:require [c3kit.bucket.api :as db]))
+  (:require [c3kit.apron.log :as log]
+            [c3kit.bucket.api :as db]))
 
 
 (defn attr-matches? [fields entity attr]
@@ -17,13 +18,13 @@
       (if-let [e (apply db/ffind-by kind (flatten (seq search-fields)))]
         (if (attrs-match? other-fields e)
           (do
-            (println "EXISTS:   " (pr-str kind search-fields))
+            (log/info "EXISTS:   " (pr-str kind search-fields))
             (reset! atm e))
           (do
-            (println "UPDATING: " (pr-str kind search-fields))
+            (log/info "UPDATING: " (pr-str kind search-fields))
             (reset! atm (db/tx (merge e other-fields)))))
         (let [entity (merge {:kind kind} search-fields other-fields)]
-          (println "CREATING: " (pr-str kind search-fields))
+          (log/info "CREATING: " (pr-str kind search-fields))
           (reset! atm (db/tx entity)))))))
 
 (defn entity

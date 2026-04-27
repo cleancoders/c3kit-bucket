@@ -6,7 +6,10 @@
     [c3kit.bucket.api :as db])
   (:import (java.util.concurrent ScheduledFuture ScheduledThreadPoolExecutor TimeUnit)))
 
-(defn start [app]
+(defn start
+  "Initialize the background task manager. Creates a ScheduledThreadPoolExecutor
+  with 3 threads and stores it in the app map under :background."
+  [app]
   (log/info "Starting background manager")
   (let [executor (ScheduledThreadPoolExecutor. 3)]
     (assoc app :background (atom {:executor executor}))))
@@ -15,7 +18,10 @@
 
 (defn ^ScheduledThreadPoolExecutor executor [] (when @background (:executor @@background)))
 
-(defn stop [app]
+(defn stop
+  "Shut down the background task manager. Immediately halts the executor and
+  waits up to 5 seconds for running tasks to finish, then removes :background from app."
+  [app]
   (when-let [executor (executor)]
     (log/info "Shutting down background manager")
     (.shutdownNow executor)
@@ -24,7 +30,9 @@
 
 (def service (app/service 'c3kit.bucket.bg/start 'c3kit.bucket.bg/stop))
 
-(defn task [key] (get @@background key))
+(defn task
+  "Return the ScheduledFuture registered under key, or nil if none exists."
+  [key] (get @@background key))
 
 (defn- new-task-record! [key] (db/tx :kind :bg-task :key key :last-ran-at time/epoch))
 
@@ -39,7 +47,11 @@
         (log/error "Background Error:")
         (log/error e)))))
 
-(defn ^ScheduledFuture schedule [key period ^Runnable task]
+(defn ^ScheduledFuture schedule
+  "Register a recurring background task under key that runs every period milliseconds.
+  Persists a :bg-task entity so that restart honors the last-ran-at timestamp and
+  computes the correct initial delay. Returns the underlying ScheduledFuture."
+  [key period ^Runnable task]
   (log/info "Scheduling task: " key period)
   (let [record           (or (db/ffind-by :bg-task :key key) (new-task-record! key))
         millis-since-ran (time/millis-between (time/now) (:last-ran-at record))
@@ -50,19 +62,27 @@
     (swap! @background assoc key scheduled)
     scheduled))
 
-(defn cancel-task [key]
+(defn cancel-task
+  "Cancel the scheduled task registered under key. Does not interrupt a run already in progress."
+  [key]
   (log/info "Cancelling task: " key)
   (when-let [bg-resolution @background]
     (when-let [^ScheduledFuture task (get @bg-resolution key)]
       (.cancel task false))))
 
-(defn start-scheduled-tasks [tasks app]
+(defn start-scheduled-tasks
+  "Schedule all tasks in the tasks collection, each specified as [key period task-fn].
+  Associates each ScheduledFuture into app under its key and returns the updated app map."
+  [tasks app]
   (reduce
     (fn [app [key period task-fn]]
       (assoc app key (schedule key period task-fn)))
     app tasks))
 
-(defn stop-scheduled-tasks [tasks app]
+(defn stop-scheduled-tasks
+  "Cancel all tasks in the tasks collection and remove their keys from app.
+  tasks is the same [key period task-fn] collection passed to start-scheduled-tasks."
+  [tasks app]
   (reduce
     (fn [app [key _ _]]
       (cancel-task key)

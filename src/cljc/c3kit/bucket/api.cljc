@@ -243,7 +243,11 @@ Presumably only for tests or in-memory implementation, but it will work on any i
 Requires the *safety* be turned off."
   [] (-clear @impl))
 
-(defmulti -create-impl (fn [config _schema] (:impl config)))
+(defmulti -create-impl
+  "Extension SPI. Backend authors implement this multimethod (dispatching on the :impl
+  key of the config map) to construct a DB instance. Receives the config map and a
+  vector of schemas. Returns a value satisfying c3kit.bucket.api/DB."
+  (fn [config _schema] (:impl config)))
 (defn create-db
   "Create an instance of DB based off the configuration.
   config - a map that may contain the following keys
@@ -274,7 +278,10 @@ Requires the *safety* be turned off."
 
 (defn -get-cas [entity] (:cas (meta entity)))
 
-(defn -check-cas! [cas entity original]
+(defn -check-cas!
+  "Extension SPI helper. Validates compare-and-swap constraints before persisting entity.
+  Throws an ex-info if any value in cas does not match the corresponding field in original."
+  [cas entity original]
   (doseq [[k v] cas]
     (let [actual (get original k)]
       (when-not (= v actual)
@@ -298,6 +305,9 @@ Requires the *safety* be turned off."
 
 #?(:clj
    (defn -start-service
+     "Extension SPI lifecycle hook. Loads bucket config, resolves schemas, creates the DB
+     impl via -create-impl, and associates :bucket/impl, :bucket/config, and :bucket/schemas
+     into app. Called by the app/service start fn."
      ([app] (-start-service app (load-config)))
      ([app config]
       (log/info "Starting bucket service:" (:impl config))
@@ -310,15 +320,13 @@ Requires the *safety* be turned off."
                    :bucket/schemas schemas)))))
 
 #?(:clj
-   (defn -stop-service [app]
+   (defn -stop-service
+     "Extension SPI lifecycle hook. Closes the active DB connection and removes
+     :bucket/impl, :bucket/config, and :bucket/schemas from app. Called by the app/service stop fn."
+     [app]
      (log/info "Stopping bucket service")
      (when-let [db (:bucket/impl app)] (close db))
      (dissoc app :bucket/impl :bucket/config :bucket/schemas)))
 
 #?(:clj (def service (app/service 'c3kit.bucket.api/-start-service 'c3kit.bucket.api/-stop-service)))
 
-;; TODO - MDM:
-;;  2) middleware for saving and loading. timestamps is a saving middleware
-;;  3) apply to test data.  Bring in entity and for-kind features
-;;  4) seeding entity
-;;  7) datomic specific features
