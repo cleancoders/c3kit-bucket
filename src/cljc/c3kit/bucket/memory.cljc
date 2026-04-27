@@ -214,7 +214,7 @@
 (deftype MemoryDB [legend store]
   api/DB
   (-clear [this] (clear this))
-  (close [_this] (comment "Nothing to do here"))
+  (close [_this] nil)
   (-count [this kind options] (core-count (do-find this kind options)))
   (-delete-all [this kind] (delete-all this kind))
   (-entity [this kind id] (entity this kind id))
