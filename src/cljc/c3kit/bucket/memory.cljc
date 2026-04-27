@@ -1,5 +1,5 @@
 (ns c3kit.bucket.memory
-  (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
+  (:refer-clojure :rename {count core-count reduce core-reduce})
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
