@@ -8,29 +8,118 @@ _"Most men give advice by the bucket, but take it by the grain."_ - William R. A
 
 [![Bucket Build](https://github.com/cleancoders/c3kit-bucket/actions/workflows/test.yml/badge.svg)](https://github.com/cleancoders/c3kit-bucket/actions/workflows/test.yml)
 
-Bucket offers an identical API for dealing with data on both the server side (datomic), and the client side (in memory), in addition to other goodies.
+## What is bucket?
 
- * __bg.clj__ : background task management
- * __db.clj__ : simple api for datomic interaction
- * __migrate.clj__ : manage and execute migration scripts
- * __spec_helper.clj__ : to easily test client code
- * __hashid.cljc__ : platform independent hashid
- * __db.cljs__ : simple api for in-memory data storage and retrieval
- * __spec_helper.cljs__ : to easily test client code
+Bucket is a unified entity-storage API for Clojure and ClojureScript. The same domain code runs against any supported backend — Datomic, JDBC (Postgres, H2, MSSQL, SQLite), in-memory, and IndexedDB — because every backend implements the same `c3kit.bucket.api/DB` protocol. Define your schemas once with [c3kit-apron](https://github.com/cleancoders/c3kit-apron), then transact, query, and look up entities through `c3kit.bucket.api` regardless of where the data lives.
 
-# Development
+## Installation
 
-    # Run the JVM tests
-    clj -M:test:spec
-    clj -M:test:spec -a         # auto runner
+**deps.edn**
 
-    # Compile and Run JS tests
-    clj -M:test:cljs once
-    clj -M:test:cljs            # auto runner
+```clojure
+{:deps {com.cleancoders.c3kit/bucket {:mvn/version "2.13.1"}}}
+```
 
-### PostgreSQL
+**Leiningen**
 
-Run the commands to set up postgresql:
+```clojure
+[com.cleancoders.c3kit/bucket "2.13.1"]
+```
+
+## Hello World
+
+The following example uses the explicit-db API (`tx-`, `find-by-`, `entity-`), which works without any global state setup and runs in a plain `clj` REPL once the dep is on the classpath.
+
+```clojure
+(require '[c3kit.apron.schema :as s]
+         '[c3kit.bucket.api :as db]
+         '[c3kit.bucket.memory])  ; loads the :memory backend
+
+;; Define a schema
+(def widget
+  {:kind  (s/kind :widget)
+   :id    s/id
+   :name  {:type :string}
+   :color {:type :keyword}})
+
+;; Create an in-memory database
+(def my-db (db/create-db {:impl :memory} [widget]))
+
+;; Save an entity (explicit-db variant)
+(db/tx- my-db {:kind :widget :name "Sprocket" :color :red})
+;; => {:kind :widget, :id 1001, :name "Sprocket", :color :red}
+
+;; Find by attribute (returns a lazy seq)
+(db/find-by- my-db :widget :name "Sprocket")
+;; => ({:kind :widget, :id 1001, :name "Sprocket", :color :red})
+
+;; Look up by id
+(db/entity- my-db :widget 1001)
+;; => {:kind :widget, :id 1001, :name "Sprocket", :color :red}
+```
+
+The id value (`1001` above) is auto-generated and will vary. The same code shape works against any supported backend; only the `{:impl ...}` config map passed to `create-db` changes.
+
+## Supported backends
+
+| Impl key | Platform | Notes | Guide |
+|---|---|---|---|
+| `:memory` | CLJ / CLJS | In-process, ephemeral | — |
+| `:re-memory` | CLJS | Reagent-aware in-memory | — |
+| `:jdbc` | CLJ | Postgres, H2, MSSQL, SQLite (+ pgvector, sqlite-vec) | — |
+| `:datomic` | CLJ | Datomic on-prem (peer) | [docs/datomic-guide.md](docs/datomic-guide.md) |
+| `:datomic-cloud` | CLJ | Datomic Cloud (client) | [docs/datomic-guide.md](docs/datomic-guide.md) |
+| `:indexeddb` | CLJS | Browser persistent storage | [docs/indexeddb-guide.md](docs/indexeddb-guide.md) |
+| `:re-indexeddb` | CLJS | Reagent-aware IndexedDB | [docs/indexeddb-guide.md](docs/indexeddb-guide.md) |
+
+## Core concepts
+
+### Schemas
+
+Schemas are plain Clojure maps validated by [c3kit-apron](https://github.com/cleancoders/c3kit-apron). Every entity schema has a `:kind` declaration (via `s/kind`), an `:id` field, and attribute definitions that describe the type of each field.
+
+```clojure
+(def order
+  {:kind     (s/kind :order)
+   :id       s/id
+   :status   {:type :keyword}
+   :subtotal {:type :bigdec}
+   :placed-at {:type :instant}})
+```
+
+Attribute types include `:string`, `:keyword`, `:long`, `:int`, `:boolean`, `:instant`, `:bigdec`, `:ref`, and collection types like `[:string]` (a sequence of strings). See the apron docs for the full type reference.
+
+### The DB protocol
+
+Every backend implements `c3kit.bucket.api/DB`. Consumers typically call the wrapper functions in `c3kit.bucket.api` (`tx`, `find`, `find-by`, `ffind`, `ffind-by`, `entity`, `entity!`, `count`, `delete`, `reload`, etc.).
+
+Each wrapper has an **explicit-db variant** suffixed with `-` (e.g. `tx-`, `find-by-`, `entity-`) that accepts a DB instance as its first argument. Use these variants when working with multiple databases in the same process, or to avoid touching the global `impl` atom.
+
+## Migrations
+
+Bucket includes a migration system for evolving your schema over time. Migrations are Clojure namespaces with numbered naming conventions; the migrator tracks which have run and executes new ones in order. See [docs/migrations-guide.md](docs/migrations-guide.md) for setup and usage.
+
+## Background tasks
+
+`c3kit.bucket.bg` provides a lightweight scheduled-task manager backed by a `ScheduledThreadPoolExecutor`. Tasks are registered by key and store a `:last-ran-at` timestamp in the database, allowing persistent scheduling across restarts. Refer to the docstrings in `src/clj/c3kit/bucket/bg.clj` for the full public API.
+
+## Development
+
+### Running tests
+
+```bash
+# JVM tests
+clj -M:test:spec
+clj -M:test:spec -a        # auto runner
+
+# ClojureScript tests
+clj -M:test:cljs once
+clj -M:test:cljs           # auto runner
+```
+
+The full SQL suite requires Postgres, MSSQL, SQLite, and sqlite-vec to be available locally. See [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup details.
+
+### PostgreSQL local setup
 
 ```
 $ sudo -u postgres createuser $(whoami)
@@ -38,18 +127,10 @@ $ sudo -u postgres createdb test
 $ sudo -u postgres psql -d test -c "GRANT ALL ON SCHEMA public TO PUBLIC;"
 ```
 
-# Deployment
+## Contributing
 
-In order to deploy to c3kit you must be a member of the Clojars group `com.cleancoders.c3kit`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, environment setup, and the release process.
 
-1. Go to https://clojars.org/tokens and configure a token with the appropriate scope
-2. Set the following environment variables
+## License
 
-```
-CLOJARS_USERNAME=<your username>
-CLOJARS_PASSWORD=<your deploy key>
-```
-
-3. Update VERSION file
-4. `clj -T:build deploy`
-
+MIT — see [LICENSE](LICENSE).
