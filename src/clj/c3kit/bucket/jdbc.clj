@@ -1,5 +1,5 @@
 (ns c3kit.bucket.jdbc
-  (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
+  (:refer-clojure :rename {count core-count reduce core-reduce})
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.apron.log :as log]
@@ -609,7 +609,6 @@
   (let [table-name (table-name schema)]
     (table-exists? db table-name)))
 
-;; TODO - MDM: don't do name translation here, let migration handle it.
 (defn build-installed-schema-legend [db legend]
   (let [db-names->schema-keys (core-reduce (fn [result [kind schema]]
                                              (let [table  (table-name schema)

@@ -1,5 +1,5 @@
 (ns c3kit.bucket.re-memory
-  (:refer-clojure :rename {find core-file count core-count reduce core-reduce})
+  (:refer-clojure :rename {count core-count reduce core-reduce})
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.bucket.api :as api]
@@ -61,7 +61,7 @@
 (deftype ReMemoryDB [legend store]
   api/DB
   (-clear [this] (memory/clear this))
-  (close [_this] (comment "Nothing to do here"))
+  (close [_this] nil)
   (-count [this kind options] (core-count (do-find this kind options)))
   (-delete-all [this kind] (memory/delete-all this kind))
   (-entity [this kind id] (entity this kind id))
