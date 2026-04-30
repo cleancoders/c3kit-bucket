@@ -13,16 +13,19 @@ Migrations live in a dedicated namespace directory. Set `:migration-ns` in your 
  :migration-ns "my.app.migrations"}
 ```
 
-The runner scans `my/app/migrations/` on the classpath for files matching `[0-9]{8}.*\.clj` — eight leading digits followed by any suffix. Files are sorted lexicographically, so the digits act as a timestamp. The recommended convention is `YYYYMMDD` optionally followed by a short description:
+The runner scans `my/app/migrations/` on the classpath for files matching `[0-9]{8}.*\.clj` — eight leading digits followed by any suffix. Files are sorted lexicographically, so the digits act as a timestamp. The recommended convention is `YYYYMMDD` optionally followed by a short description.
+
+When you need multiple migrations on the same date, append a letter suffix (`a`, `b`, `c`, …) directly after the digits so lex order matches the intended run order:
 
 ```
 my/app/migrations/
   20230101.clj
   20230202-add-user-email.clj
-  20230303-drop-legacy-kind.clj
+  20230303a-drop-legacy-kind.clj
+  20230303b-add-replacement-kind.clj
 ```
 
-Names that don't match the eight-digit pattern are silently ignored by the runner.
+Files without eight leading digits don't match the pattern and aren't picked up by the runner.
 
 ### Migration Script Shape
 
@@ -54,6 +57,12 @@ Use the `c3kit.bucket.migrator` API inside migration functions:
 | `migrator/add-attribute!` | Adds an attribute to an existing kind |
 | `migrator/remove-attribute!` | Removes an attribute (and all its values) |
 | `migrator/rename-attribute!` | Renames an attribute within a kind |
+
+### Going Deeper
+
+For more substantive migrations — multi-step data transforms, cross-kind moves, performance considerations on large tables — read [Facing Migrations With Respect](https://cleancoders.com/blog/2025-02-13-facing-migrations-with-respect). It covers the conventions and discipline this project's migrations follow.
+
+If you're working in Claude Code, the [`writing-migrations` skill](https://github.com/cleancoders/agent-plugins/blob/master/plugins/clojure/skills/writing-migrations/SKILL.md) in the `clojure` plugin walks you through the same conventions step-by-step.
 
 ## Running Migrations
 

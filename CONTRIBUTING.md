@@ -2,9 +2,17 @@
 
 c3kit-bucket is a small Clojure/ClojureScript library providing a unified data API across Datomic, SQL databases, IndexedDB, and in-memory stores. Contributions are welcome — keep PRs focused and the scope small.
 
-## Branching
+## Workflow
 
-Branch off `master`. PRs must pass CI before merge.
+**All pull requests must be linked to an open issue.** PRs without a linked issue will be auto-closed without review by the [`require-linked-issue`](./.github/workflows/require-linked-issue.yml) workflow. Open (or find) an issue first, get a thumbs-up from a maintainer, then start work. This protects everyone's time — yours and ours.
+
+1. Open or find an issue describing the bug or proposed change. Wait for maintainer acknowledgement before starting work on anything non-trivial.
+2. Branch off `master`.
+3. Use TDD — write a failing spec first, then the minimum code to make it pass, then refactor.
+4. Keep commits small and focused.
+5. Update `CHANGES.md` with a one-line entry under the relevant version header (skip for doc-only or repo cleanup).
+6. Reference the issue with `Closes #N` (or `Fixes #N` / `Resolves #N`) in your PR description so the linked-issue check passes and the issue auto-closes on merge.
+7. Ensure CI is green before requesting review.
 
 ## Running tests locally
 
