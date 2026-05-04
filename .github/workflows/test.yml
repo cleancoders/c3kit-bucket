@@ -2,7 +2,7 @@ name: Bucket Build
 
 on:
   push:
-    branches: '*'
+    branches: [ master ]
   pull_request:
     branches: [ master ]
 
@@ -80,10 +80,9 @@ jobs:
             ${{ runner.os }}-deps-
 
       - name: Install Clojure CLI
-        run: |
-          curl -L -O https://github.com/clojure/brew-install/releases/latest/download/linux-install.sh
-          chmod +x linux-install.sh
-          sudo ./linux-install.sh
+        uses: DeLaGuardo/setup-clojure@13.4
+        with:
+          cli: 'latest'
 
       - name: Run Clojure Tests
         run: clojure -M:test:spec-ci

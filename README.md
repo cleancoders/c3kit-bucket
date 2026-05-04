@@ -7,6 +7,8 @@ A library component of [c3kit - Clean Coders Clojure Kit](https://github.com/cle
 _"Most men give advice by the bucket, but take it by the grain."_ - William R. Alger
 
 [![Bucket Build](https://github.com/cleancoders/c3kit-bucket/actions/workflows/test.yml/badge.svg)](https://github.com/cleancoders/c3kit-bucket/actions/workflows/test.yml)
+[![Clojars Project](https://img.shields.io/clojars/v/com.cleancoders.c3kit/bucket.svg)](https://clojars.org/com.cleancoders.c3kit/bucket)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## What is bucket?
 
@@ -129,8 +131,11 @@ $ sudo -u postgres psql -d test -c "GRANT ALL ON SCHEMA public TO PUBLIC;"
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, environment setup, and the release process.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, environment
+setup, and the release process. This project follows the
+[Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). Security issues
+should be reported privately — see [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE) © Clean Coders.
