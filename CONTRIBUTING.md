@@ -58,10 +58,16 @@ sudo -u postgres psql -d test -c "GRANT ALL ON SCHEMA public TO PUBLIC;"
 
 **MSSQL**
 
+Set a strong SA password in your shell first (don't commit it):
+
+```bash
+export SA_PASSWORD='your-strong-password-here'
+```
+
 Run via Docker:
 
 ```bash
-docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=Pala2023" \
+docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=$SA_PASSWORD" \
   -p 1433:1433 \
   mcr.microsoft.com/mssql/server:2019-CU27-ubuntu-20.04
 ```
@@ -69,7 +75,7 @@ docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=Pala2023" \
 Then create the database:
 
 ```bash
-sqlcmd -S localhost -U sa -P Pala2023 -Q "CREATE DATABASE bucketTest" -C
+sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -Q "CREATE DATABASE bucketTest" -C
 ```
 
 **SQLite**

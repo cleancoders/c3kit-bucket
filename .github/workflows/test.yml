@@ -33,10 +33,10 @@ jobs:
         ports:
           - 1433:1433
         env:
-          SA_PASSWORD: "Pala2023"
+          SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
           ACCEPT_EULA: "Y"
         options: >-
-          --health-cmd "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Pala2023 -Q 'SELECT 1'"
+          --health-cmd "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $SA_PASSWORD -Q 'SELECT 1'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -59,7 +59,9 @@ jobs:
           sudo apt-get install -y mssql-tools18 unixodbc-dev
 
       - name: Initialize MSSQL Database
-        run: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Pala2023 -Q "CREATE DATABASE bucketTest" -C
+        env:
+          SA_PASSWORD: ${{ secrets.MSSQL_SA_PASSWORD }}
+        run: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -Q "CREATE DATABASE bucketTest" -C
 
       - name: Initialize PostgreSQL Database
         run: |
