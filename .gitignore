@@ -2,6 +2,8 @@
 *.iml
 *.jar
 .DS_Store
+.clj-kondo/.cache
+.clj-kondo/imports
 .cpcache
 .idea
 .nrepl-port
