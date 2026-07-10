@@ -186,7 +186,7 @@
                           (-> (update db [:all] #(apply dissoc % all-ids))
                               (dissoc kind))))))
 
-(defn- do-install-schema! [db schema]
+(defn do-install-schema! [db schema]
   (let [schema (api/-normalize-schema schema)
         kind   (api/-schema-kind schema)]
     (swap! (.-legend db) assoc kind schema)))

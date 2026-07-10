@@ -1,0 +1,8 @@
+name: Security
+on:
+  pull_request: {}
+  workflow_call: {}
+jobs:
+  security:
+    uses: cleancoders/github-actions/.github/workflows/security.yml@v1
+    secrets: inherit
