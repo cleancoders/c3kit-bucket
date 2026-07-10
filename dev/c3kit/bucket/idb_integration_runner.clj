@@ -1,5 +1,6 @@
 (ns c3kit.bucket.idb-integration-runner
   (:require [cljs.build.api :as cljs]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str])
   (:import (com.microsoft.playwright ConsoleMessage Playwright)
@@ -10,7 +11,7 @@
   (accept [_ value] (accept-fn value)))
 
 (def build-config
-  (read-string (slurp (io/resource "config/cljs-integration.edn"))))
+  (edn/read-string (slurp (io/resource "config/cljs-integration.edn"))))
 
 (defn- compile-cljs! []
   (println "Compiling ClojureScript for integration tests...")
