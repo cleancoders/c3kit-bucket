@@ -3,13 +3,15 @@ name: Bucket Build
 on:
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ master ]
+  pull_request: {}
 
 env:
   C3_ENV: ci
 
 jobs:
+  security:
+    uses: cleancoders/github-actions/.github/workflows/security.yml@v1
+
   test:
     runs-on: ubuntu-latest
 
