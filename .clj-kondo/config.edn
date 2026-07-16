@@ -23,11 +23,18 @@
  {;; c3kit's `for-all` is a comprehension macro shaped like `for`.
   c3kit.apron.corec/for-all clojure.core/for
   ;; garden's `defstyles` defines the stylesheet var; treat like `def`.
-  garden.def/defstyles      clojure.core/def
-  ;; Speclj `with` / `with-all` rebind a value used via deref (`@name`);
-  ;; treat like `def` so the binding resolves.
-  speclj.core/with          clojure.core/def
-  speclj.core/with-all      clojure.core/def}
+  garden.def/defstyles      clojure.core/def}
+
+ ;; Speclj's `with` family declares a lazily-evaluated, deref-able symbol
+ ;; (accessed via `@name`). Mapping it to `def` via :lint-as resolves the
+ ;; symbol but trips :inline-def (the def sits inside describe/context). This
+ ;; hook instead rewrites it to `(def sym (atom (do body)))`, which models the
+ ;; deref correctly, keeps the body analyzed, and avoids the inline-def flag.
+ :hooks
+ {:analyze-call {speclj.core/with      hooks.speclj-with/with-binding
+                 speclj.core/with!     hooks.speclj-with/with-binding
+                 speclj.core/with-all  hooks.speclj-with/with-binding
+                 speclj.core/with-all! hooks.speclj-with/with-binding}}
 
  :linters
  {;; --- security posture: escalate ----------------------------------------
@@ -77,4 +84,12 @@
              should-be-ajax-ok should-be-ajax-fail
              should-have-invoked-ajax-get should-have-invoked-ajax-post
              should-have-invoked-ws
-             should-select should-not-select]}}}
+             should-select should-not-select]}}
+
+ ;; Speclj's `with` binds a deref-able value; the hook above models it as a
+ ;; `def`. These namespaces factor reusable spec suites into `defn`s, so that
+ ;; rewritten def sits inside a fn and reads as an inline-def. Disable that one
+ ;; linter for these files only — inline-def stays active everywhere else.
+ :config-in-ns
+ {c3kit.bucket.impl-spec   {:linters {:inline-def {:level :off}}}
+  c3kit.bucket.memory-spec {:linters {:inline-def {:level :off}}}}}
