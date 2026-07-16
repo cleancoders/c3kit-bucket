@@ -5,4 +5,3 @@ on:
 jobs:
   security:
     uses: cleancoders/github-actions/.github/workflows/security.yml@v1
-    secrets: inherit
