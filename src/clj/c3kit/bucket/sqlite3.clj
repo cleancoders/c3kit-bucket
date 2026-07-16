@@ -288,7 +288,7 @@
       (jdbc/execute-one-conn! conn [(str "INSERT INTO " vec0-name "(rowid, " (safe-col-name col) ") VALUES (?, ?)")
                                     id (vec->float32-blob embedding)]))))
 
-(defmethod jdbc/after-tx! :sqlite3 [db conn t-map original result]
+(defmethod jdbc/after-tx! :sqlite3 [_db conn t-map original result]
   (let [vec-fields (vec-fields t-map)]
     (when (seq vec-fields)
       (let [table (:table t-map)

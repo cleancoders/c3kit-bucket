@@ -89,14 +89,6 @@
     (retract-entity store e)
     (install-entity legend store e)))
 
-(defn- ensure-key [k]
-  (if (set? k)
-    (map ensure-key k)
-    (->> [(namespace k) (name k)]
-         (remove nil?)
-         (map keyword)
-         vec)))
-
 (defn- ensure-schema! [legend kind] (legend/for-kind legend kind))
 
 (def ^:private vector-operators #{'<-> '<=> '<#>})

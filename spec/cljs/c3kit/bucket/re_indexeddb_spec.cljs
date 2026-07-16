@@ -6,9 +6,7 @@
             [c3kit.bucket.re-indexeddb]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.memory-spec :as memory-spec]
-            [c3kit.bucket.spec-helperc :as helperc]
             [c3kit.apron.schema :as s]
-            [reagent.core :as r]
             [speclj.core]))
 
 (def config {:impl :re-indexeddb :db-name "test-re-indexeddb"})

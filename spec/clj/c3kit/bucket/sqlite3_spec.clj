@@ -1,6 +1,5 @@
 (ns c3kit.bucket.sqlite3-spec
   (:require [c3kit.apron.schema :as schema]
-            [c3kit.apron.schema]
             [c3kit.apron.time :as time]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.impl-spec :as spec]

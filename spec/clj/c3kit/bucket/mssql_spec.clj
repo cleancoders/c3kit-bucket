@@ -1,8 +1,6 @@
 (ns c3kit.bucket.mssql-spec
   (:require [c3kit.apron.schema :as schema]
-            [c3kit.apron.schema]
             [c3kit.bucket.api :as api]
-            [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.jdbc :as jdbc]
             [c3kit.bucket.jdbc-spec :as jdbc-spec]

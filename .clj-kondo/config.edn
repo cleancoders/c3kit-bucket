@@ -33,12 +33,17 @@
  {;; --- security posture: escalate ----------------------------------------
   ;; Type confusion is a real correctness/security defect — block on it.
   :type-mismatch      {:level :error}
-  ;; No `:refer :all`. Every refer must be explicit.
-  :refer-all          {:level :error}
+  ;; No `:refer :all` in production code. Speclj's public API is a large set of
+  ;; macros (describe/it/should*/...) documented for use via `:refer :all`;
+  ;; excluding it keeps the ban meaningful for real code.
+  :refer-all          {:level :error :exclude [speclj.core]}
   ;; The sloppy code where bugs hide — surface, don't block.
   :unused-binding     {:level :warning}
-  :shadowed-var       {:level :warning}
   :unused-private-var {:level :warning}
+  ;; Off: this codebase deliberately reuses accessor names (dialect/db/entity)
+  ;; and clojure.core names (type/key/name) as locals/params holding the
+  ;; corresponding value — a benign, pervasive idiom here, not a bug source.
+  :shadowed-var       {:level :off}
 
   ;; --- Speclj / c3kit.wire DSL: symbol-resolution only -------------------
   ;; These macros are referred but cannot be resolved without jar analysis, so

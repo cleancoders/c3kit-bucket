@@ -135,7 +135,7 @@
 
         (it "pass"
           (sut/-attempt-lock! @config)
-          (future (do (Thread/sleep 500) (sut/-release-lock! @config)))
+          (future (Thread/sleep 500) (sut/-release-lock! @config))
           (with-redefs [sut/lock-wait-time   1000
                         sut/lock-check-delay 100]
             (should-not-throw (sut/-wait-for-unlock! @config))))))

@@ -1,9 +1,8 @@
 (ns c3kit.bucket.re-memory-spec
   (:require-macros [c3kit.bucket.api :refer [with-safety-off]]
-                   [speclj.core :refer [around before context describe focus-context focus-it it redefs-around should should-be-nil should-contain should-not-contain should-not-throw should-throw should= with]])
+                   [speclj.core :refer [around before context describe it should-be-nil should-contain should-not-contain should=]])
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.time :as time]
-            [c3kit.bucket.api]
             [c3kit.bucket.api :as db]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.memory-spec :as memory-spec]

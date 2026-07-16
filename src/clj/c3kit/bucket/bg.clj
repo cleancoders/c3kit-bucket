@@ -16,7 +16,7 @@
 
 (defonce background (app/resolution :background))
 
-(defn ^ScheduledThreadPoolExecutor executor [] (when @background (:executor @@background)))
+(defn executor ^ScheduledThreadPoolExecutor [] (when @background (:executor @@background)))
 
 (defn stop
   "Shut down the background task manager. Immediately halts the executor and
@@ -47,11 +47,11 @@
         (log/error "Background Error:")
         (log/error e)))))
 
-(defn ^ScheduledFuture schedule
+(defn schedule
   "Register a recurring background task under key that runs every period milliseconds.
   Persists a :bg-task entity so that restart honors the last-ran-at timestamp and
   computes the correct initial delay. Returns the underlying ScheduledFuture."
-  [key period ^Runnable task]
+  ^ScheduledFuture [key period ^Runnable task]
   (log/info "Scheduling task: " key period)
   (let [record           (or (db/ffind-by :bg-task :key key) (new-task-record! key))
         millis-since-ran (time/millis-between (time/now) (:last-ran-at record))

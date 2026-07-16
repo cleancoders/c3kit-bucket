@@ -1,5 +1,5 @@
 (ns c3kit.bucket.idb-reader-spec
-  (:require-macros [speclj.core :refer [describe context it should= should-contain]])
+  (:require-macros [speclj.core :refer [describe context it should=]])
   (:require [c3kit.bucket.idb-io :as io]
             [c3kit.bucket.idb-reader :as sut]
             [speclj.core]))

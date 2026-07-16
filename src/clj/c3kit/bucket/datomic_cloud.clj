@@ -162,21 +162,21 @@
 
 (deftype DatomicCloudApi [config client conn]
   common-api/DatomicApi
-  (connect [this] (reset! conn (connect config client)))
-  (db [this] (datomic/db @conn))
-  (transact [this transaction] (datomic/transact @conn {:tx-data transaction}))
-  (delete-database [this]
+  (connect [_this] (reset! conn (connect config client)))
+  (db [_this] (datomic/db @conn))
+  (transact [_this transaction] (datomic/transact @conn {:tx-data transaction}))
+  (delete-database [_this]
     (datomic/delete-database client config))
-  (as-of [this t] (datomic/as-of (datomic/db @conn) t))
-  (q [this query] (datomic/q query (datomic/db @conn)))
-  (q [this query db args]
+  (as-of [_this t] (datomic/as-of (datomic/db @conn) t))
+  (q [_this query] (datomic/q query (datomic/db @conn)))
+  (q [_this query db args]
     (apply datomic/q query db args))
-  (history [this]
+  (history [_this]
     (datomic/history (datomic/db @conn)))
-  (do-find [this db kind options] (do-find db kind options))
-  (tx [this db e] (tx db e))
-  (tx* [this db entities] (tx* db entities))
-  (d-entity [this ddb eid] (pull-entity ddb eid)))
+  (do-find [_this db kind options] (do-find db kind options))
+  (tx [_this db e] (tx db e))
+  (tx* [_this db entities] (tx* db entities))
+  (d-entity [_this ddb eid] (pull-entity ddb eid)))
 
 (defmethod api/-create-impl :datomic-cloud [config schemas]
   (let [datomic-client (datomic/client config)

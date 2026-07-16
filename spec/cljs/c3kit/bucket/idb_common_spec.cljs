@@ -20,7 +20,7 @@
   (context "sync!"
 
     (it "invokes callback with empty vector when idb-atom is nil"
-      (let [db      (indexeddb/->IndexedDB (atom legend) (atom {}) (atom nil) "test" (constantly true) memory/entity memory/do-find)
+      (let [db      (indexeddb/->IndexedDB (atom legend) (atom {}) (atom nil) "test" (constantly true) :primary memory/entity memory/do-find)
             called? (atom false)]
         (reset! api/impl db)
         (sut/sync! (fn [entities]

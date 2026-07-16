@@ -1,5 +1,5 @@
 (ns c3kit.bucket.idb-integration-test
-  (:require [cljs.test :refer-macros [deftest async is testing]]
+  (:require [cljs.test :refer-macros [deftest async is]]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.idb-common :as idb]
             [c3kit.bucket.idb-io :as io]
@@ -18,7 +18,7 @@
   (let [rc (:report-counters env)]
     {:fail (:fail rc 0) :error (:error rc 0)}))
 
-(defmethod cljs.test/report [:cljs.test/default :begin-test-var] [m]
+(defmethod cljs.test/report [:cljs.test/default :begin-test-var] [_m]
   (reset! counters-before (report-counters (cljs.test/get-current-env))))
 
 (defmethod cljs.test/report [:cljs.test/default :end-test-var] [m]
@@ -208,7 +208,7 @@
                         (reset! online? true)
                         (api/close db)
                         (idb/init!)))
-               (.then (fn [db]
+               (.then (fn [_db]
                    ;; Sync should still find the dirty entity
                         (idb/sync! (fn [entities] (reset! synced entities)))))
                (.then (fn [_]

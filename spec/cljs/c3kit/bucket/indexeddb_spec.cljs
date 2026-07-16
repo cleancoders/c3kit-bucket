@@ -1,12 +1,11 @@
 (ns c3kit.bucket.indexeddb-spec
-  (:require-macros [speclj.core :refer [around before context describe it should should= should-not-be-nil]]
+  (:require-macros [speclj.core :refer [around before context describe it should should=]]
                    [c3kit.bucket.api :refer [with-safety-off]])
   (:require [c3kit.bucket.api :as api]
             [c3kit.bucket.idb-common :as idb]
             [c3kit.bucket.indexeddb]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.memory-spec :as memory-spec]
-            [c3kit.bucket.spec-helperc :as helperc]
             [c3kit.apron.schema :as s]
             [speclj.core]))
 
@@ -143,7 +142,7 @@
             db      (api/create-db {:impl :indexeddb :db-name "test-mem-7" :online? #(deref online?)} [bibelot])
             saved   (api/-tx db {:kind :bibelot :name "existing"})]
         (reset! online? false)
-        (let [results (api/-tx* db [{:kind :bibelot :name "new-offline"} (assoc saved :db/delete? true)])]
+        (let [_results (api/-tx* db [{:kind :bibelot :name "new-offline"} (assoc saved :db/delete? true)])]
           (should= 1 (count (api/find-by- db :bibelot :name "new-offline")))
           (should= 0 (count (api/find-by- db :bibelot :name "existing")))))))
 

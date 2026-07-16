@@ -39,7 +39,7 @@
 ;; Note: H2 doesn't need a cast for JSON - it accepts the string directly
 ;; Using CAST(? AS json) causes H2 to double-encode the value
 
-(defmethod jdbc/build-upsert-sql :h2 [dialect t-map {:keys [id] :as entity}]
+(defmethod jdbc/build-upsert-sql :h2 [dialect t-map entity]
   (let [{:keys [table key->col key->type key->cast]} t-map
         used-key->col (select-keys key->col (keys entity))
         ->sql-args    (partial jdbc/->sql-args dialect used-key->col key->type key->cast entity)

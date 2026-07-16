@@ -3,7 +3,7 @@
   (:require [c3kit.apron.corec :as ccc]
             [c3kit.apron.legend :as legend]
             [c3kit.bucket.api :as api]
-            [c3kit.bucket.memory :refer [MemoryDB] :as memory]
+            [c3kit.bucket.memory :as memory]
             [c3kit.bucket.migrator :as migrator]
             [reagent.core :as r]))
 
@@ -69,11 +69,11 @@
   (-tx [this entity] (memory/tx this entity))
   (-tx* [this entities] (memory/tx* this entities))
   migrator/Migrator
-  (-schema-exists? [this schema] (contains? @legend (-> schema :kind :value)))
-  (-installed-schema-legend [this _expected-legend] @legend)
+  (-schema-exists? [_this schema] (contains? @legend (-> schema :kind :value)))
+  (-installed-schema-legend [_this _expected-legend] @legend)
   (-install-schema! [this schema] (memory/do-install-schema! this schema))
   (-add-attribute! [this schema attr] (migrator/-add-attribute! this (-> schema :kind :value) attr (get schema attr)))
-  (-add-attribute! [this kind attr spec] (swap! legend assoc-in [kind attr] spec))
+  (-add-attribute! [_this kind attr spec] (swap! legend assoc-in [kind attr] spec))
   (-remove-attribute! [this kind attr] (memory/do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (memory/do-rename-attribute! this kind attr new-kind new-attr)))
 

@@ -1,5 +1,5 @@
 (ns c3kit.bucket.idb-io-spec
-  (:require-macros [speclj.core :refer [before context describe it should should= should-not= should-be-nil with-stubs]])
+  (:require-macros [speclj.core :refer [before context describe it should= should-not= should-be-nil]])
   (:require [c3kit.bucket.idb-io :as sut]
             [speclj.core]))
 
