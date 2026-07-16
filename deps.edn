@@ -1,14 +1,25 @@
-{
- :paths   ["src/clj" "src/cljc" "src/cljs"]
- :deps    {
-           com.cleancoders.c3kit/apron {:mvn/version "2.5.0"}
-           cljsjs/hashids              {:mvn/version "1.0.2-0"}
-           jstrutz/hashids             {:mvn/version "1.0.1"}
-           org.clojure/clojure         {:mvn/version "1.12.4"}
-           }
- :aliases {
-           :test            {:extra-deps    {
-                                             reagent/reagent                   {:mvn/version "2.0.1"}
+{:paths   ["src/clj" "src/cljc" "src/cljs"]
+ :deps    {com.cleancoders.c3kit/apron           {:mvn/version "2.5.0"}
+           ;; Override transitive jackson-core (via apron -> transit) to patch
+           ;; CVE-2025-52999 (HIGH) and GHSA-72hv-8253-57qq (MEDIUM).
+           com.fasterxml.jackson.core/jackson-core {:mvn/version "2.18.6"}
+           cljsjs/hashids                        {:mvn/version "1.0.2-0"}
+           jstrutz/hashids                       {:mvn/version "1.0.1"}
+           org.clojure/clojure                   {:mvn/version "1.12.4"}}
+ :aliases {:antq            {:deps      {com.github.liquidz/antq {:mvn/version "2.11.1276"}}
+                             :main-opts ["-m" "antq.core"]}
+           :build           {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.10.10"}
+                                           clj-commons/pomegranate       {:mvn/version "1.2.25"}}
+                             :ns-default  build
+                             :extra-paths ["dev"]}
+           :clj-watson      {:replace-deps {io.github.clj-holmes/clj-watson {:git/tag "v6.1.0"
+                                                                             :git/sha "be98e4db74fb8927db4825cc73bbe2606e44e5e3"}}
+                             :main-opts    ["-m" "clj-watson.cli"]}
+           :cljs            {:main-opts ["-m" "c3kit.scaffold.cljs"]}
+           :idb-integration {:main-opts ["-m" "c3kit.bucket.idb-integration-runner"]}
+           :spec            {:main-opts ["-m" "speclj.main" "-c" "-t" "~slow"]}
+           :spec-ci         {:main-opts ["-m" "speclj.main" "-c"]}
+           :test            {:extra-deps    {reagent/reagent                   {:mvn/version "2.0.1"}
                                              clj-commons/pomegranate           {:mvn/version "1.2.25"}
                                              com.cleancoders.c3kit/scaffold    {:mvn/version "2.3.2"}
                                              com.cleancoders.c3kit/wire        {:mvn/version "3.0.0"}
@@ -25,23 +36,8 @@
                                              org.xerial/sqlite-jdbc            {:mvn/version "3.51.2.0"}
                                              speclj/speclj                     {:mvn/version "3.10.0"}
                                              cljsjs/react                      {:mvn/version "18.3.1-1"}
-                                             cljsjs/react-dom                  {:mvn/version "18.3.1-1"}
-                                             }
-                             :override-deps {
-                                             ;com.cleancoders.c3kit/apron    {:local/root "../apron"}
+                                             cljsjs/react-dom                  {:mvn/version "18.3.1-1"}}
+                             :override-deps {                                             ;com.cleancoders.c3kit/apron    {:local/root "../apron"}
                                              ;com.cleancoders.c3kit/scaffold {:local/root "../scaffold"}
                                              }
-                             :extra-paths   ["dev" "spec/clj" "spec/cljc" "spec/cljs"]}
-           :spec            {:main-opts ["-m" "speclj.main" "-c" "-t" "~slow"]}
-           :spec-ci         {:main-opts ["-m" "speclj.main" "-c"]}
-           :cljs            {:main-opts ["-m" "c3kit.scaffold.cljs"]}
-           :idb-integration {:main-opts ["-m" "c3kit.bucket.idb-integration-runner"]}
-           :antq            {:deps      {com.github.liquidz/antq {:mvn/version "2.11.1276"}}
-                             :main-opts ["-m" "antq.core"]}
-           :build           {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.10.10"}
-                                           clj-commons/pomegranate       {:mvn/version "1.2.25"}}
-                             :ns-default  build
-                             :extra-paths ["dev"]
-                             }
-           }
- }
+                             :extra-paths   ["dev" "spec/clj" "spec/cljc" "spec/cljs"]}}}

@@ -22,3 +22,4 @@ pom.xml.asc
 sqlite_test.db
 .worktrees/
 .beads/
+.security-session-start-sha

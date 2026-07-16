@@ -1,3 +1,9 @@
+### 2.13.2
+* Overrode the transitive `com.fasterxml.jackson.core/jackson-core` dependency (pulled in via `apron` → `transit`) to `2.18.6`, patching CVE-2025-52999 (High) and GHSA-72hv-8253-57qq (Medium)
+* Added CI security scanning via a central reusable workflow: `clj-watson` (dependency CVEs), `clj-holmes`, `clj-kondo`, `semgrep`, `gitleaks`, and `shellcheck`
+* Hardened CI workflows: pinned all GitHub Actions to full commit SHAs and removed an unused `secrets: inherit`
+* Merged the standalone Security workflow into the `Bucket Build` workflow so the security scan and test suite run as parallel jobs
+
 ### 2.13.1
 * Fixed `c3kit.bucket.migrator/rename-attribute!-` (explicit-db arity); previous body had a stranded vector literal that would have prevented future modifications from working correctly
 * Replaced unconditional `println` calls in `c3kit.bucket.seed` with `log/info` so callers can silence them via standard log config
