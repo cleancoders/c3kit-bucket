@@ -4,14 +4,13 @@
             [speclj.core #?(:clj :refer :cljs :refer-macros) [describe it should= should-not-be-nil should-contain]]
             [c3kit.bucket.api :as db]
             [c3kit.bucket.seed :as sut]
-            [c3kit.apron.schema :as s]
             [c3kit.bucket.impl-spec :as impl-spec]
             [c3kit.bucket.spec-helperc :as helper]))
 
 (def bibelot
   (schema/merge-schemas
     impl-spec/bibelot
-    {:id     s/id
+    {:id     schema/id
      :happy? {:type :boolean}}))
 
 (describe "Seed"

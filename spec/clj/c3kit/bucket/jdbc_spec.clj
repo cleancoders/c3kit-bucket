@@ -1,7 +1,6 @@
 (ns c3kit.bucket.jdbc-spec
   (:require [c3kit.apron.log :as log]
             [c3kit.apron.schema :as schema]
-            [c3kit.apron.schema :as s]
             [c3kit.apron.time :as time]
             [c3kit.apron.utilc :as utilc]
             [c3kit.bucket.api :as api]
@@ -14,17 +13,17 @@
   (:import (com.mchange.v2.c3p0 PooledDataSource)))
 
 (def reserved-word-entity
-  {:kind  (assoc (s/kind :reserved-word-entity) :db {:name "select"}) ;; select is a reserved word
+  {:kind  (assoc (schema/kind :reserved-word-entity) :db {:name "select"}) ;; select is a reserved word
    :id    {:type :int :db {:type "serial PRIMARY KEY"}}
    :where {:type :int}})                                    ;; where is a reserved word
 
 (def json-entity
-  {:kind  (assoc (s/kind :json-entity) :db {:name "json_entity"})
+  {:kind  (assoc (schema/kind :json-entity) :db {:name "json_entity"})
    :id    {:type :int :db {:type "serial PRIMARY KEY"}}
    :stuff {:type :string :db {:type "jsonb"}}})
 
 (def str-id-entity
-  {:kind  (assoc (s/kind :str-id-entity) :db {:name "str_id_entity"})
+  {:kind  (assoc (schema/kind :str-id-entity) :db {:name "str_id_entity"})
    :id    {:type :string :db {:type "varchar(255) PRIMARY KEY"} :strategy :pre-populated}
    :value {:type :int}})
 
@@ -40,7 +39,7 @@
      :color {:db {:type "varchar(55)"}}}))
 
 (def bibelot-2
-  {:kind  (assoc (s/kind :bibelot) :db {:table "BIBELOT"})
+  {:kind  (assoc (schema/kind :bibelot) :db {:table "BIBELOT"})
    :id    {:type :long :db {:type "serial PRIMARY KEY" :column "Number"}}
    :name  {:type :string :db {:type "varchar(42)" :column "Name"}}
    :size  {:type :long :db {:type "int"}}
@@ -63,7 +62,7 @@
      :truthy? {:db {:column "truthy"}}}))
 
 (def variform
-  {:kind (s/kind :variform)
+  {:kind (schema/kind :variform)
    :id   {:type :ref :db {:type "serial PRIMARY KEY"}}})
 
 (def now (time/now))
@@ -489,7 +488,7 @@
 
       ;(before (log/debug!))
       (def h2-json-entity
-        {:kind  (assoc (s/kind :json-entity) :db {:name "json_entity"})
+        {:kind  (assoc (schema/kind :json-entity) :db {:name "json_entity"})
          :id    {:type :int :db {:type "serial PRIMARY KEY"}}
          :stuff {:type :string :db {:type "json"}}})
       ;; don't use the json type with h2 unless you really need to for some reason.  Use varchar instead.

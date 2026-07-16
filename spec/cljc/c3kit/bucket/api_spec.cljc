@@ -1,6 +1,5 @@
 (ns c3kit.bucket.api-spec
-  (:require [c3kit.bucket.api :as api]
-            [c3kit.bucket.impl-spec :as spec]
+  (:require [c3kit.bucket.impl-spec :as spec]
             [speclj.core #?(:clj :refer :cljs :refer-macros) [context describe it should-contain should-have-invoked
                                                               should-not-contain should-throw should= stub with-stubs]]
             [c3kit.bucket.api :as sut #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
@@ -87,7 +86,7 @@
                  (should= [spec/bibelot spec/doodad spec/thingy] schemas)))))
 
          (it "stop"
-           (with-redefs [api/close (stub :close)]
+           (with-redefs [sut/close (stub :close)]
              (let [app (sut/-stop-service {:bucket/impl    :blah
                                            :bucket/config  :blah
                                            :bucket/schemas :blah})]

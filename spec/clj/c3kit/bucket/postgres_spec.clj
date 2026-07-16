@@ -1,6 +1,5 @@
 (ns c3kit.bucket.postgres-spec
-  (:require [c3kit.apron.utilc :as util]
-            [c3kit.apron.utilc :as utilc]
+  (:require [c3kit.apron.utilc :as utilc]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.impl-spec :as spec]
             [c3kit.bucket.jdbc :as jdbc]
@@ -149,7 +148,7 @@
           (let [data  {:foo "bar" :count 42}
                 json  (utilc/->json data)
                 saved (jdbc/tx @db {:kind :json-entity :stuff json})]
-            (should= data (util/<-json-kw (:stuff saved)))
+            (should= data (utilc/<-json-kw (:stuff saved)))
             (should= data (-> (jdbc/entity @db :json-entity (:id saved))
                               :stuff
-                              util/<-json-kw))))))))
+                              utilc/<-json-kw))))))))
