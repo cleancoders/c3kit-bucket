@@ -1,3 +1,8 @@
+### 2.14.0
+* Upgraded `apron` to `3.0.1`, which pins `com.fasterxml.jackson.core/jackson-core` to `2.18.6` transitively (patching CVE-2025-52999 (High) and GHSA-72hv-8253-57qq (Medium)). **Note:** apron `3.0.0` was a breaking major release restructuring the ref/registry system into a `lexicon`; consumers relying on apron's schema internals transitively via bucket should review the apron `3.0.0` changelog
+* Removed bucket's direct `jackson-core` override; the CVE fix now comes from apron's own pin
+* Migrated to apron `3.0.x` API: replaced the removed `schema/type-coercer!` with `schema/coerce-value!` in `api/-coerced-id`, and the removed `corec/map-some` with `keep` in `memory/rename-attribute!`
+
 ### 2.13.2
 * Overrode the transitive `com.fasterxml.jackson.core/jackson-core` dependency (pulled in via `apron` → `transit`) to `2.18.6`, patching CVE-2025-52999 (High) and GHSA-72hv-8253-57qq (Medium)
 * Added CI security scanning via a central reusable workflow: `clj-watson` (dependency CVEs), `clj-holmes`, `clj-kondo`, `semgrep`, `gitleaks`, and `shellcheck`

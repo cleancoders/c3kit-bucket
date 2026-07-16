@@ -19,8 +19,7 @@
   (-find [this kind options])
   (-reduce [this kind f init options])
   (-tx [this entity])
-  (-tx* [this entities])
-  )
+  (-tx* [this entities]))
 
 #?(:clj  (defonce impl (app/resolution! :bucket/impl))
    :cljs (def impl (atom nil)))
@@ -30,11 +29,10 @@
 (defn -coerced-id
   ([legend kind id] (-coerced-id (-id-type legend kind) id))
   ([type id]
-   (let [coerce (schema/type-coercer! type)]
-     (try (coerce id)
-          (catch #?(:clj Exception :cljs :default) e
-            (log/warn (str "failed to coerce id of type " type " - " (ex-message e)))
-            id)))))
+   (try (schema/coerce-value! {:type type} id)
+        (catch #?(:clj Exception :cljs :default) e
+          (log/warn (str "failed to coerce id of type " type " - " (ex-message e)))
+          id))))
 
 (defn -schema-kind [schema]
   (or (-> schema :kind :value)
@@ -42,8 +40,8 @@
 
 (defn -normalize-schema [schema]
   (cond-> schema
-          (contains? schema :kind)
-          schema/normalize-schema))
+    (contains? schema :kind)
+    schema/normalize-schema))
 
 (defn -kvs->kv-pairs [kvs]
   (assert (even? (core/count kvs)) "filter params must come in pairs")
@@ -316,8 +314,8 @@ Requires the *safety* be turned off."
             schemas     (flatten (util/var-value schemas-var))
             impl        (create-db config schemas)]
         (assoc app :bucket/impl impl
-                   :bucket/config config
-                   :bucket/schemas schemas)))))
+               :bucket/config config
+               :bucket/schemas schemas)))))
 
 #?(:clj
    (defn -stop-service

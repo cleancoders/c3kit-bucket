@@ -1,8 +1,5 @@
 {:paths   ["src/clj" "src/cljc" "src/cljs"]
- :deps    {com.cleancoders.c3kit/apron           {:mvn/version "2.5.0"}
-           ;; Override transitive jackson-core (via apron -> transit) to patch
-           ;; CVE-2025-52999 (HIGH) and GHSA-72hv-8253-57qq (MEDIUM).
-           com.fasterxml.jackson.core/jackson-core {:mvn/version "2.18.6"}
+ :deps    {com.cleancoders.c3kit/apron           {:mvn/version "3.0.1"}
            cljsjs/hashids                        {:mvn/version "1.0.2-0"}
            jstrutz/hashids                       {:mvn/version "1.0.1"}
            org.clojure/clojure                   {:mvn/version "1.12.4"}}
