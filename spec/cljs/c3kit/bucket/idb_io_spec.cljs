@@ -53,6 +53,4 @@
         (should= entity (sut/js->clj-entity (sut/clj->js-entity entity)))))
 
     (it "round-trips nil for nil input"
-      (should= nil (sut/js->clj-entity nil))))
-
-  )
+      (should= nil (sut/js->clj-entity nil)))))

@@ -29,7 +29,5 @@
     (log/capture-logs
       (let [hash-fns (sut/hashid-fns "abcdefg" 30)          ;; magic combo
             ->id     (:hash->id hash-fns)]
-        (should= nil (->id "blah")))))
-
-  )
+        (should= nil (->id "blah"))))))
 

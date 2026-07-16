@@ -83,8 +83,7 @@
    :kw-ref  "varchar"
    :instant "timestamp without time zone"
    :date    "date"
-   :string  "varchar"
-   })
+   :string  "varchar"})
 
 (defn schema-type->db-type [dialect type]
   (get (schema->db-type-map dialect) type))
@@ -142,8 +141,8 @@
 
 (defn ->field-name [dialect {:keys [table key->col]} k]
   (cond->> (->safe-name dialect (get key->col k))
-           (not (namespace k))
-           (str (->safe-name dialect table) \.)))
+    (not (namespace k))
+    (str (->safe-name dialect table) \.)))
 
 (defmulti spec->db-type (fn [dialect _spec] dialect))
 (defmethod spec->db-type :default [_ spec] (:type spec))
@@ -254,8 +253,7 @@
      :key->type    k->t
      :key->cast    k->cast
      :key->distance k->dist
-     :builder-fn   (partial col->key-builder dialect {:col->key c->k :key->type k->t})
-     }))
+     :builder-fn   (partial col->key-builder dialect {:col->key c->k :key->type k->t})}))
 
 (defn key-map
   ([db kind] (key-map (dialect db) @(.-legend db) (.-mappings db) kind))

@@ -64,10 +64,9 @@
         (let [attribute (sut/spec->attribute :foo :name {:type :string :db []} true)]
           (should= false (:db/fulltext attribute)))
         (let [attribute (sut/spec->attribute :foo :name {:type :string :db [:fulltext]} true)]
-          (should= true (:db/fulltext attribute))))
-      )
+          (should= true (:db/fulltext attribute)))))
 
-    ;; TODO [BAC]: This context is too tightly coupled to implementation
+;; TODO [BAC]: This context is too tightly coupled to implementation
     (context "attribute->spec"
 
       (it "ignores any without a valueType, which could be just the db"
@@ -136,9 +135,7 @@
         (let [attribute (sut/spec->attribute :foo :names {:type :string} false)]
           (should-not-contain :db/index attribute))
         (let [attribute (sut/spec->attribute :foo :names {:type :string :db [:index]} true)]
-          (should-contain :db/index attribute)))
-
-      )
+          (should-contain :db/index attribute))))
 
     (it "entity"
       (let [schema (sut/->entity-schema {:kind (s/kind :bar)
@@ -156,8 +153,7 @@
       (let [schema (sut/->enum-schema {:enum :thing :values [:foo :bar]})]
         (should= 2 (count schema))
         (should-contain {:db/ident :thing/foo} schema)
-        (should-contain {:db/ident :thing/bar} schema)))
-    )
+        (should-contain {:db/ident :thing/bar} schema))))
 
   (context "partition"
 
@@ -171,5 +167,4 @@
 
     (it "schema"
       (should= [{:db/id "test", :db/ident :test} [:db/add :db.part/db :db.install/partition "test"]] (sut/partition-schema :test))
-      (should= [{:db/id "newbie", :db/ident :newbie} [:db/add :db.part/db :db.install/partition "newbie"]] (sut/partition-schema :newbie)))
-    ))
+      (should= [{:db/id "newbie", :db/ident :newbie} [:db/add :db.part/db :db.install/partition "newbie"]] (sut/partition-schema :newbie)))))

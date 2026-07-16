@@ -41,5 +41,4 @@
           optimus   (sut/entity :bibelot {:name "Optimus"} {:happy? true})]
       (log/capture-logs
         @optimus)
-      (should-contain "EXISTS:" (log/captured-logs-str))))
-  )
+      (should-contain "EXISTS:" (log/captured-logs-str)))))

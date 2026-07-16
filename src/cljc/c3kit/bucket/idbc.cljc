@@ -59,9 +59,9 @@
     true
     (let [claimed? (atom false)]
       (swap! processed-syncs
-        (fn [syncs]
-          (if (contains? syncs sync-id)
-            (do (reset! claimed? false) syncs)
-            (do (reset! claimed? true) (conj syncs sync-id)))))
+             (fn [syncs]
+               (if (contains? syncs sync-id)
+                 (do (reset! claimed? false) syncs)
+                 (do (reset! claimed? true) (conj syncs sync-id)))))
       (trim-processed-syncs!)
       @claimed?)))

@@ -52,8 +52,6 @@
             (jdbc/execute! db "CREATE EXTENSION IF NOT EXISTS vector")))
         (spec/order-by-vector-specs config))
 
-
-
       (context "migrator"
 
         (with db (api/create-db config []))
@@ -139,10 +137,7 @@
             (jdbc-spec/should-regurgitate-spec @db {:type :string :db {:type "varchar(123)"}}))
 
           (it "numeric"
-            (jdbc-spec/should-regurgitate-spec @db {:type :bigdec :db {:type "numeric(4,3)"}}))
-
-          )
-        )
+            (jdbc-spec/should-regurgitate-spec @db {:type :bigdec :db {:type "numeric(4,3)"}}))))
 
       (context "json"
 
@@ -157,8 +152,4 @@
             (should= data (util/<-json-kw (:stuff saved)))
             (should= data (-> (jdbc/entity @db :json-entity (:id saved))
                               :stuff
-                              util/<-json-kw)))))
-
-      )
-    )
-  )
+                              util/<-json-kw))))))))

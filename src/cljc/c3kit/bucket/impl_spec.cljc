@@ -73,8 +73,7 @@
         (should= nil (sut/entity :bibelot -1))
         (should= nil (sut/entity :bibelot nil))
         (should= nil (sut/entity :bibelot ""))
-        (should= nil (sut/entity :bibelot "-1"))
-        ))
+        (should= nil (sut/entity :bibelot "-1"))))
 
     (it "tx nil entities"
       (should-not-throw (sut/tx nil))
@@ -212,8 +211,7 @@
       (it "it clears the db"
         (sut/tx {:kind :bibelot :name "hello"})
         (sut/clear)
-        (should= [] (sut/find :bibelot)))
-      )
+        (should= [] (sut/find :bibelot))))
 
     (context "tx*"
 
@@ -233,11 +231,7 @@
                                   {:kind :bibelot :name "thing 2"}
                                   {:kind :blah :crash "burn"}]))
           (should= b1 (sut/reload b1))
-          (should= nil (sut/ffind-by :bibelot :name "thing 2"))
-          ))
-      )
-    )
-  )
+          (should= nil (sut/ffind-by :bibelot :name "thing 2")))))))
 
 (defn multi-value-fields [config]
   (context "multi-value fields"
@@ -288,9 +282,7 @@
         (should= (set [d1 d2]) (set-find-by :doodad :names ["foo" "BLAH"]))
         (should= (set [d1 d2]) (set-find-by :doodad :names ["bar" "bang"]))
         (should= [d1] (sut/find-by :doodad :names ["bar" "BLAH"]))
-        (should= [] (sut/find-by :doodad :names ["ARG" "BLAH"]))))
-    )
-  )
+        (should= [] (sut/find-by :doodad :names ["ARG" "BLAH"]))))))
 
 (defn kind-in-entity-is-optional [config]
   (context "kind in (entity) is optional"
@@ -307,9 +299,7 @@
       (let [foo (sut/tx {:kind :bibelot :name "foo"})]
         (should= foo (sut/entity! (:id foo)))
         (should= foo (sut/entity! :bibelot (:id foo)))
-        (should-throw (sut/entity! :thingy (:id foo)))))
-    )
-  )
+        (should-throw (sut/entity! :thingy (:id foo)))))))
 
 (defn kind-is-required [db-ctor]
   (context "kind is required"
@@ -324,9 +314,7 @@
     (it "entity!"
       (let [foo (sut/tx {:kind :bibelot :name "foo"})]
         (should-throw #?(:clj UnsupportedOperationException) (sut/entity! (:id foo)))
-        (should-throw (sut/entity! :thingy (:id foo)))))
-    )
-  )
+        (should-throw (sut/entity! :thingy (:id foo)))))))
 
 (defn find-specs [config]
   (context "find"
@@ -446,11 +434,7 @@
 
       (it "ffind-by"
         (let [world (sut/ffind-by :bibelot :name "world" :size 2)]
-          (should= "world" (:name world))))
-
-      )
-    )
-  )
+          (should= "world" (:name world)))))))
 
 (defn filter-specs [config]
   (context "filters"
@@ -614,10 +598,7 @@
               result-names (map :name result)]
           (should-contain "world" result-names)
           (should-not-contain "words" result-names)
-          (should-not-contain "hello" result-names)))
-      )
-    )
-  )
+          (should-not-contain "hello" result-names))))))
 
 (defn reduce-specs [config]
   (context "reduce"
@@ -639,9 +620,7 @@
 
     (it "reduced map"
       (should= {"world" [2] "hi!" [2]} (sut/reduce :bibelot #(update %1 (:name %2) conj (:size %2)) {}
-                                                   :where {:size ['not= nil]})))
-    )
-  )
+                                                   :where {:size ['not= nil]})))))
 
 (defn count-specs [config]
   (context "count"
@@ -680,10 +659,7 @@
           (should= 0 (sut/count-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
           (should= 1 (sut/count-by :bibelot :size 2 :id (:id b3)))
           (should= 2 (sut/count-by :bibelot :name "world" :id [(:id b2) (:id b3)]))
-          (should= 2 (sut/count-by :bibelot :size 2 :id [(:id b3) (:id b4)]))))
-      )
-    )
-  )
+          (should= 2 (sut/count-by :bibelot :size 2 :id [(:id b3) (:id b4)])))))))
 
 (defn nil-value-specs [config]
 
@@ -699,7 +675,6 @@
                             :truthy? true
                             :fizz    1234
                             :bang    (time/now)}))
-
 
     (it "can set a string to nil"
       (let [result (sut/tx (assoc @original :foo nil))]
@@ -724,9 +699,7 @@
     (it "can set an instant to nil"
       (let [result (sut/tx (assoc @original :bang nil))]
         (should-be-nil (:bang result))
-        (should-be-nil (:bang (sut/reload @original)))))
-    )
-  )
+        (should-be-nil (:bang (sut/reload @original)))))))
 
 (defn cas [config]
 
@@ -765,11 +738,7 @@
             green (sut/tx {:kind :bibelot :name "green" :size 2 :color "green"})]
         (should-throw (sut/tx* [(sut/cas {:name "blue"} (assoc red :size 9)) (assoc green :size 9)]))
         (should= 1 (:size (sut/reload red)))
-        (should= 2 (:size (sut/reload green)))))
-
-    )
-
-  )
+        (should= 2 (:size (sut/reload green)))))))
 
 (defn broken-in-datomic [config]
 
@@ -817,11 +786,7 @@
               result-names (map :name result)]
           (should-not-contain "hi!" result-names)
           (should-contain "hello" result-names)
-          (should-contain "world" result-names)))
-      )
-    )
-
-  )
+          (should-contain "world" result-names))))))
 
 (defn order-by-specs [config]
   (context "order-by"

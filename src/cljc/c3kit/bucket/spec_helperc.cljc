@@ -14,10 +14,10 @@
   ([config schemas]
    (list
      (around-all [it]
-       (with-redefs [api/*safety* false
-                     api/impl     (atom (api/create-db config schemas))]
-         (try
-           (it)
-           (finally
-             (api/close @api/impl)))))
+                 (with-redefs [api/*safety* false
+                               api/impl     (atom (api/create-db config schemas))]
+                   (try
+                     (it)
+                     (finally
+                       (api/close @api/impl)))))
      (before (api/clear)))))

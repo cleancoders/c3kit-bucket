@@ -7,8 +7,7 @@
     [c3kit.bucket.bg :as bg]
     [c3kit.bucket.bg-schema :as bg-schema]
     [c3kit.bucket.spec-helperc :as helperc]
-    [speclj.core :refer :all]
-    ))
+    [speclj.core :refer :all]))
 
 (def app (atom {}))
 (def counter (atom 0))
@@ -97,5 +96,4 @@
     (let [logs (seq (ccc/find-by (log/parse-captured-logs) :level :error))]
       (should-not-be-nil logs)
       (should= "Background Error:" (:message (first logs)))
-      (should= "clojure.lang.ExceptionInfo: blah {}" (:message (second logs)))))
-  )
+      (should= "clojure.lang.ExceptionInfo: blah {}" (:message (second logs))))))

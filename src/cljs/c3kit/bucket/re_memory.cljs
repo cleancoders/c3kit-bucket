@@ -25,7 +25,6 @@
        (map? id) @(r/cursor (.-store db) [kind (api/-coerced-id @(.-legend db) kind (:id id))])
        :else @(r/cursor (.-store db) [kind (api/-coerced-id @(.-legend db) kind id)])))))
 
-
 (defn- slice-by-kind ([kind] (get @(.-store @api/impl) kind)))
 (defn- slice-by-ids [ids] (select-keys (get @(.-store @api/impl) :all) ids))
 (defn- ids-not-fns? [id] (or (int? id) (and (coll? id) (int? (first (remove nil? id))))))

@@ -154,8 +154,4 @@
         ;    (jdbc-spec/should-regurgitate-spec @db {:type :bigdec :db {:type "numeric(4,3)"}}))
         ;
         ;  )
-        )
-
-      )
-    )
-  )
+        ))))

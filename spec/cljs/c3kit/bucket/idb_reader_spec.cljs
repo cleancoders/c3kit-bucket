@@ -14,8 +14,8 @@
       (.put store (io/clj->js-entity entity)))
     (.put meta (io/clj->js-entity {:id "dirty" :data dirty-entries}))
     (js/Promise.
-     (fn [resolve _]
-       (set! (.-oncomplete tx) #(resolve idb))))))
+      (fn [resolve _]
+        (set! (.-oncomplete tx) #(resolve idb))))))
 
 (describe "IDB Reader"
 
@@ -60,34 +60,33 @@
                                       store   (.objectStore tx "_meta")
                                       request (.get store "dirty")]
                                   (js/Promise.
-                                   (fn [resolve _]
-                                     (set! (.-onsuccess request)
-                                           (fn [event]
-                                             (let [result (io/js->clj-entity (.-result (.-target event)))]
-                                               (should= {-2 :bibelot} (:data result))
-                                               (resolve idb)))))))))
+                                    (fn [resolve _]
+                                      (set! (.-onsuccess request)
+                                            (fn [event]
+                                              (let [result (io/js->clj-entity (.-result (.-target event)))]
+                                                (should= {-2 :bibelot} (:data result))
+                                                (resolve idb)))))))))
                        (.then (fn [idb]
                                 ;; Check entity -1 is gone
                                 (let [tx      (.transaction idb #js ["bibelot"] "readonly")
                                       store   (.objectStore tx "bibelot")
                                       request (.get store -1)]
                                   (js/Promise.
-                                   (fn [resolve _]
-                                     (set! (.-onsuccess request)
-                                           (fn [event]
-                                             (should= nil (.-result (.-target event)))
-                                             (resolve idb))))))))
+                                    (fn [resolve _]
+                                      (set! (.-onsuccess request)
+                                            (fn [event]
+                                              (should= nil (.-result (.-target event)))
+                                              (resolve idb))))))))
                        (.then (fn [idb]
                                 ;; Check entity -2 remains
                                 (let [tx      (.transaction idb #js ["bibelot"] "readonly")
                                       store   (.objectStore tx "bibelot")
                                       request (.get store -2)]
                                   (js/Promise.
-                                   (fn [resolve _]
-                                     (set! (.-onsuccess request)
-                                           (fn [event]
-                                             (let [entity (io/js->clj-entity (.-result (.-target event)))]
-                                               (should= "second" (:name entity))
-                                               (io/close idb)
-                                               (resolve (.deleteDatabase js/indexedDB "test-reader-3")))))))))))))))
-  ))
+                                    (fn [resolve _]
+                                      (set! (.-onsuccess request)
+                                            (fn [event]
+                                              (let [entity (io/js->clj-entity (.-result (.-target event)))]
+                                                (should= "second" (:name entity))
+                                                (io/close idb)
+                                                (resolve (.deleteDatabase js/indexedDB "test-reader-3")))))))))))))))))

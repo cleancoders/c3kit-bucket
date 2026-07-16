@@ -64,8 +64,8 @@
     (it "remove-attribute! that doesn't exist"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-       (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
-       (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
+        (should-not-throw (migrator/-remove-attribute! @db :bibelot :fizz))
+        (should-not-throw (migrator/-remove-attribute! @db :fizz :bang))))
 
     (it "rename-attribute!"
       (let [_          (migrator/-install-schema! @db spec/bibelot)
@@ -88,8 +88,7 @@
     (it "rename-attribute! - existing missing"
       (migrator/-install-schema! @db spec/bibelot)
       (log/capture-logs
-       (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size))))
-    ))
+        (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size))))))
 
 (describe "Memory DB"
 
@@ -118,7 +117,5 @@
   (it "specifying the store"
     (let [store (atom {:foo :bar})
           db    (db/create-db {:impl :memory :store store} [])]
-      (should= :bar (:foo @(.-store db)))))
-
-  )
+      (should= :bar (:foo @(.-store db))))))
 

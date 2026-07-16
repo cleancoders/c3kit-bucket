@@ -63,9 +63,9 @@
   "Wraps an IDB request in a promise. Calls result-fn with the request result on success."
   [request result-fn]
   (js/Promise.
-   (fn [resolve reject]
-     (on-success! request (fn [event] (resolve (result-fn (event-result event)))))
-     (on-error! request (fn [event] (reject (event-error event)))))))
+    (fn [resolve reject]
+      (on-success! request (fn [event] (resolve (result-fn (event-result event)))))
+      (on-error! request (fn [event] (reject (event-error event)))))))
 
 (defn entity-store-names
   "Returns non-meta store names from an IDB instance."
@@ -132,13 +132,13 @@
    then resolves to result-val when the transaction completes."
   [idb store-names work-fn result-val]
   (js/Promise.
-   (fn [resolve reject]
-     (let [tx        (.transaction idb (clj->js (vec store-names)) "readwrite")
-           on-reject (fn [event] (reject (event-error event)))]
-       (set! (.-oncomplete tx) (fn [_] (resolve result-val)))
-       (on-error! tx on-reject)
-       (set! (.-onabort tx) on-reject)
-       (work-fn tx)))))
+    (fn [resolve reject]
+      (let [tx        (.transaction idb (clj->js (vec store-names)) "readwrite")
+            on-reject (fn [event] (reject (event-error event)))]
+        (set! (.-oncomplete tx) (fn [_] (resolve result-val)))
+        (on-error! tx on-reject)
+        (set! (.-onabort tx) on-reject)
+        (work-fn tx)))))
 
 ;endregion
 

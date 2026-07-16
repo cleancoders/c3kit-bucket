@@ -2,7 +2,6 @@
   (:require [c3kit.apron.log :as log]
             [c3kit.bucket.api :as db]))
 
-
 (defn attr-matches? [fields entity attr]
   (= (get fields attr)
      (get entity attr)))

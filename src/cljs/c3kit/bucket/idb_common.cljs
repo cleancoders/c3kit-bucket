@@ -31,19 +31,19 @@
 
 (defn put-entity [idb entity]
   (io/rw-request idb (name (:kind entity))
-                     #(.put % (io/clj->js-entity entity))
-                     entity))
+                 #(.put % (io/clj->js-entity entity))
+                 entity))
 
 (defn put-entities [idb entities]
   (if (empty? entities)
     (js/Promise.resolve entities)
     (let [store-names (into #{} (map #(name (:kind %))) entities)]
       (io/batch-tx idb store-names
-                       (fn [tx]
-                         (doseq [entity entities]
-                           (.put (.objectStore tx (name (:kind entity)))
-                                 (io/clj->js-entity entity))))
-                       entities))))
+                   (fn [tx]
+                     (doseq [entity entities]
+                       (.put (.objectStore tx (name (:kind entity)))
+                             (io/clj->js-entity entity))))
+                   entities))))
 
 (defn delete-entity [idb kind id]
   (io/rw-request idb (name kind) #(.delete % id) nil))
@@ -56,10 +56,10 @@
     (if (empty? store-names)
       (js/Promise.resolve nil)
       (io/batch-tx idb store-names
-                       (fn [tx]
-                         (doseq [store-name store-names]
-                           (.clear (.objectStore tx store-name))))
-                       nil))))
+                   (fn [tx]
+                     (doseq [store-name store-names]
+                       (.clear (.objectStore tx store-name))))
+                   nil))))
 
 (defn- rehydrate [idb kinds tx-fn]
   (let [read-promise (if (seq kinds)
@@ -80,19 +80,19 @@
 
 (defn add-to-dirty-set! [idb entries]
   (swap! dirty-chain
-    (fn [chain]
-      (-> chain
-          (.catch (fn [_] nil))
-          (.then (fn [_] (io/read-dirty-set idb)))
-          (.then (fn [current] (io/write-dirty-set! idb (merge current entries))))))))
+         (fn [chain]
+           (-> chain
+               (.catch (fn [_] nil))
+               (.then (fn [_] (io/read-dirty-set idb)))
+               (.then (fn [current] (io/write-dirty-set! idb (merge current entries))))))))
 
 (defn remove-from-dirty-set! [idb ids]
   (swap! dirty-chain
-    (fn [chain]
-      (-> chain
-          (.catch (fn [_] nil))
-          (.then (fn [_] (io/read-dirty-set idb)))
-          (.then (fn [current] (io/write-dirty-set! idb (apply dissoc current ids))))))))
+         (fn [chain]
+           (-> chain
+               (.catch (fn [_] nil))
+               (.then (fn [_] (io/read-dirty-set idb)))
+               (.then (fn [current] (io/write-dirty-set! idb (apply dissoc current ids))))))))
 
 ;endregion
 
@@ -133,15 +133,15 @@
       (memory/tx* db server-entities)
       (when idb
         (swap! dirty-chain
-          (fn [chain]
-            (-> chain
-                (.catch (fn [_] nil))
-                (.then (fn [_] (io/read-dirty-set idb)))
-                (.then (fn [dirty-entries]
-                         (let [entries-to-delete (select-keys dirty-entries id-set)]
-                           (-> (delete-dirty-entities idb entries-to-delete)
-                               (.then (fn [_] (io/write-dirty-set! idb (apply dissoc dirty-entries id-set))))
-                               (.then (fn [_] (put-entities idb server-entities))))))))))))))
+               (fn [chain]
+                 (-> chain
+                     (.catch (fn [_] nil))
+                     (.then (fn [_] (io/read-dirty-set idb)))
+                     (.then (fn [dirty-entries]
+                              (let [entries-to-delete (select-keys dirty-entries id-set)]
+                                (-> (delete-dirty-entities idb entries-to-delete)
+                                    (.then (fn [_] (io/write-dirty-set! idb (apply dissoc dirty-entries id-set))))
+                                    (.then (fn [_] (put-entities idb server-entities))))))))))))))
 
 (defn- purge-neg-entities-from-memory! [db kinds]
   (let [neg-entries (for [kind kinds
@@ -197,19 +197,19 @@
         delete? (api/delete? entity)]
     (if (and delete? (neg? id))
       (swap! dirty-chain
-        (fn [chain]
-          (-> chain
-              (.catch (fn [_] nil))
-              (.then (fn [_] (delete-entity idb kind id)))
-              (.then (fn [_] (io/read-dirty-set idb)))
-              (.then (fn [current] (io/write-dirty-set! idb (apply dissoc current [id])))))))
+             (fn [chain]
+               (-> chain
+                   (.catch (fn [_] nil))
+                   (.then (fn [_] (delete-entity idb kind id)))
+                   (.then (fn [_] (io/read-dirty-set idb)))
+                   (.then (fn [current] (io/write-dirty-set! idb (apply dissoc current [id])))))))
       (let [put-promise (put-entity idb result)]
         (swap! dirty-chain
-          (fn [chain]
-            (-> (js/Promise.all #js [chain put-promise])
-                (.catch (fn [_] nil))
-                (.then (fn [_] (io/read-dirty-set idb)))
-                (.then (fn [current] (io/write-dirty-set! idb (merge current {id kind})))))))))
+               (fn [chain]
+                 (-> (js/Promise.all #js [chain put-promise])
+                     (.catch (fn [_] nil))
+                     (.then (fn [_] (io/read-dirty-set idb)))
+                     (.then (fn [current] (io/write-dirty-set! idb (merge current {id kind})))))))))
     @dirty-chain))
 
 (defn- persist-online! [idb entity result]

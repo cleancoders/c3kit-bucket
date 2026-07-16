@@ -15,10 +15,10 @@
   [idb entries]
   (let [store-names (into #{} (map (comp name val)) entries)]
     (io/batch-tx idb store-names
-      (fn [tx]
-        (doseq [[id kind] entries]
-          (.delete (.objectStore tx (name kind)) id)))
-      nil)))
+                 (fn [tx]
+                   (doseq [[id kind] entries]
+                     (.delete (.objectStore tx (name kind)) id)))
+                 nil)))
 
 ;endregion
 
@@ -40,7 +40,7 @@
         remaining (apply dissoc dirty-entries id-set)]
     (-> (io/write-dirty-set! idb remaining)
         (.then (fn [_] (when (seq to-delete)
-                          (delete-by-entries idb to-delete)))))))
+                         (delete-by-entries idb to-delete)))))))
 
 (defn clear-dirty! [idb ids-to-clear]
   (let [id-set (set ids-to-clear)]

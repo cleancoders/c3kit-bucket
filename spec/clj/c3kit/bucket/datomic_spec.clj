@@ -29,8 +29,7 @@
     (spec/count-specs config)
     (spec/kind-in-entity-is-optional config)
     (spec/multi-value-fields config)
-    (spec/cas config)
-    )
+    (spec/cas config))
 
   (context "safety"
     (around [it] (with-redefs [api/*safety* true] (it)))
@@ -45,9 +44,7 @@
     (it "one kv with nil value"
       (log/capture-logs
         (should= [] (api/find- @db :bibelot :where {:name nil})))
-      (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str)))
-
-    )
+      (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str))))
 
   (context "find-datalog"
     (helper/with-schemas config [spec/bibelot])
@@ -56,8 +53,7 @@
       (api/tx {:kind :bibelot :name "bibby"})
       (let [results (sut/find-datalog '[:find ?e :in $ :where [?e :bibelot/name]])]
         (should= 1 (count results))
-        (should= "bibby" (:name (first results)))))
-    )
+        (should= "bibby" (:name (first results))))))
 
   (context "min & max"
     (with db (api/create-db config [spec/bibelot spec/thingy]))
@@ -76,8 +72,7 @@
             _  (api/tx- @db {:kind :bibelot :size 2})
             _  (api/tx- @db {:kind :bibelot :size 3})]
         (should= b1 (sut/find-min-of-all- @db :bibelot :size))
-        (should= 1 (sut/find-min-val-of-all- @db :bibelot :size))))
-    )
+        (should= 1 (sut/find-min-val-of-all- @db :bibelot :size)))))
 
   (describe "migrator"
 
@@ -190,7 +185,6 @@
       (log/capture-logs
         (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size)))))
 
-
   (context "history"
     (helper/with-schemas config [spec/bibelot #_spec/thingy])
     (with biby (-> (api/tx :kind :bibelot :name "Biby" :size 1 :color "blue")
@@ -241,7 +235,4 @@
     ;  @(datomic/sync-index @(.-conn @api/impl) (time/millis-since-epoch (time/from-now (time/hours 1))))
     ;  (should-be-nil (api/find-by :bibelot :name "Biby"))
     ;  (should-be-nil (sut/history @biby)))
-
-    )
-
-  )
+    ))

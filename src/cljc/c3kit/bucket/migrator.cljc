@@ -14,8 +14,7 @@
   (-install-schema! [this schema])
   (-add-attribute! [this schema attr] [this kind attr spec])
   (-remove-attribute! [this kind attr] "Remove an attribute from the database schema. All values will be removed.")
-  (-rename-attribute! [this kind attr new-kind new-attr] "Rename the attribute.  SQL implementations may not allow the kind to change.")
-  )
+  (-rename-attribute! [this kind attr new-kind new-attr] "Rename the attribute.  SQL implementations may not allow the kind to change."))
 
 (defmulti migration-schema :impl)
 (defmethod migration-schema :default [_config] default-migration-schema)

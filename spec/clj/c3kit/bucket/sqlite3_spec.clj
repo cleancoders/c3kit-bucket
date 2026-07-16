@@ -81,9 +81,7 @@
 
       (it "spec->db-cast returns nil for non-vector fields"
         (should-be-nil (jdbc/spec->db-cast :sqlite3 {:type :string :db {:type "TEXT"}}))
-        (should-be-nil (jdbc/spec->db-cast :sqlite3 {:type :long})))
-
-      )
+        (should-be-nil (jdbc/spec->db-cast :sqlite3 {:type :long}))))
 
     (context "vector serialization"
 
@@ -109,9 +107,7 @@
 
       (it "DDL uses normal type for non-vector columns"
         (should= "TEXT" (jdbc/sql-col-type :sqlite3 {:type :string}))
-        (should= "varchar(42)" (jdbc/sql-col-type :sqlite3 {:type :string :db {:type "varchar(42)"}})))
-
-      )
+        (should= "varchar(42)" (jdbc/sql-col-type :sqlite3 {:type :string :db {:type "varchar(42)"}}))))
 
     (context "vector deserialization"
 
@@ -129,9 +125,7 @@
 
       (it "passes through non-vector types unchanged"
         (should= "hello" (jdbc/<-sql-value-for-dialect :sqlite3 :string "hello"))
-        (should= 42 (jdbc/<-sql-value-for-dialect :sqlite3 :long 42)))
-
-      )
+        (should= 42 (jdbc/<-sql-value-for-dialect :sqlite3 :long 42))))
 
     (context "vector ORDER BY SQL generation"
 
@@ -160,7 +154,7 @@
                      :key->type {:embedding :sqlite-vec}
                      :key->cast {:embedding "vec_f32(3)"}}]
           (should-throw Exception "Unsupported vector operator on sqlite3: <#>"
-            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<#> [1.0 0.0 0.0]]}))))
+                        (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<#> [1.0 0.0 0.0]]}))))
 
       (it "generates mixed vector and scalar ORDER BY"
         (let [t-map {:table      "vectorable"
@@ -171,9 +165,7 @@
           (should-contain "vec_distance_L2" sql)
           (should-contain "name" sql)
           (should-contain "ASC" sql)
-          (should (bytes? (first args)))))
-
-      )
+          (should (bytes? (first args))))))
 
     (context "operator-distance metric validation"
 
@@ -184,7 +176,7 @@
                      :key->cast    {:embedding "vec_f32(3)"}
                      :key->distance {:embedding :l2}}]
           (should-throw Exception "Operator <=> requires :distance :cosine, but field :embedding is configured as :l2"
-            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]}))))
+                        (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]}))))
 
       (it "<-> on :distance :cosine schema throws"
         (let [t-map {:table        "vectorable"
@@ -193,7 +185,7 @@
                      :key->cast    {:embedding "vec_f32(3)"}
                      :key->distance {:embedding :cosine}}]
           (should-throw Exception "Operator <-> requires :distance :l2, but field :embedding is configured as :cosine"
-            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<-> [1.0 0.0 0.0]]}))))
+                        (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<-> [1.0 0.0 0.0]]}))))
 
       (it "<#> always throws on sqlite3 regardless of distance"
         (let [t-map {:table        "vectorable"
@@ -202,7 +194,7 @@
                      :key->cast    {:embedding "vec_f32(3)"}
                      :key->distance {:embedding :l2}}]
           (should-throw Exception "Unsupported vector operator on sqlite3: <#>"
-            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<#> [1.0 0.0 0.0]]}))))
+                        (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<#> [1.0 0.0 0.0]]}))))
 
       (it "correct operator succeeds on matching :l2 schema"
         (let [t-map {:table        "vectorable"
@@ -236,7 +228,7 @@
                      :key->type {:embedding :sqlite-vec}
                      :key->cast {:embedding "vec_f32(3)"}}]
           (should-throw Exception "Operator <=> requires :distance :cosine, but field :embedding is configured as :l2"
-            (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]}))))
+                        (jdbc/-build-order-by :sqlite3 t-map {:embedding ['<=> [1.0 0.0 0.0]]}))))
 
       (it "compile-mapping populates key->distance from schema :db :distance"
         (let [schema   {:kind      (schema/kind :vectorable)
@@ -252,9 +244,7 @@
                         :name      {:type :string}
                         :embedding {:type [:float] :db {:type "vec_f32(3)"}}}
               compiled (jdbc/compile-mapping :sqlite3 schema)]
-          (should= {} (:key->distance compiled))))
-
-      )
+          (should= {} (:key->distance compiled)))))
 
     (context "extensions"
 
@@ -271,16 +261,14 @@
       (it "throws meaningful error for invalid extension path"
         (let [bad-config (assoc config :extensions ["/nonexistent/path/to/vec0"])]
           (should-throw Exception
-            (api/create-db bad-config []))))
+                        (api/create-db bad-config []))))
 
       (it "error message includes the bad extension path"
         (try
           (api/create-db (assoc config :extensions ["/bad/path/vec0"]) [])
           (should-fail "Expected exception")
           (catch Exception e
-            (should-contain "/bad/path/vec0" (.getMessage e)))))
-
-      )
+            (should-contain "/bad/path/vec0" (.getMessage e))))))
 
     (context "slow"
 
@@ -308,9 +296,7 @@
         (it "reads and writes booleans"
           (let [now    (time/now)
                 thingy (api/tx {:kind :thingy :id 1 :bang now})]
-            (should= now (:bang thingy))))
-
-        )
+            (should= now (:bang thingy)))))
 
       (context "->sql-type"
         (test-type-conversion :bigdec "REAL")
@@ -326,8 +312,7 @@
         (test-type-conversion :ref "INTEGER")
         (test-type-conversion :string "TEXT")
         (test-type-conversion :timestamp "INTEGER")
-        (test-type-conversion :uuid "TEXT")
-        )
+        (test-type-conversion :uuid "TEXT"))
 
       (context "migrator"
 
@@ -434,12 +419,7 @@
             (jdbc-spec/should-regurgitate-spec @db {:type :long :db {:type "INTEGER DEFAULT 4"}}))
 
           (it "hidden"
-            (jdbc-spec/should-regurgitate-spec @db {:type :string :db {:type "TEXT HIDDEN"}}))
-          )
-        )
-      )
-    )
-  )
+            (jdbc-spec/should-regurgitate-spec @db {:type :string :db {:type "TEXT HIDDEN"}})))))))
 
 (when vec-extension-path
   (describe "sqlite3 vec0"
@@ -590,6 +570,4 @@
         (api/tx {:kind :multi-vectorable :name "b" :title-embedding [0.0 1.0 0.0] :body-embedding [0.0 1.0]})
         (api/tx {:kind :multi-vectorable :name "c" :title-embedding [0.9 0.1 0.0] :body-embedding [0.9 0.1]})
         (let [results (api/find :multi-vectorable :order-by {:body-embedding ['<=> [1.0 0.0]]})]
-          (should= ["a" "c" "b"] (map :name results)))))
-    )
-  )
+          (should= ["a" "c" "b"] (map :name results)))))))

@@ -140,5 +140,4 @@
     (it "trims processed set when exceeding max"
       (doseq [i (range 105)]
         (sut/claim-sync! (str "trim-" i)))
-      (should (sut/claim-sync! "trim-0"))))
-  )
+      (should (sut/claim-sync! "trim-0")))))

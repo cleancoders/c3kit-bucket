@@ -36,8 +36,7 @@
     (impl-spec/count-specs config)
     (impl-spec/kind-in-entity-is-optional config)
     (impl-spec/multi-value-fields config)
-    (impl-spec/cas config)
-    )
+    (impl-spec/cas config))
 
   (context "ref attribute"
     (helper/with-schemas config [impl-spec/bibelot (assoc impl-spec/thingy :fuzz {:type :ref}) impl-spec/disorganized])
@@ -49,21 +48,18 @@
         (should (api/entity (:fuzz thingy)))))
 
     #_(focus-it "testin stuff"
-        (let [bibelot (api/tx {:kind :bibelot :name "bibby"})
-              thingy  (api/tx {:kind :thingy :id 123 :name "thingy" :fuzz (:id bibelot)})]
+                (let [bibelot (api/tx {:kind :bibelot :name "bibby"})
+                      thingy  (api/tx {:kind :thingy :id 123 :name "thingy" :fuzz (:id bibelot)})]
           ;(should= thingy (api/entity (:id thingy)))
-          (should= 1 (sut/q
-                       (concat
-                         '[:find ?e
-                           :where
-                           (or [?e :thingy/name]
-                               [?e :thingy/fuzz])
-                           ]
-                         [
-                          [(list '= '?e (:id thingy))]
+                  (should= 1 (sut/q
+                               (concat
+                                 '[:find ?e
+                                   :where
+                                   (or [?e :thingy/name]
+                                       [?e :thingy/fuzz])]
+                                 [[(list '= '?e (:id thingy))]
                           ;[(list 'contains? #{(:id thingy)} '?e)]
-                          ]
-                         )
+                                  ])
                        ;'[:find ?e
                        ;  :in $ ?q
                        ;  :where
@@ -73,10 +69,7 @@
                        ;  ;[(= ?q ?e)]
                        ;  ]
                        ;#{(:id thingy)}
-                       ))
-          ))
-    )
-
+                               )))))
   (context "safety"
     (around [it] (with-redefs [api/*safety* true] (it)))
 
@@ -90,9 +83,7 @@
     (it "one kv with nil value"
       (log/capture-logs
         (should= [] (api/find- @db :bibelot :where {:name nil})))
-      (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str)))
-
-    )
+      (should-contain "search for nil value (:bibelot :name), returning no results." (log/captured-logs-str))))
 
   (context "find-datalog"
     (helper/with-schemas config [impl-spec/bibelot])
@@ -101,8 +92,7 @@
       (api/tx {:kind :bibelot :name "bibby"})
       (let [results (sut/find-datalog '[:find (pull ?e [*]) :in $ :where [?e :bibelot/name]])]
         (should= 1 (count results))
-        (should= "bibby" (:name (first results)))))
-    )
+        (should= "bibby" (:name (first results))))))
 
   (context "migrator"
 
@@ -239,7 +229,4 @@
       (let [updated (api/tx @biby :size 4)
             result  (sut/with-timestamps updated)]
         (should= (sut/created-at updated) (:db/created-at result))
-        (should= (sut/updated-at updated) (:db/updated-at result))))
-    )
-
-  )
+        (should= (sut/updated-at updated) (:db/updated-at result))))))

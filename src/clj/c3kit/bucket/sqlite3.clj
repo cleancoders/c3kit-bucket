@@ -12,8 +12,7 @@
            (javax.sql DataSource)))
 
 (defmethod jdbc/schema->db-type-map :sqlite3 [_]
-  {
-   :bigdec    "REAL"
+  {:bigdec    "REAL"
    :boolean   "INTEGER"
    :date      "INTEGER"
    :double    "REAL"
@@ -26,8 +25,7 @@
    :ref       "INTEGER"
    :string    "TEXT"
    :timestamp "INTEGER"
-   :uuid      "TEXT"
-   })
+   :uuid      "TEXT"})
 
 (defmethod jdbc/auto-int-primary-key :sqlite3 [_] "INTEGER PRIMARY KEY AUTOINCREMENT")
 
@@ -119,8 +117,8 @@
                      (remove nil?)
                      (str/join " "))]
     (cond-> {:type schema-type}
-            (ccc/not-blank? db-type)
-            (assoc :db {:type db-type}))))
+      (ccc/not-blank? db-type)
+      (assoc :db {:type db-type}))))
 
 (defn include-index-info [db index]
   (let [index-info (jdbc/execute-one! db [(str "PRAGMA index_info(\"" (:name index) "\")")])]

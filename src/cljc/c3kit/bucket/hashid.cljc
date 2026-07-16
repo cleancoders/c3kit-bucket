@@ -1,9 +1,8 @@
 (ns c3kit.bucket.hashid
   (:require
     [c3kit.apron.log :as log]
-     #?(:clj [hashids.core :as hashid])
-     #?(:cljs [cljsjs.hashids])
-     ))
+    #?(:clj [hashids.core :as hashid])
+    #?(:cljs [cljsjs.hashids])))
 
 (defn- -id->hash [conf id]
   (when id

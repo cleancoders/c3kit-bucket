@@ -11,7 +11,6 @@
             [c3kit.bucket.spec-helperc :as helperc]
             [c3kit.wire.spec-helper :as wire]))
 
-
 (def config {:impl :re-memory})
 (declare db)
 
@@ -52,7 +51,6 @@
   (reset! thingy-2 (db/tx {:kind :thingy :name "thingy-2" :foo "foo 2"}))
   (reset! doodad-2 (db/tx {:kind :doodad :names ["doodad-2"]})))
 
-
 (describe "rememory"
   (around [it] (with-safety-off (it)))
 
@@ -82,8 +80,7 @@
       (it "searching by multiple attrs"
         (db/tx (swap! thingy assoc :foo "hey foo"))
         (should= [(select-keys @thingy [:kind :id :name :foo])]
-                 (sut/select-find-by :thingy :name (:name @thingy) :foo (:foo @thingy))))
-      )
+                 (sut/select-find-by :thingy :name (:name @thingy) :foo (:foo @thingy)))))
 
     (context "with keyseq"
       (helperc/with-schemas config [spec/thingy spec/doodad])
@@ -115,9 +112,7 @@
 
       (it "gracefully ignores other fns that are passed in"
         (should= [(select-keys @thingy [:kind :id :name :foo :bar])]
-                 (sut/select-find-by :thingy ['reduce :bar :foo] :name (:name @thingy))))
-      )
-    )
+                 (sut/select-find-by :thingy ['reduce :bar :foo] :name (:name @thingy))))))
 
   (context "render control"
     (wire/with-root-dom)
@@ -167,8 +162,7 @@
           (db/tx @thingy :name (:name "new-thingy-1"))
           (wire/flush)
           (should= 3 @thingy-3-count)
-          (should= 2 @thingy-render-count)))
-      )
+          (should= 2 @thingy-render-count))))
 
     (context "entity"
       (it "editing a thingy doesn't make another thingy re-render"
@@ -180,8 +174,7 @@
         (db/tx @thingy :name "edited-thingy")
         (wire/flush)
         (should= 2 @thingy-render-count)
-        (should= 1 @thingy-2-count))
-      )
+        (should= 1 @thingy-2-count)))
 
     (context "select-find-by"
 
@@ -235,8 +228,7 @@
             (db/tx* [(swap! thingy assoc :bar 123) (swap! thingy-3 assoc :bar 456)])
             (wire/flush)
             (should= 3 @thingy-3-count)
-            (should= 1 @thingy-render-count)))
-        )
+            (should= 1 @thingy-render-count))))
 
       (it "editing a field not searched by or selected does not cause re-render"
         (wire/render [:div
@@ -287,11 +279,7 @@
           (db/tx* [(swap! thingy assoc :bar 123) (swap! thingy-3 assoc :bar 456)])
           (wire/flush)
           (should= 3 @thingy-3-count)
-          (should= 2 @thingy-render-count)))
-
-      )
-
-    )
+          (should= 2 @thingy-render-count)))))
 
   (context "bucket tests for select-find"
 
@@ -369,8 +357,7 @@
             (should= #{b2 (select-keys b3 [:name :id :kind])}
                      (set (sut/select-find-by :bibelot :name "world" :id [(:id b2) (:id b3)])))
             (should= (set (map #(select-keys % [:size :kind :id]) [b3 b4]))
-                     (set (sut/select-find-by :bibelot :size 2 :id [(:id b3) (:id b4)])))
-            ))
+                     (set (sut/select-find-by :bibelot :size 2 :id [(:id b3) (:id b4)])))))
 
         (it "two attributes"
           (let [[entity :as entities] (sut/select-find-by :bibelot :name "world" :size 2)]
@@ -406,10 +393,8 @@
 
         (it "ffind-by"
           (let [world (sut/select-ffind-by :bibelot :name "world" :size 2)]
-            (should= "world" (:name world))))
+            (should= "world" (:name world))))))
 
-        )
-      )
     (context "multi-value fields"
 
       (helperc/with-schemas config [spec/doodad])
@@ -458,8 +443,7 @@
           (should= (set [d1 d2]) (spec/set-find-by :doodad :names ["foo" "BLAH"]))
           (should= (set [d1 d2]) (spec/set-find-by :doodad :names ["bar" "bang"]))
           (should= [d1] (sut/select-find-by :doodad [:numbers] :names ["bar" "BLAH"]))
-          (should= [] (sut/select-find-by :doodad :names ["ARG" "BLAH"]))))
-      )
+          (should= [] (sut/select-find-by :doodad :names ["ARG" "BLAH"])))))
 
     (context "filters"
       (helperc/with-schemas config [spec/bibelot spec/thingy])
@@ -528,8 +512,7 @@
             (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot [:name] :size ['not=])))
             (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot [:size] :name ['not=])))
             (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot [:size] :name ['not=] :id ['not=])))
-            (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot :name ['not=] :size ['not=])))
-            ))
+            (should= #{b1 b2 b3 b4} (set (sut/select-find-by :bibelot :name ['not=] :size ['not=])))))
 
         (it "< > string"
           (let [result       (spec/set-find-by :bibelot :name ['> "g"] :name ['< "i"])
@@ -619,9 +602,7 @@
                 result-names (map :name result)]
             (should-contain "world" result-names)
             (should-not-contain "words" result-names)
-            (should-not-contain "hello" result-names)))
-        )
-      )
+            (should-not-contain "hello" result-names)))))
 
     (context "count"
       (helperc/with-schemas config [spec/bibelot spec/thingy])
@@ -659,9 +640,7 @@
             (should= 0 (sut/select-count-by :bibelot :name "world" :id ['not= (:id b2) (:id b3)]))
             (should= 1 (sut/select-count-by :bibelot :size 2 :id (:id b3)))
             (should= 2 (sut/select-count-by :bibelot :name "world" :id [(:id b2) (:id b3)]))
-            (should= 2 (sut/select-count-by :bibelot :size 2 :id [(:id b3) (:id b4)]))))
-        )
-      )
+            (should= 2 (sut/select-count-by :bibelot :size 2 :id [(:id b3) (:id b4)]))))))
 
     (context "tx with select-find"
       (helperc/with-schemas config [spec/thingy spec/doodad])
@@ -677,8 +656,7 @@
       (it "can delete an attr with an explicit nil"
         (let [original (db/ffind-by :thingy :name "thingy-2")]
           (should= original (sut/select-tx (dissoc original :name)))
-          (should= (dissoc original :name) (sut/select-tx original :name nil))))
-      )
+          (should= (dissoc original :name) (sut/select-tx original :name nil)))))
 
     (context "tx* with select-find"
       (helperc/with-schemas config [spec/thingy spec/doodad])
@@ -694,7 +672,4 @@
       (it "can delete an attr with an explicit nil"
         (let [originals (db/find-by :thingy)]
           (should= originals (sut/select-tx* (map #(dissoc % :name) originals)))
-          (should= (map #(dissoc % :name) originals) (sut/select-tx* (map #(assoc % :name nil) originals)))))
-      )
-    )
-  )
+          (should= (map #(dissoc % :name) originals) (sut/select-tx* (map #(assoc % :name nil) originals))))))))

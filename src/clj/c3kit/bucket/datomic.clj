@@ -42,9 +42,9 @@
    (reduce-kv
      (fn [m k v]
        (assoc m (keyword (name k))
-                (if (set? v)
-                  (ccc/map-set value-or-id v)
-                  (value-or-id v))))
+              (if (set? v)
+                (ccc/map-set value-or-id v)
+                (value-or-id v))))
      {:id id :kind (keyword kind)}
      attributes)))
 

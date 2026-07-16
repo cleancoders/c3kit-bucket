@@ -122,7 +122,6 @@
           (should= uuid (:variant entity))
           (should= entity (api/ffind-by :variform :variant str-uuid)))))
 
-
     (test-type config :boolean true)
     (test-type config :boolean false)
     (test-type config :boolean nil)
@@ -135,8 +134,7 @@
     ;(test-type config :date time/epoch)
 
     (test-type config :timestamp (time/now))
-    (test-type config :timestamp time/epoch)
-    ))
+    (test-type config :timestamp time/epoch)))
 
 (defn regurgitate-spec [db spec]
   (sut/drop-table db "foo")
@@ -192,10 +190,7 @@
       (migrator/remove-attribute! "select" :where))
 
     (it "rename column"
-      (migrator/rename-attribute! "select" "where" "select" "limit"))
-
-    )
-  )
+      (migrator/rename-attribute! "select" "where" "select" "limit"))))
 
 (with-redefs [spec/bibelot      bibelot
               spec/thingy       thingy
@@ -230,9 +225,7 @@
         (it "schema-type to db-type"
           (should= "int4" (sut/schema-type->db-type :foo :int))
           (should= "int4" (sut/schema-type->db-type :foo :long))
-          (should= "bool" (sut/schema-type->db-type :foo :boolean)))
-        )
-      )
+          (should= "bool" (sut/schema-type->db-type :foo :boolean)))))
 
     (context "compile schema"
 
@@ -248,16 +241,13 @@
           (should= "BIBELOT" (:table compiled))
           (should= {:id "Number" :name "Name" :size "size" :color "Colour"} (:key->col compiled))
           (should= {"Number" :id "Name" :name "size" :size "Colour" :color} (:col->key compiled))
-          (should= {:id :long :name :string :size :long :color :string} (:key->type compiled))
-          ))
+          (should= {:id :long :name :string :size :long :color :string} (:key->type compiled))))
 
       (it "json reader"
         (let [compiled (sut/compile-mapping :h2 json-entity)]
           (should= "json_entity" (:table compiled))
           (should= {:id "id" :stuff "stuff"} (:key->col compiled))
-          (should= {"id" :id "stuff" :stuff} (:col->key compiled))))
-      )
-
+          (should= {"id" :id "stuff" :stuff} (:col->key compiled)))))
 
     (context "api"
 
@@ -271,15 +261,13 @@
       (spec/kind-is-required config)
       (spec/cas config)
       (type-specs config)
-      (reserved-word-specs config)
-      )
+      (reserved-word-specs config))
 
     (context "safety"
       (around [it] (with-redefs [api/*safety* true] (it)))
 
       (it "clear" (should-throw AssertionError (sut/clear (config nil))))
-      (it "delete-all" (should-throw AssertionError (sut/delete-all (config nil) :foo)))
-      )
+      (it "delete-all" (should-throw AssertionError (sut/delete-all (config nil) :foo))))
 
     (context "SQL Injection"
 
@@ -300,8 +288,7 @@
       (it "sneaky deletes with actual id works"
         (api/tx {:kind :str-id-entity :id "' OR 1 = 1;--" :value 1})
         (api/delete {:kind :str-id-entity :id "' OR 1 = 1;--"})
-        (should= 0 (api/count :str-id-entity)))
-      )
+        (should= 0 (api/count :str-id-entity))))
 
     (context "connection pool"
 
@@ -323,9 +310,7 @@
         (log/capture-logs
           (with-open [db (api/create-db (assoc config :connection-pool? true :min-pool-size 1 :max-pool-size 42) [])]
             (should= true (instance? PooledDataSource (.-ds db)))))
-        (should-contain "Connection Pooling:  {:min 1, :max 42}" (log/captured-logs-str)))
-
-      )
+        (should-contain "Connection Pooling:  {:min 1, :max 42}" (log/captured-logs-str))))
 
     (context "local api"
 
@@ -360,8 +345,7 @@
         (sut/execute! "create type If not exists spell_type as enum (1, 2, 3)")
         (sut/execute! "ALTER TABLE thingy ALTER COLUMN spell TYPE spell_type")
         (let [saved (api/tx {:kind :thingy :id 123 :spell 1})]
-          (should= saved (api/ffind-by :thingy :spell 1))))
-      )
+          (should= saved (api/ffind-by :thingy :spell 1)))))
 
     (context "schema"
 
@@ -384,10 +368,7 @@
                                                           :table_constraints/constraint_type "UNIQUE"}
                                                          {:key_column_usage/column_name      "id"
                                                           :table_constraints/constraint_name "migration_pkey"
-                                                          :table_constraints/constraint_type "UNIQUE"}])))
-        )
-
-      )
+                                                          :table_constraints/constraint_type "UNIQUE"}])))))
 
     (context "migrator"
 
@@ -502,10 +483,7 @@
           (should-regurgitate-spec @db {:type :string :db {:type "varchar(123)"}}))
 
         (it "numeric"
-          (should-regurgitate-spec @db {:type :bigdec :db {:type "numeric(4,5)"}}))
-
-        )
-      )
+          (should-regurgitate-spec @db {:type :bigdec :db {:type "numeric(4,5)"}}))))
 
     (context "json"
 
@@ -527,7 +505,4 @@
           (should= data (utilc/<-json-kw (:stuff saved)))
           (should= data (-> (sut/entity @db :json-entity (:id saved))
                             :stuff
-                            utilc/<-json-kw)))))
-
-    )
-  )
+                            utilc/<-json-kw)))))))

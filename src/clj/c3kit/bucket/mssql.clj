@@ -24,12 +24,12 @@
         ;; MSSQL requires ORDER BY for OFFSET/FETCH, default to id if using pagination
         order-sql (or order-sql (when drop (str "ORDER BY " id-col)))
         sql    (jdbc/-seq->sql "SELECT"
-                 (when (and take (not drop)) (str "TOP " take))
-                 "* FROM" (jdbc/->safe-name dialect (:table t-map))
-                 where-sql
-                 order-sql
-                 (when drop ["OFFSET" drop "ROWS"
-                             (when take ["FETCH NEXT" take " ROWS ONLY"])]))]
+                               (when (and take (not drop)) (str "TOP " take))
+                               "* FROM" (jdbc/->safe-name dialect (:table t-map))
+                               where-sql
+                               order-sql
+                               (when drop ["OFFSET" drop "ROWS"
+                                           (when take ["FETCH NEXT" take " ROWS ONLY"])]))]
     (cons sql (concat where-args order-args))))
 
 (defmethod jdbc/build-upsert-sql :mssql [dialect t-map {:keys [id] :as entity}]

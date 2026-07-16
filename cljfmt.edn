@@ -1,0 +1,36 @@
+;; cljfmt config for c3kit-bucket.
+;;
+;; Based on the `clojure` plugin's baseline, tailored to this codebase:
+;;
+;; :function-arguments-indentation :cursive — this codebase indents wrapped
+;; function arguments and ns :require entries two spaces past the enclosing
+;; form (Cursive's default), NOT cljfmt's :community one-space-past-symbol.
+;; Without this, cljfmt reindents nearly every multi-line call. With it, cljfmt
+;; leaves the intentional indentation alone and only fixes genuine problems
+;; (trailing close-parens on their own lines, blank lines before a close, etc.).
+;;
+;; :extra-indents register block-style indentation so cljfmt does not align
+;; bodies under the first argument. Speclj test macros (describe/context/it/...)
+;; indent their bodies like defn; c3kit.apron.corec/for-all is shaped like for;
+;; reagent.core/with-let is shaped like let. Both bare and fully-qualified forms
+;; are registered so the rule fires regardless of how the caller aliases the ns.
+{:function-arguments-indentation :cursive
+
+ :extra-indents
+ {describe                  [[:block 1]]
+  context                   [[:block 1]]
+  it                        [[:block 1]]
+  xit                       [[:block 1]]
+  before                    [[:block 0]]
+  before-all                [[:block 0]]
+  after                     [[:block 0]]
+  after-all                 [[:block 0]]
+  around                    [[:block 1]]
+  with                      [[:block 1]]
+  with-all                  [[:block 1]]
+  redefs-around             [[:block 1]]
+  it-routes                 [[:block 2]]
+  for-all                   [[:block 1]]
+  c3kit.apron.corec/for-all [[:block 1]]
+  with-let                  [[:block 1]]
+  reagent.core/with-let     [[:block 1]]}}

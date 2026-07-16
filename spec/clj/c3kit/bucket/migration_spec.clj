@@ -24,7 +24,7 @@
 
     (it "find available migrations - missing :migration-ns"
       (should-throw ExceptionInfo ":migration-ns is missing from the database config."
-        (sut/-available-migration-names {})))
+                    (sut/-available-migration-names {})))
 
     (it "find available migrations - package doesn't exist"
       (log/capture-logs
@@ -34,9 +34,7 @@
     (it "find available migrations"
       (let [filenames (sut/-available-migration-names db-config)]
         (should= 3 (count filenames))
-        (should= ["20230101" "20230202" "20230303"] filenames)))
-
-    )
+        (should= ["20230101" "20230202" "20230303"] filenames))))
 
   (context "utilities"
 
@@ -68,9 +66,7 @@
       (should= {:up [] :down ["3"]} (sut/-calculate-ups-and-downs ["1" "2" "3"] ["1" "2" "3"] "2"))
       (should= {:up [] :down []} (sut/-calculate-ups-and-downs ["1" "2" "3"] ["1" "2" "3"] "3"))
       (should-throw (sut/-calculate-ups-and-downs ["1" "2" "3"] [] "BLAH"))
-      (should-throw (sut/-calculate-ups-and-downs ["1" "2" "3"] ["1" "3"] "1")))
-
-    )
+      (should-throw (sut/-calculate-ups-and-downs ["1" "2" "3"] ["1" "3"] "1"))))
 
   (context "with mem db"
 
@@ -142,9 +138,7 @@
           (future (do (Thread/sleep 500) (sut/-release-lock! @config)))
           (with-redefs [sut/lock-wait-time   1000
                         sut/lock-check-delay 100]
-            (should-not-throw (sut/-wait-for-unlock! @config))))
-        )
-      )
+            (should-not-throw (sut/-wait-for-unlock! @config))))))
 
     (context "sync-schemas"
 
@@ -216,8 +210,7 @@
           (should= 3 (count values))
           (should-contain :pending values)
           (should-contain :active values)
-          (should-contain :disabled values)))
-      )
+          (should-contain :disabled values))))
 
     (context "migrate!"
 
@@ -256,8 +249,7 @@
         (sut/-create-migration! @config "20230303")
         (log/capture-logs (sut/migrate! @config nil))
         (let [logs (log/parse-captured-logs)]
-          (should= ["No migrations needed."] (map :message logs))))
-      )
+          (should= ["No migrations needed."] (map :message logs)))))
 
     (context "service"
 
@@ -269,10 +261,4 @@
             (should-have-invoked :migrate!))))
 
       (it "does nothing on stop"
-        (should-be-nil (:stop sut/service)))
-
-      )
-
-    )
-
-  )
+        (should-be-nil (:stop sut/service))))))

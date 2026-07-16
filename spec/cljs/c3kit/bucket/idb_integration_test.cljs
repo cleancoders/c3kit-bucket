@@ -32,18 +32,18 @@
 (defmethod cljs.test/report [:cljs.test/default :fail] [m]
   (cljs.test/inc-report-counter! :fail)
   (swap! failure-messages conj
-    (str "\nFAIL in " (cljs.test/testing-vars-str m)
-         (when-let [msg (:message m)] (str "\n" msg))
-         "\nexpected: " (pr-str (:expected m))
-         "\n  actual: " (pr-str (:actual m)))))
+         (str "\nFAIL in " (cljs.test/testing-vars-str m)
+              (when-let [msg (:message m)] (str "\n" msg))
+              "\nexpected: " (pr-str (:expected m))
+              "\n  actual: " (pr-str (:actual m)))))
 
 (defmethod cljs.test/report [:cljs.test/default :error] [m]
   (cljs.test/inc-report-counter! :error)
   (swap! failure-messages conj
-    (str "\nERROR in " (cljs.test/testing-vars-str m)
-         (when-let [msg (:message m)] (str "\n" msg))
-         "\nexpected: " (pr-str (:expected m))
-         "\n  actual: " (pr-str (:actual m)))))
+         (str "\nERROR in " (cljs.test/testing-vars-str m)
+              (when-let [msg (:message m)] (str "\n" msg))
+              "\nexpected: " (pr-str (:expected m))
+              "\n  actual: " (pr-str (:actual m)))))
 
 (defmethod cljs.test/report [:cljs.test/default :summary] [m]
   (doseq [msg @failure-messages] (println msg))
@@ -68,396 +68,396 @@
 
 (deftest persistence-round-trip
   (async done
-    (let [db (api/create-db {:impl :indexeddb :db-name "integration-persist-1"} [bibelot])]
-      (reset! api/impl db)
-      (-> (idb/init!)
-          (.then (fn [db] (api/-tx db {:kind :bibelot :name "widget" :size 5})))
-          (.then (fn [saved]
-                   (is (= "widget" (:name saved)))
-                   (is (some? (:id saved)))
-                   (reset! (.-store db) {:all {}})
-                   (idb/rehydrate!)))
-          (.then (fn [db]
-                   (let [found (api/find-by- db :bibelot :name "widget")]
-                     (is (= 1 (count found)))
-                     (is (= "widget" (:name (first found))))
-                     (is (= 5 (:size (first found)))))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-persist-1")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+         (let [db (api/create-db {:impl :indexeddb :db-name "integration-persist-1"} [bibelot])]
+           (reset! api/impl db)
+           (-> (idb/init!)
+               (.then (fn [db] (api/-tx db {:kind :bibelot :name "widget" :size 5})))
+               (.then (fn [saved]
+                        (is (= "widget" (:name saved)))
+                        (is (some? (:id saved)))
+                        (reset! (.-store db) {:all {}})
+                        (idb/rehydrate!)))
+               (.then (fn [db]
+                        (let [found (api/find-by- db :bibelot :name "widget")]
+                          (is (= 1 (count found)))
+                          (is (= "widget" (:name (first found))))
+                          (is (= 5 (:size (first found)))))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-persist-1")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest dirty-set-round-trip
   (async done
-    (let [legend {:bibelot {:id {:type :long} :name {:type :string}}}]
-      (reset! idb/dirty-chain (js/Promise.resolve nil))
-      (-> (io/open "integration-dirty-1" legend)
-          (.then (fn [idb]
-                   (-> (idb/add-to-dirty-set! idb {1 :bibelot 2 :bibelot 3 :bibelot})
-                       (.then (fn [_] (idb/read-dirty-set idb)))
-                       (.then (fn [result]
-                                (is (= {1 :bibelot 2 :bibelot 3 :bibelot} result))
-                                (idb/add-to-dirty-set! idb {4 :bibelot})))
-                       (.then (fn [_] (idb/read-dirty-set idb)))
-                       (.then (fn [result]
-                                (is (= {1 :bibelot 2 :bibelot 3 :bibelot 4 :bibelot} result))
-                                (idb/remove-from-dirty-set! idb #{2 4})))
-                       (.then (fn [_] (idb/read-dirty-set idb)))
-                       (.then (fn [result]
-                                (is (= {1 :bibelot 3 :bibelot} result))
-                                (io/close idb)
-                                (.deleteDatabase js/indexedDB "integration-dirty-1"))))))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+         (let [legend {:bibelot {:id {:type :long} :name {:type :string}}}]
+           (reset! idb/dirty-chain (js/Promise.resolve nil))
+           (-> (io/open "integration-dirty-1" legend)
+               (.then (fn [idb]
+                        (-> (idb/add-to-dirty-set! idb {1 :bibelot 2 :bibelot 3 :bibelot})
+                            (.then (fn [_] (idb/read-dirty-set idb)))
+                            (.then (fn [result]
+                                     (is (= {1 :bibelot 2 :bibelot 3 :bibelot} result))
+                                     (idb/add-to-dirty-set! idb {4 :bibelot})))
+                            (.then (fn [_] (idb/read-dirty-set idb)))
+                            (.then (fn [result]
+                                     (is (= {1 :bibelot 2 :bibelot 3 :bibelot 4 :bibelot} result))
+                                     (idb/remove-from-dirty-set! idb #{2 4})))
+                            (.then (fn [_] (idb/read-dirty-set idb)))
+                            (.then (fn [result]
+                                     (is (= {1 :bibelot 3 :bibelot} result))
+                                     (io/close idb)
+                                     (.deleteDatabase js/indexedDB "integration-dirty-1"))))))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest offline-tx-and-sync-lifecycle
   (async done
-    (let [db       (api/create-db {:impl :indexeddb :db-name "integration-sync-1" :online? (constantly false)} [bibelot])
-          received (atom nil)]
-      (reset! api/impl db)
-      (reset! idb/offline-id-counter 0)
-      (reset! idb/dirty-chain (js/Promise.resolve nil))
-      (-> (idb/init!)
-          (.then (fn [db]
-                   (api/-tx db {:kind :bibelot :name "w1" :size 1})
-                   (api/-tx db {:kind :bibelot :name "w2" :size 2})
-                   (idb/sync! (fn [entities] (reset! received entities)))))
-          (.then (fn [_]
-                   (is (= 2 (count @received)))
-                   (is (= #{-1 -2} (into #{} (map :id) @received)))
-                   (idb/sync-complete! #{-1 -2} [{:kind :bibelot :id 9001 :name "w1" :size 1}
-                                                  {:kind :bibelot :id 9002 :name "w2" :size 2}])))
-          (.then (fn [_]
-                   (is (= 0 (count (api/find-by- db :bibelot :id -1))))
-                   (is (= 0 (count (api/find-by- db :bibelot :id -2))))
-                   (is (= "w1" (:name (api/entity- db :bibelot 9001))))
-                   (is (= "w2" (:name (api/entity- db :bibelot 9002))))
-                   (idb/read-dirty-set @(.-idb-atom db))))
-          (.then (fn [dirty]
-                   (is (= {} dirty))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-sync-1")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+         (let [db       (api/create-db {:impl :indexeddb :db-name "integration-sync-1" :online? (constantly false)} [bibelot])
+               received (atom nil)]
+           (reset! api/impl db)
+           (reset! idb/offline-id-counter 0)
+           (reset! idb/dirty-chain (js/Promise.resolve nil))
+           (-> (idb/init!)
+               (.then (fn [db]
+                        (api/-tx db {:kind :bibelot :name "w1" :size 1})
+                        (api/-tx db {:kind :bibelot :name "w2" :size 2})
+                        (idb/sync! (fn [entities] (reset! received entities)))))
+               (.then (fn [_]
+                        (is (= 2 (count @received)))
+                        (is (= #{-1 -2} (into #{} (map :id) @received)))
+                        (idb/sync-complete! #{-1 -2} [{:kind :bibelot :id 9001 :name "w1" :size 1}
+                                                      {:kind :bibelot :id 9002 :name "w2" :size 2}])))
+               (.then (fn [_]
+                        (is (= 0 (count (api/find-by- db :bibelot :id -1))))
+                        (is (= 0 (count (api/find-by- db :bibelot :id -2))))
+                        (is (= "w1" (:name (api/entity- db :bibelot 9001))))
+                        (is (= "w2" (:name (api/entity- db :bibelot 9002))))
+                        (idb/read-dirty-set @(.-idb-atom db))))
+               (.then (fn [dirty]
+                        (is (= {} dirty))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-sync-1")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest refresh-purges-and-replaces
   (async done
-    (let [db (api/create-db {:impl :indexeddb :db-name "integration-refresh-1"} [bibelot])]
-      (reset! api/impl db)
-      (reset! idb/offline-id-counter 0)
-      (-> (idb/init!)
-          (.then (fn [db]
-                   (api/-tx db {:kind :bibelot :id -1 :name "offline-widget" :size 5})
-                   (api/-tx db {:kind :bibelot :id 100 :name "server-widget" :size 10})
-                   (idb/refresh! [{:kind :bibelot :id 200 :name "fresh-widget" :size 20}])))
-          (.then (fn [_]
-                   (is (= 0 (count (filter #(neg? (:id %)) (api/find-by- db :bibelot :name "offline-widget")))))
-                   (is (= "server-widget" (:name (api/entity- db :bibelot 100))))
-                   (is (= "fresh-widget" (:name (api/entity- db :bibelot 200))))
+         (let [db (api/create-db {:impl :indexeddb :db-name "integration-refresh-1"} [bibelot])]
+           (reset! api/impl db)
+           (reset! idb/offline-id-counter 0)
+           (-> (idb/init!)
+               (.then (fn [db]
+                        (api/-tx db {:kind :bibelot :id -1 :name "offline-widget" :size 5})
+                        (api/-tx db {:kind :bibelot :id 100 :name "server-widget" :size 10})
+                        (idb/refresh! [{:kind :bibelot :id 200 :name "fresh-widget" :size 20}])))
+               (.then (fn [_]
+                        (is (= 0 (count (filter #(neg? (:id %)) (api/find-by- db :bibelot :name "offline-widget")))))
+                        (is (= "server-widget" (:name (api/entity- db :bibelot 100))))
+                        (is (= "fresh-widget" (:name (api/entity- db :bibelot 200))))
                    ;; Rehydrate to verify IDB state matches memory
-                   (reset! (.-store db) {:all {}})
-                   (idb/rehydrate!)))
-          (.then (fn [db]
-                   (is (= 0 (count (filter #(neg? (:id %)) (api/find-by- db :bibelot :name "offline-widget")))))
-                   (is (some? (api/entity- db :bibelot 100)))
-                   (is (some? (api/entity- db :bibelot 200)))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-refresh-1")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+                        (reset! (.-store db) {:all {}})
+                        (idb/rehydrate!)))
+               (.then (fn [db]
+                        (is (= 0 (count (filter #(neg? (:id %)) (api/find-by- db :bibelot :name "offline-widget")))))
+                        (is (some? (api/entity- db :bibelot 100)))
+                        (is (some? (api/entity- db :bibelot 200)))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-refresh-1")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest cache-strategy-clears-on-init-when-online
   (async done
-    (let [db (api/create-db {:impl :indexeddb :db-name "integration-cache-1"
-                             :idb-strategy :cache :online? (constantly true)} [bibelot])]
-      (reset! api/impl db)
-      (-> (idb/init!)
-          (.then (fn [db] (api/-tx db {:kind :bibelot :name "cached-widget" :size 5})))
-          (.then (fn [_]
+         (let [db (api/create-db {:impl :indexeddb :db-name "integration-cache-1"
+                                  :idb-strategy :cache :online? (constantly true)} [bibelot])]
+           (reset! api/impl db)
+           (-> (idb/init!)
+               (.then (fn [db] (api/-tx db {:kind :bibelot :name "cached-widget" :size 5})))
+               (.then (fn [_]
                    ;; Verify data is persisted in IDB
-                   (reset! (.-store db) {:all {}})
-                   (idb/rehydrate!)))
-          (.then (fn [db]
-                   (is (= 1 (count (api/find-by- db :bibelot :name "cached-widget"))))
+                        (reset! (.-store db) {:all {}})
+                        (idb/rehydrate!)))
+               (.then (fn [db]
+                        (is (= 1 (count (api/find-by- db :bibelot :name "cached-widget"))))
                    ;; Close and re-init — should clear because online + cache strategy
-                   (api/close db)
-                   (idb/init!)))
-          (.then (fn [db]
-                   (is (= 0 (count (api/find-by- db :bibelot :name "cached-widget"))))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-cache-1")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+                        (api/close db)
+                        (idb/init!)))
+               (.then (fn [db]
+                        (is (= 0 (count (api/find-by- db :bibelot :name "cached-widget"))))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-cache-1")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest cache-strategy-preserves-dirty-entities-on-init-when-online
   (async done
-    (let [online? (atom false)
-          db      (api/create-db {:impl :indexeddb :db-name "integration-cache-dirty-1"
-                                  :idb-strategy :cache :online? #(deref online?)} [bibelot])
-          synced  (atom nil)]
-      (reset! api/impl db)
-      (reset! idb/offline-id-counter 0)
-      (reset! idb/dirty-chain (js/Promise.resolve nil))
-      (-> (idb/init!)
-          (.then (fn [db]
+         (let [online? (atom false)
+               db      (api/create-db {:impl :indexeddb :db-name "integration-cache-dirty-1"
+                                       :idb-strategy :cache :online? #(deref online?)} [bibelot])
+               synced  (atom nil)]
+           (reset! api/impl db)
+           (reset! idb/offline-id-counter 0)
+           (reset! idb/dirty-chain (js/Promise.resolve nil))
+           (-> (idb/init!)
+               (.then (fn [db]
                    ;; Create entities while offline — these become dirty
-                   (api/-tx db {:kind :bibelot :name "dirty-widget" :size 42})
-                   @idb/dirty-chain))
-          (.then (fn [_]
+                        (api/-tx db {:kind :bibelot :name "dirty-widget" :size 42})
+                        @idb/dirty-chain))
+               (.then (fn [_]
                    ;; Go online and re-init (simulates page refresh after reconnect)
-                   (reset! online? true)
-                   (api/close db)
-                   (idb/init!)))
-          (.then (fn [db]
+                        (reset! online? true)
+                        (api/close db)
+                        (idb/init!)))
+               (.then (fn [db]
                    ;; Sync should still find the dirty entity
-                   (idb/sync! (fn [entities] (reset! synced entities)))))
-          (.then (fn [_]
-                   (is (= 1 (count @synced)) "dirty entity should survive cache clear")
-                   (is (= "dirty-widget" (:name (first @synced))))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-cache-dirty-1")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+                        (idb/sync! (fn [entities] (reset! synced entities)))))
+               (.then (fn [_]
+                        (is (= 1 (count @synced)) "dirty entity should survive cache clear")
+                        (is (= "dirty-widget" (:name (first @synced))))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-cache-dirty-1")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest cache-strategy-dirty-entities-survive-full-refresh-simulation
   (async done
-    (let [online? (atom false)
-          db      (api/create-db {:impl :indexeddb :db-name "integration-cache-dirty-refresh"
-                                  :idb-strategy :cache :online? #(deref online?)} [bibelot])
-          synced  (atom nil)]
-      (reset! api/impl db)
-      (reset! idb/offline-id-counter 0)
-      (reset! idb/dirty-chain (js/Promise.resolve nil))
-      (-> (idb/init!)
-          (.then (fn [db]
-                   (api/-tx db {:kind :bibelot :name "dirty-widget" :size 42})
-                   @idb/dirty-chain))
-          (.then (fn [_]
+         (let [online? (atom false)
+               db      (api/create-db {:impl :indexeddb :db-name "integration-cache-dirty-refresh"
+                                       :idb-strategy :cache :online? #(deref online?)} [bibelot])
+               synced  (atom nil)]
+           (reset! api/impl db)
+           (reset! idb/offline-id-counter 0)
+           (reset! idb/dirty-chain (js/Promise.resolve nil))
+           (-> (idb/init!)
+               (.then (fn [db]
+                        (api/-tx db {:kind :bibelot :name "dirty-widget" :size 42})
+                        @idb/dirty-chain))
+               (.then (fn [_]
                    ;; Simulate full page refresh: reset all JS state that would be fresh
-                   (reset! online? true)
-                   (reset! idb/dirty-chain (js/Promise.resolve nil))
-                   (reset! idb/offline-id-counter 0)
-                   (api/close db)
-                   (idb/init!)))
-          (.then (fn [_]
-                   (idb/sync! (fn [entities] (reset! synced entities)))))
-          (.then (fn [_]
-                   (is (= 1 (count @synced)) "dirty entity should survive full refresh simulation")
-                   (is (= "dirty-widget" (:name (first @synced))))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-cache-dirty-refresh")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+                        (reset! online? true)
+                        (reset! idb/dirty-chain (js/Promise.resolve nil))
+                        (reset! idb/offline-id-counter 0)
+                        (api/close db)
+                        (idb/init!)))
+               (.then (fn [_]
+                        (idb/sync! (fn [entities] (reset! synced entities)))))
+               (.then (fn [_]
+                        (is (= 1 (count @synced)) "dirty entity should survive full refresh simulation")
+                        (is (= "dirty-widget" (:name (first @synced))))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-cache-dirty-refresh")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest cache-strategy-keeps-data-when-offline
   (async done
-    (let [online? (atom false)
-          db      (api/create-db {:impl :indexeddb :db-name "integration-cache-2"
-                                  :idb-strategy :cache :online? #(deref online?)} [bibelot])]
-      (reset! api/impl db)
-      (-> (idb/init!)
-          (.then (fn [db]
-                   (reset! online? true)
-                   (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})))
-          (.then (fn [_]
+         (let [online? (atom false)
+               db      (api/create-db {:impl :indexeddb :db-name "integration-cache-2"
+                                       :idb-strategy :cache :online? #(deref online?)} [bibelot])]
+           (reset! api/impl db)
+           (-> (idb/init!)
+               (.then (fn [db]
+                        (reset! online? true)
+                        (api/-tx db {:kind :bibelot :name "offline-widget" :size 5})))
+               (.then (fn [_]
                    ;; Persist to IDB, then clear memory
-                   (reset! (.-store db) {:all {}})
-                   (idb/rehydrate!)))
-          (.then (fn [db]
-                   (is (= 1 (count (api/find-by- db :bibelot :name "offline-widget"))))
+                        (reset! (.-store db) {:all {}})
+                        (idb/rehydrate!)))
+               (.then (fn [db]
+                        (is (= 1 (count (api/find-by- db :bibelot :name "offline-widget"))))
                    ;; Re-init while offline — should keep data
-                   (reset! online? false)
-                   (api/close db)
-                   (idb/init!)))
-          (.then (fn [db]
-                   (is (= 1 (count (api/find-by- db :bibelot :name "offline-widget"))))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-cache-2")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+                        (reset! online? false)
+                        (api/close db)
+                        (idb/init!)))
+               (.then (fn [db]
+                        (is (= 1 (count (api/find-by- db :bibelot :name "offline-widget"))))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-cache-2")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest primary-strategy-keeps-data-when-online
   (async done
-    (let [db (api/create-db {:impl :indexeddb :db-name "integration-primary-1"
-                             :idb-strategy :primary :online? (constantly true)} [bibelot])]
-      (reset! api/impl db)
-      (-> (idb/init!)
-          (.then (fn [db] (api/-tx db {:kind :bibelot :name "primary-widget" :size 5})))
-          (.then (fn [_]
-                   (reset! (.-store db) {:all {}})
-                   (idb/rehydrate!)))
-          (.then (fn [db]
-                   (is (= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))
-                   (api/close db)
-                   (idb/init!)))
-          (.then (fn [db]
-                   (is (= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-primary-1")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+         (let [db (api/create-db {:impl :indexeddb :db-name "integration-primary-1"
+                                  :idb-strategy :primary :online? (constantly true)} [bibelot])]
+           (reset! api/impl db)
+           (-> (idb/init!)
+               (.then (fn [db] (api/-tx db {:kind :bibelot :name "primary-widget" :size 5})))
+               (.then (fn [_]
+                        (reset! (.-store db) {:all {}})
+                        (idb/rehydrate!)))
+               (.then (fn [db]
+                        (is (= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))
+                        (api/close db)
+                        (idb/init!)))
+               (.then (fn [db]
+                        (is (= 1 (count (api/find-by- db :bibelot :name "primary-widget"))))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-primary-1")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest rollback-on-idb-failure
   (async done
-    (let [db           (api/create-db {:impl :indexeddb :db-name "integration-rollback-1"} [bibelot])
-          _            (api/-tx db {:kind :bibelot :name "existing" :size 1})
-          store-before @(.-store db)]
+         (let [db           (api/create-db {:impl :indexeddb :db-name "integration-rollback-1"} [bibelot])
+               _            (api/-tx db {:kind :bibelot :name "existing" :size 1})
+               store-before @(.-store db)]
       ;; Point idb-atom to a broken mock to force IDB write failure
-      (reset! (.-idb-atom db) #js {:transaction (fn [] (throw (js/Error. "closed")))})
-      (api/-tx db {:kind :bibelot :name "should-rollback" :size 99})
+           (reset! (.-idb-atom db) #js {:transaction (fn [] (throw (js/Error. "closed")))})
+           (api/-tx db {:kind :bibelot :name "should-rollback" :size 99})
       ;; Entity appears optimistically in memory
-      (is (= 1 (count (api/find-by- db :bibelot :name "should-rollback"))))
+           (is (= 1 (count (api/find-by- db :bibelot :name "should-rollback"))))
       ;; After the promise rejects, store should roll back
-      (js/setTimeout
-        (fn []
-          (is (= store-before @(.-store db)))
-          (is (= 0 (count (api/find-by- db :bibelot :name "should-rollback"))))
-          (done))
-        100))))
+           (js/setTimeout
+             (fn []
+               (is (= store-before @(.-store db)))
+               (is (= 0 (count (api/find-by- db :bibelot :name "should-rollback"))))
+               (done))
+             100))))
 
 (deftest sync-before-init-completes-returns-empty
   (async done
-    (let [online? (atom false)
-          db      (api/create-db {:impl :indexeddb :db-name "integration-sync-race-1"
-                                  :idb-strategy :cache :online? #(deref online?)} [bibelot])
-          synced1 (atom nil)
-          synced2 (atom nil)]
-      (reset! api/impl db)
-      (reset! idb/offline-id-counter 0)
-      (reset! idb/dirty-chain (js/Promise.resolve nil))
-      (-> (idb/init!)
-          (.then (fn [db]
+         (let [online? (atom false)
+               db      (api/create-db {:impl :indexeddb :db-name "integration-sync-race-1"
+                                       :idb-strategy :cache :online? #(deref online?)} [bibelot])
+               synced1 (atom nil)
+               synced2 (atom nil)]
+           (reset! api/impl db)
+           (reset! idb/offline-id-counter 0)
+           (reset! idb/dirty-chain (js/Promise.resolve nil))
+           (-> (idb/init!)
+               (.then (fn [db]
                    ;; Create entity while offline — becomes dirty with negative ID
-                   (api/-tx db {:kind :bibelot :name "race-widget" :size 7})
-                   @idb/dirty-chain))
-          (.then (fn [_]
+                        (api/-tx db {:kind :bibelot :name "race-widget" :size 7})
+                        @idb/dirty-chain))
+               (.then (fn [_]
                    ;; Go online
-                   (reset! online? true)
+                        (reset! online? true)
                    ;; Close DB and nil out idb-atom to simulate pre-init state
-                   (api/close db)
-                   (reset! (.-idb-atom db) nil)
+                        (api/close db)
+                        (reset! (.-idb-atom db) nil)
                    ;; sync! BEFORE init! — idb-atom is nil, should get []
-                   (idb/sync! (fn [entities] (reset! synced1 entities)))))
-          (.then (fn [_]
-                   (is (= [] @synced1) "sync before init should return empty vector")
+                        (idb/sync! (fn [entities] (reset! synced1 entities)))))
+               (.then (fn [_]
+                        (is (= [] @synced1) "sync before init should return empty vector")
                    ;; Now init! completes (simulating init finishing after on-online)
-                   (reset! idb/dirty-chain (js/Promise.resolve nil))
-                   (idb/init!)))
-          (.then (fn [_]
+                        (reset! idb/dirty-chain (js/Promise.resolve nil))
+                        (idb/init!)))
+               (.then (fn [_]
                    ;; sync! AFTER init! — should find the dirty entity
-                   (idb/sync! (fn [entities] (reset! synced2 entities)))))
-          (.then (fn [_]
-                   (is (= 1 (count @synced2)) "sync after init should find dirty entity")
-                   (is (= "race-widget" (:name (first @synced2))))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-sync-race-1")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+                        (idb/sync! (fn [entities] (reset! synced2 entities)))))
+               (.then (fn [_]
+                        (is (= 1 (count @synced2)) "sync after init should find dirty entity")
+                        (is (= "race-widget" (:name (first @synced2))))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-sync-race-1")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest migrates-store-with-wrong-keypath
   (async done
-    (let [db-name  "integration-keypath-migration"
-          legend   {:bibelot {:id {:type :long} :name {:type :string}}}
-          request  (.open js/indexedDB db-name 1)]
-      (set! (.-onupgradeneeded request)
-            (fn [event]
-              (let [db (.-result (.-target event))]
-                (.createObjectStore db "bibelot" #js {:keyPath "idxId"})
-                (.createObjectStore db "_meta" #js {:keyPath "id"}))))
-      (-> (io/request->promise request identity)
-          (.then (fn [old-db]
-                   (let [tx    (.transaction old-db #js ["bibelot"] "readwrite")
-                         store (.objectStore tx "bibelot")]
-                     (.put store #js {:idxId 1 :id 42 :data "{:kind :bibelot :id 42 :name \"old\"}"})
-                     (js/Promise.
-                       (fn [resolve reject]
-                         (set! (.-oncomplete tx) (fn [_] (resolve old-db)))
-                         (set! (.-onerror tx) (fn [e] (reject e))))))))
-          (.then (fn [old-db]
-                   (.close old-db)
-                   (.removeItem js/localStorage (str db-name "-schema-hash"))
-                   (.removeItem js/localStorage (str db-name "-schema-ver"))
-                   (io/open db-name legend)))
-          (.then (fn [new-db]
-                   (let [tx    (.transaction new-db #js ["bibelot"] "readwrite")
-                         store (.objectStore tx "bibelot")]
-                     (is (= "id" (.-keyPath store)))
-                     (.put store (io/clj->js-entity {:kind :bibelot :id -1 :name "new-widget"}))
-                     (-> (js/Promise.
-                           (fn [resolve reject]
-                             (set! (.-oncomplete tx) (fn [_] (resolve nil)))
-                             (set! (.-onerror tx) (fn [e] (reject e)))))
-                         (.then (fn [_] (io/read-entity new-db "bibelot" -1)))
-                         (.then (fn [entity]
-                                  (is (= -1 (:id entity)))
-                                  (is (= "new-widget" (:name entity)))
-                                  (.close new-db)
-                                  (.deleteDatabase js/indexedDB db-name)))))))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+         (let [db-name  "integration-keypath-migration"
+               legend   {:bibelot {:id {:type :long} :name {:type :string}}}
+               request  (.open js/indexedDB db-name 1)]
+           (set! (.-onupgradeneeded request)
+                 (fn [event]
+                   (let [db (.-result (.-target event))]
+                     (.createObjectStore db "bibelot" #js {:keyPath "idxId"})
+                     (.createObjectStore db "_meta" #js {:keyPath "id"}))))
+           (-> (io/request->promise request identity)
+               (.then (fn [old-db]
+                        (let [tx    (.transaction old-db #js ["bibelot"] "readwrite")
+                              store (.objectStore tx "bibelot")]
+                          (.put store #js {:idxId 1 :id 42 :data "{:kind :bibelot :id 42 :name \"old\"}"})
+                          (js/Promise.
+                            (fn [resolve reject]
+                              (set! (.-oncomplete tx) (fn [_] (resolve old-db)))
+                              (set! (.-onerror tx) (fn [e] (reject e))))))))
+               (.then (fn [old-db]
+                        (.close old-db)
+                        (.removeItem js/localStorage (str db-name "-schema-hash"))
+                        (.removeItem js/localStorage (str db-name "-schema-ver"))
+                        (io/open db-name legend)))
+               (.then (fn [new-db]
+                        (let [tx    (.transaction new-db #js ["bibelot"] "readwrite")
+                              store (.objectStore tx "bibelot")]
+                          (is (= "id" (.-keyPath store)))
+                          (.put store (io/clj->js-entity {:kind :bibelot :id -1 :name "new-widget"}))
+                          (-> (js/Promise.
+                                (fn [resolve reject]
+                                  (set! (.-oncomplete tx) (fn [_] (resolve nil)))
+                                  (set! (.-onerror tx) (fn [e] (reject e)))))
+                              (.then (fn [_] (io/read-entity new-db "bibelot" -1)))
+                              (.then (fn [entity]
+                                       (is (= -1 (:id entity)))
+                                       (is (= "new-widget" (:name entity)))
+                                       (.close new-db)
+                                       (.deleteDatabase js/indexedDB db-name)))))))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest open-sets-onversionchange-to-close-db
   (async done
-    (let [db-name "integration-versionchange-1"
-          legend  {:bibelot {:id {:type :long} :name {:type :string}}}]
-      (.deleteDatabase js/indexedDB db-name)
-      (-> (io/open db-name legend)
-          (.then (fn [db]
-                   (is (fn? (.-onversionchange db)) "onversionchange should be set after open")
-                   (io/close db)
-                   (.deleteDatabase js/indexedDB db-name)))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+         (let [db-name "integration-versionchange-1"
+               legend  {:bibelot {:id {:type :long} :name {:type :string}}}]
+           (.deleteDatabase js/indexedDB db-name)
+           (-> (io/open db-name legend)
+               (.then (fn [db]
+                        (is (fn? (.-onversionchange db)) "onversionchange should be set after open")
+                        (io/close db)
+                        (.deleteDatabase js/indexedDB db-name)))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest version-upgrade-unblocks-when-old-connection-exists
   (async done
-    (let [db-name "integration-versionchange-2"
-          legend  {:bibelot {:id {:type :long} :name {:type :string}}}]
-      (.deleteDatabase js/indexedDB db-name)
+         (let [db-name "integration-versionchange-2"
+               legend  {:bibelot {:id {:type :long} :name {:type :string}}}]
+           (.deleteDatabase js/indexedDB db-name)
       ;; Open at version 1 (simulating old service worker)
-      (-> (io/request->promise (.open js/indexedDB db-name 1) identity)
-          (.then (fn [old-db]
+           (-> (io/request->promise (.open js/indexedDB db-name 1) identity)
+               (.then (fn [old-db]
                    ;; Now open via io/open which requests a higher version.
                    ;; Without onversionchange on old-db, this would block forever.
                    ;; io/open should set onversionchange on its OWN connections,
                    ;; but here old-db was opened raw. So we set it manually to
                    ;; simulate what io/open would do on the SW's connection.
-                   (set! (.-onversionchange old-db) (fn [_] (.close old-db)))
-                   (.removeItem js/localStorage (str db-name "-schema-hash"))
-                   (.removeItem js/localStorage (str db-name "-schema-ver"))
-                   (io/open db-name legend)))
-          (.then (fn [new-db]
-                   (is (some? new-db) "upgrade should succeed after old connection closes")
-                   (is (fn? (.-onversionchange new-db)) "new db should also have onversionchange")
-                   (io/close new-db)
-                   (.deleteDatabase js/indexedDB db-name)))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+                        (set! (.-onversionchange old-db) (fn [_] (.close old-db)))
+                        (.removeItem js/localStorage (str db-name "-schema-hash"))
+                        (.removeItem js/localStorage (str db-name "-schema-ver"))
+                        (io/open db-name legend)))
+               (.then (fn [new-db]
+                        (is (some? new-db) "upgrade should succeed after old connection closes")
+                        (is (fn? (.-onversionchange new-db)) "new db should also have onversionchange")
+                        (io/close new-db)
+                        (.deleteDatabase js/indexedDB db-name)))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (deftest force-offline-dirty-tracks-when-navigator-online
   (async done
-    (let [db      (api/create-db {:impl :indexeddb :db-name "integration-force-offline-1" :online? (constantly true)} [bibelot])
-          synced  (atom nil)]
-      (reset! api/impl db)
-      (reset! idb/offline-id-counter 0)
-      (reset! idb/dirty-chain (js/Promise.resolve nil))
-      (-> (idb/init!)
-          (.then (fn [_]
+         (let [db      (api/create-db {:impl :indexeddb :db-name "integration-force-offline-1" :online? (constantly true)} [bibelot])
+               synced  (atom nil)]
+           (reset! api/impl db)
+           (reset! idb/offline-id-counter 0)
+           (reset! idb/dirty-chain (js/Promise.resolve nil))
+           (-> (idb/init!)
+               (.then (fn [_]
                    ;; Force offline mode — simulates save-offline! while navigator.onLine is true
-                   (reset! idb/force-offline? true)
-                   (api/-tx db {:kind :bibelot :name "forced-offline-widget" :size 7})
-                   (reset! idb/force-offline? false)
-                   @idb/dirty-chain))
-          (.then (fn [_]
-                   (idb/sync! (fn [entities] (reset! synced entities)))))
-          (.then (fn [_]
-                   (is (= 1 (count @synced)) "entity should be dirty-tracked")
-                   (is (= -1 (:id (first @synced))) "entity should have negative offline ID")
-                   (is (= "forced-offline-widget" (:name (first @synced))))
-                   (api/close db)
-                   (.deleteDatabase js/indexedDB "integration-force-offline-1")))
-          (.then (fn [_] (done)))
-          (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
+                        (reset! idb/force-offline? true)
+                        (api/-tx db {:kind :bibelot :name "forced-offline-widget" :size 7})
+                        (reset! idb/force-offline? false)
+                        @idb/dirty-chain))
+               (.then (fn [_]
+                        (idb/sync! (fn [entities] (reset! synced entities)))))
+               (.then (fn [_]
+                        (is (= 1 (count @synced)) "entity should be dirty-tracked")
+                        (is (= -1 (:id (first @synced))) "entity should have negative offline ID")
+                        (is (= "forced-offline-widget" (:name (first @synced))))
+                        (api/close db)
+                        (.deleteDatabase js/indexedDB "integration-force-offline-1")))
+               (.then (fn [_] (done)))
+               (.catch (fn [e] (is (nil? e) (str "Unexpected: " e)) (done)))))))
 
 (defn ^:export run []
   (cljs.test/run-tests 'c3kit.bucket.idb-integration-test))

@@ -21,9 +21,7 @@
       (sut/set-safety! false)
       (should= false sut/*safety*)
       (sut/set-safety! true)
-      (should= true sut/*safety*))
-
-    )
+      (should= true sut/*safety*)))
 
   (context "cas"
 
@@ -34,10 +32,8 @@
 
     (it "without id"
       (should-throw #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core.ExceptionInfo)
-        "cas may not be applied to new entities."
-        (sut/cas {:foo "bar"} {:kind :widget})))
-
-    )
+                    "cas may not be applied to new entities."
+                    (sut/cas {:foo "bar"} {:kind :widget}))))
 
   #?(:clj
      (context "clj"
@@ -52,7 +48,6 @@
                (should= {:foo "bar"} result)
                (should-have-invoked :read-edn {:with ["config/bucket.edn"]}))))
 
-
          (it "loading from alternative resource"
            (with-redefs [util/read-edn-resource (stub :read-edn {:return {:foo "bar"}})]
              (let [result (sut/load-config "foo/bar/config.edn")]
@@ -65,9 +60,7 @@
                            util/var-value         (stub :var-value {:return {:fizz "bang"}})]
                (let [result (sut/load-config)]
                  (should= {:foo "bar" :fizz "bang"} result)
-                 (should-have-invoked :var-value {:with ['foo.bar]})))))
-
-         )
+                 (should-have-invoked :var-value {:with ['foo.bar]}))))))
 
        (context "service"
 
@@ -101,11 +94,6 @@
                (should-not-contain :bucket/impl app)
                (should-not-contain :bucket/config app)
                (should-not-contain :bucket/schemas app))
-             (should-have-invoked :close)))
-
-         )
-       )
-     )
-  )
+             (should-have-invoked :close)))))))
 
 
