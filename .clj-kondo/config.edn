@@ -23,7 +23,11 @@
  {;; c3kit's `for-all` is a comprehension macro shaped like `for`.
   c3kit.apron.corec/for-all clojure.core/for
   ;; garden's `defstyles` defines the stylesheet var; treat like `def`.
-  garden.def/defstyles      clojure.core/def}
+  garden.def/defstyles      clojure.core/def
+  ;; Speclj `around` / `around-all` take a body fn invoked via its bound symbol
+  ;; (`(around [body] (body))`); treat like `fn` so the binding resolves.
+  speclj.core/around        clojure.core/fn
+  speclj.core/around-all    clojure.core/fn}
 
  ;; Speclj's `with` family declares a lazily-evaluated, deref-able symbol
  ;; (accessed via `@name`). Mapping it to `def` via :lint-as resolves the
