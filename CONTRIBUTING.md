@@ -95,23 +95,6 @@ Every consumer-visible change — new features, bug fixes, behaviour changes —
 
 No project-wide formatter. Aim for idiomatic Clojure consistent with the surrounding code. See the formatting notes in the project's internal style docs if in doubt.
 
-## Releasing (maintainers only)
+## Deployment
 
-You must be a member of the Clojars group `com.cleancoders.c3kit`.
-
-1. Go to <https://clojars.org/tokens> and create a deploy token scoped to the group.
-2. Export credentials:
-
-```bash
-export CLOJARS_USERNAME=<your username>
-export CLOJARS_PASSWORD=<your deploy token>
-```
-
-3. Update the `VERSION` file.
-4. Deploy:
-
-```bash
-clj -T:build deploy
-```
-
-This tags the commit, builds the jar, and pushes to Clojars in one step.
+Releases run in CI — see the README's "Deployment" section. Publishing from a local checkout is refused; `clj -T:build deploy` aborts outside GitHub Actions.

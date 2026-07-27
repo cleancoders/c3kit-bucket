@@ -5,10 +5,14 @@
            org.clojure/clojure                   {:mvn/version "1.12.4"}}
  :aliases {:antq            {:deps      {com.github.liquidz/antq {:mvn/version "2.11.1276"}}
                              :main-opts ["-m" "antq.core"]}
-           :build           {:extra-deps  {io.github.clojure/tools.build {:mvn/version "0.10.10"}
-                                           clj-commons/pomegranate       {:mvn/version "1.2.25"}}
-                             :ns-default  build
-                             :extra-paths ["dev"]}
+           :build           {:extra-deps {io.github.cleancoders/github-actions
+                                          {:git/sha "248b62b695cb0e10752988913a778395490936e2" :deps/root "clj"}}
+                             :ns-default cleancoders.build.api
+                             :exec-args  {:group       "com.cleancoders.c3kit"
+                                          :lib-name    "bucket"
+                                          :repo        "cleancoders/c3kit-bucket"
+                                          :ci-workflow "test.yml"
+                                          :license-url "https://github.com/cleancoders/c3kit-bucket/blob/master/LICENSE"}}
            :clj-watson      {:replace-deps {io.github.clj-holmes/clj-watson {:git/tag "v6.1.0"
                                                                              :git/sha "be98e4db74fb8927db4825cc73bbe2606e44e5e3"}}
                              :main-opts    ["-m" "clj-watson.cli"]}
