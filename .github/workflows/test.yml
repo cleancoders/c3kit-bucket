@@ -52,7 +52,7 @@ jobs:
       - name: Install sqlite-vec extension
         run: |
           pip install sqlite-vec
-          echo "SQLITE_VEC_PATH=$(python3 -c 'import sqlite_vec; print(sqlite_vec.loadable_path())')" >> $GITHUB_ENV
+          echo "SQLITE_VEC_PATH=$(python3 -c 'import sqlite_vec; print(sqlite_vec.loadable_path())')" >> "$GITHUB_ENV"
 
       - name: Install sqlcmd
         run: |

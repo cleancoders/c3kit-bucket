@@ -15,6 +15,8 @@
   * **Breaking:** anyone implementing `c3kit.bucket.datomic-common/DatomicApi` outside this repo must update to the new protocol methods
 * **Breaking:** `api/DB` gained `-legend` (returns the legend atom); `api/legend` goes through it, so external `api/DB` implementations must add the method. Cross-namespace `(.-legend db)` access replaced.
 * re-memory: `active-store` for slice cursors so history decorators do not break field access; `select-tx` routes through `api/-tx`
+* Pinned `com.fasterxml.jackson.core/jackson-core` to `2.18.8`, overriding apron's transitive `2.18.6` pin (patches GHSA-r7wm-3cxj-wff9 (High))
+* CI: quoted `$GITHUB_ENV` in the sqlite-vec install step (actionlint SC2086)
 
 ### 2.14.0
 * Upgraded `apron` to `3.0.1`, which pins `com.fasterxml.jackson.core/jackson-core` to `2.18.6` transitively (patching CVE-2025-52999 (High) and GHSA-72hv-8253-57qq (Medium)). **Note:** apron `3.0.0` was a breaking major release restructuring the ref/registry system into a `lexicon`; consumers relying on apron's schema internals transitively via bucket should review the apron `3.0.0` changelog

@@ -1,6 +1,8 @@
 {:paths   ["src/clj" "src/cljc" "src/cljs"]
  :deps    {com.cleancoders.c3kit/apron           {:mvn/version "3.0.1"}
            cljsjs/hashids                        {:mvn/version "1.0.2-0"}
+           ;; overrides apron's transitive 2.18.6 pin; patches GHSA-r7wm-3cxj-wff9 (High)
+           com.fasterxml.jackson.core/jackson-core {:mvn/version "2.18.8"}
            jstrutz/hashids                       {:mvn/version "1.0.1"}
            org.clojure/clojure                   {:mvn/version "1.12.4"}}
  :aliases {:antq            {:deps      {com.github.liquidz/antq {:mvn/version "2.11.1276"}}
