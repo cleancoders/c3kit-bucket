@@ -1,4 +1,4 @@
-### Unreleased
+### 3.0.0
 * **Datomic `:order-by` and pagination** — both on-prem and cloud `find` support `:order-by` plus deterministic `:drop`/`:take` pages. Pipeline: query id/sort-key tuples → sort/page in process → hydrate only the page (cloud uses one batch pull). See `docs/datomic-guide.md`.
   * Cloud no longer hydrates the full match set before paging (was a full `pull` in the main query)
   * Without `:order-by`, `:drop`/`:take` sorts by eid for stable pages; plain finds stay unsorted
@@ -11,8 +11,8 @@
 * **Datomic-layer refactor**
   * Merged `DatomicOnPremApi` / `DatomicCloudApi` into `DatomicDB` / `DatomicCloudDB` (one deftype per product)
   * Slimmed `DatomicApi` to a pure driver port with `-method` names (`-connect`, `-db`, `-transact`, `-q`, `-d-entity`, `-history-db`, `-as-of-db`); removed `tx`/`tx*`/`do-find` callbacks
-  * **Breaking (internal):** anyone implementing `c3kit.bucket.datomic-common/DatomicApi` outside this repo must update to the new protocol methods
-* Added `api/DB` `-legend` (returns the legend atom); `api/legend` uses it. Cross-namespace `(.-legend db)` access replaced.
+  * **Breaking:** anyone implementing `c3kit.bucket.datomic-common/DatomicApi` outside this repo must update to the new protocol methods
+* **Breaking:** `api/DB` gained `-legend` (returns the legend atom); `api/legend` goes through it, so external `api/DB` implementations must add the method. Cross-namespace `(.-legend db)` access replaced.
 * re-memory: `active-store` for slice cursors so history decorators do not break field access; `select-tx` routes through `api/-tx`
 
 ### 2.14.0
