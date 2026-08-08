@@ -3,7 +3,7 @@
 Status: **implemented**
 
 Builds on the refactored datomic layer (merged deftypes, `DatomicApi` driver port — see
-`docs/history-design.md`). All code references below are to the post-history-refactor sources.
+`docs/plans/2026-08-08-history-design.md`). All code references below are to the post-history-refactor sources.
 
 ## Motivation
 
