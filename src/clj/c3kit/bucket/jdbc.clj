@@ -665,6 +665,7 @@
 (deftype JDBCDB [legend dialect ds mappings]
   api/DB
   (close [this] (do-close this))
+  (-legend [_this] legend)
   (-clear [this] (clear this))
   (-delete-all [this kind] (delete-all this kind))
   (-count [this kind options] (do-count this kind options))

@@ -1,9 +1,10 @@
 (ns c3kit.bucket.impl-spec
   (:require [c3kit.apron.corec :as ccc]
-            [speclj.core #?(:clj :refer :cljs :refer-macros) [before context it should-be-nil should-contain
-                                                              should-not-be-nil should-not-contain should-not-have-invoked
+            [speclj.core #?(:clj :refer :cljs :refer-macros) [before context it should should-be-a should-be-nil should-contain
+                                                              should-not should-not-be-nil should-not-contain should-not-have-invoked
                                                               should-not-throw should-throw should= stub with with-stubs]]
             [c3kit.bucket.api :as sut]
+            [c3kit.bucket.history :as history]
             [c3kit.bucket.spec-helperc :as helper]
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
@@ -856,3 +857,141 @@
       (let [query-vec [1.0 0.0 0.0]
             results   (sut/find :vectorable :order-by {:embedding ['<=> query-vec]} :take 2)]
         (should= ["a" "c"] (map :name results))))))
+
+(defn history-specs [config]
+  (context "history"
+    (helper/with-schemas config [bibelot])
+
+    (it "supported?"
+      (should= true (history/supported?)))
+
+    (it "history of a new entity"
+      (let [e   (sut/tx :kind :bibelot :name "New" :size 1 :color "blue")
+            hs  (history/history e)]
+        (should= 1 (count hs))
+        (should= "New" (:name (first hs)))
+        (should (:db/tx (first hs)))
+        (should (:db/instant (first hs)))))
+
+    (it "history of an entity tx'd multiple times (Biby sequence)"
+      (let [biby (-> (sut/tx :kind :bibelot :name "Biby" :size 1 :color "blue")
+                     (sut/tx :size 2)
+                     (sut/tx :color "green")
+                     (sut/tx :size 3 :color "red"))
+            hs   (history/history biby)]
+        (should= 4 (count hs))
+        (doseq [h hs]
+          (should (:db/tx h))
+          (should (:db/instant h)))
+        (should= (sort (map :db/tx hs)) (map :db/tx hs))
+        (should= {:name "Biby" :size 1 :color "blue"} (select-keys (nth hs 0) [:name :size :color]))
+        (should= {:name "Biby" :size 2 :color "blue"} (select-keys (nth hs 1) [:name :size :color]))
+        (should= {:name "Biby" :size 2 :color "green"} (select-keys (nth hs 2) [:name :size :color]))
+        (should= {:name "Biby" :size 3 :color "red"} (select-keys (nth hs 3) [:name :size :color]))))
+
+    (it "no-op tx records no new version"
+      (let [e  (sut/tx :kind :bibelot :name "Stable" :size 1 :color "blue")
+            _  (sut/tx e)
+            hs (history/history e)]
+        (should= 1 (count hs))))
+
+    (it "deleted entity retains versions and ends with deletion marker"
+      (let [e   (sut/tx :kind :bibelot :name "Doomed" :size 1 :color "red")
+            e   (sut/tx e :size 2)
+            _   (sut/delete e)
+            hs  (history/history e)]
+        (should= 3 (count hs))
+        (should= false (boolean (:db/deleted? (nth hs 0))))
+        (should= false (boolean (:db/deleted? (nth hs 1))))
+        (should= true (:db/deleted? (last hs)))
+        (should (:db/tx (last hs)))
+        (should (:db/instant (last hs)))))
+
+    (it "created-at"
+      (let [e      (sut/tx :kind :bibelot :name "Born" :size 1 :color "blue")
+            moment (history/created-at e)
+            now    (time/now)]
+        (should-be-a #?(:clj java.util.Date :cljs js/Date) moment)
+        (should (time/after? moment (-> 5 time/seconds time/ago)))
+        (should (time/before? moment (time/from-now (time/seconds 1))))))
+
+    (it "updated-at"
+      (let [e       (sut/tx :kind :bibelot :name "Growing" :size 1 :color "blue")
+            updated (sut/tx e :size 2)
+            moment  (history/updated-at updated)]
+        (should-be-a #?(:clj java.util.Date :cljs js/Date) moment)
+        (should-not (time/before? moment (history/created-at updated)))))
+
+    (it "with-timestamps"
+      (let [e      (sut/tx :kind :bibelot :name "Stamp" :size 1 :color "blue")
+            result (history/with-timestamps e)]
+        (should= (history/created-at e) (:db/created-at result))
+        (should= (history/updated-at e) (:db/updated-at result))))
+
+    (it "created-at/updated-at accept bare id"
+      (let [e (sut/tx :kind :bibelot :name "ById" :size 1 :color "blue")]
+        (should= (history/created-at e) (history/created-at (:id e)))
+        (should= (history/updated-at e) (history/updated-at (:id e)))))
+
+    (it "tx* entities share :db/tx"
+      (let [[a b] (sut/tx* [{:kind :bibelot :name "A" :size 1 :color "red"}
+                            {:kind :bibelot :name "B" :size 2 :color "blue"}])
+            ha    (first (history/history a))
+            hb    (first (history/history b))]
+        (should= (:db/tx ha) (:db/tx hb))))
+
+    (it "as-of by instant"
+      ;; Prefer a mid-point between two version instants. Memory-history guarantees
+      ;; strictly increasing instants; for Datomic we sleep so wall-clock can separate.
+      (let [e1 (sut/tx :kind :bibelot :name "Timey" :size 1 :color "blue")
+            t1 (:db/instant (first (history/history e1)))]
+        #?(:clj (Thread/sleep 15))
+        (let [_  (sut/tx e1 :size 99)
+              t2 (:db/instant (last (history/history e1)))
+              ;; Instant strictly after t1 and at-or-before t2 when possible; else t1.
+              mid-ms (let [a #?(:clj (.getTime ^java.util.Date t1) :cljs (.getTime t1))
+                           b #?(:clj (.getTime ^java.util.Date t2) :cljs (.getTime t2))]
+                       (if (< a b) (quot (+ a b) 2) a))
+              t  #?(:clj (java.util.Date. (long mid-ms)) :cljs (js/Date. mid-ms))
+              e-at-t (sut/entity- (history/as-of t) :bibelot (:id e1))]
+          (should= 1 (:size e-at-t))
+          (should= 99 (:size (sut/entity :bibelot (:id e1))))
+          (should= 1 (:size (first (sut/find- (history/as-of t) :bibelot :where {:name "Timey"})))))))
+
+    (it "as-of by tx id"
+      (let [e    (sut/tx :kind :bibelot :name "TxSnap" :size 1 :color "blue")
+            e    (sut/tx e :size 2)
+            first-tx (:db/tx (first (history/history e)))
+            e-at (sut/entity- (history/as-of first-tx) :bibelot (:id e))]
+        (should= 1 (:size e-at))))
+
+    (it "entity-as-of / find-as-of / ffind-as-of sugar"
+      (let [e    (sut/tx :kind :bibelot :name "Sugar" :size 1 :color "green")
+            e    (sut/tx e :size 2)
+            first-tx (:db/tx (first (history/history e)))]
+        (should= 1 (:size (history/entity-as-of first-tx :bibelot (:id e))))
+        (should= 1 (:size (first (history/find-as-of first-tx :bibelot :where {:name "Sugar"}))))
+        (should= 1 (:size (history/ffind-as-of first-tx :bibelot :where {:name "Sugar"})))))
+
+    (it "as-of view is read-only"
+      (let [e  (sut/tx :kind :bibelot :name "RO" :size 1 :color "blue")
+            t  (:db/tx (first (history/history e)))
+            v  (history/as-of t)]
+        (should-throw #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core.ExceptionInfo)
+                      (sut/tx- v :kind :bibelot :name "nope" :size 1 :color "red"))
+        (should-throw #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core.ExceptionInfo)
+                      (sut/tx* v [{:kind :bibelot :name "nope" :size 1 :color "red"}]))
+        (should-throw #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core.ExceptionInfo)
+                      (sut/clear- v))
+        (should-throw #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core.ExceptionInfo)
+                      (sut/delete-all- v :bibelot))))))
+
+(defn excise-specs [config]
+  (context "excise!"
+    (helper/with-schemas config [bibelot])
+
+    (it "removes entity and history"
+      (let [e (sut/tx :kind :bibelot :name "Gone" :size 1 :color "black")
+            _ (history/excise! e)]
+        (should-be-nil (sut/entity :bibelot (:id e)))
+        (should= [] (history/history e))))))

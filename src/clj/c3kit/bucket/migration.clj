@@ -17,7 +17,7 @@
 
 (defn -ensure-migration-schema! [{:keys [-db] :as config}]
   (let [schema (migrator/migration-schema config)]
-    (swap! (.-legend -db) assoc (db/-schema-kind schema) schema)
+    (swap! (db/-legend -db) assoc (db/-schema-kind schema) schema)
     (when-not (migrator/-schema-exists? -db schema)
       (migrator/-install-schema! -db schema)
       (log/warn "Installed 'migration' schema because it was missing."))))

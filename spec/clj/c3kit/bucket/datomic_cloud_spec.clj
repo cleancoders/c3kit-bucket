@@ -4,6 +4,7 @@
             [c3kit.bucket.api :as api]
             [c3kit.bucket.datomic-cloud :as sut]
             [c3kit.bucket.datomic-common :as common-api]
+            [c3kit.bucket.history :as history]
             [c3kit.bucket.impl-spec :as impl-spec]
             [c3kit.bucket.migrator :as migrator]
             [c3kit.bucket.spec-helperc :as helper]
@@ -186,8 +187,10 @@
       (log/capture-logs
         (should-not-throw (migrator/-rename-attribute! @db :blah :color :blah :size)))))
 
-  (context "history"
-    (helper/with-schemas config [impl-spec/bibelot impl-spec/thingy])
+  (impl-spec/history-specs config)
+
+  (context "legacy history fns"
+    (helper/with-schemas config [impl-spec/bibelot])
     (with biby (-> (api/tx :kind :bibelot :name "Biby" :size 1 :color "blue")
                    sleep
                    (api/tx :size 2)
@@ -196,37 +199,31 @@
                    sleep
                    (api/tx :size 3 :color "red")))
 
-    (it "of entity"
-      (let [history (sut/history @biby)]
-        (should= 4 (count history))
-        (doseq [h history]
-          (should (:db/tx h))
-          (should (:db/instant h)))
-        (should= {:name "Biby" :size 1 :color "blue"} (select-keys (nth history 0) [:name :size :color]))
-        (should= {:name "Biby" :size 2 :color "blue"} (select-keys (nth history 1) [:name :size :color]))
-        (should= {:name "Biby" :size 2 :color "green"} (select-keys (nth history 2) [:name :size :color]))
-        (should= {:name "Biby" :size 3 :color "red"} (select-keys (nth history 3) [:name :size :color]))))
+    (it "legacy history keeps trailing nil on deletion"
+      (let [e  (api/tx :kind :bibelot :name "Legacy" :size 1 :color "blue")
+            _  (api/delete e)
+            hs (sut/history e)]
+        (should (some nil? hs))
+        (should-not (:db/deleted? (last (remove nil? hs))))))
 
-    (it "created-at"
+    (it "legacy created-at / updated-at / with-timestamps"
       (let [moment (sut/created-at @biby)
             now    (time/now)]
         (should-be-a Date moment)
         (should (time/after? moment (-> 1 time/seconds time/ago)))
-        (should (time/before? moment now))))
-
-    (it "updated-at"
+        (should (time/before? moment now)))
       (Thread/sleep 10)
       (let [updated (api/tx @biby :size 4)
             moment  (sut/updated-at updated)
-            _       (Thread/sleep 10)
-            now     (time/now)]
-        (should-be-a Date moment)
-        (should (time/after? moment (-> 1 time/seconds time/ago)))
-        (should (time/before? moment now))
-        (should (time/after? moment (sut/created-at updated)))))
-
-    (it "with-timestamps"
-      (let [updated (api/tx @biby :size 4)
             result  (sut/with-timestamps updated)]
+        (should-be-a Date moment)
+        (should (time/after? moment (sut/created-at updated)))
         (should= (sut/created-at updated) (:db/created-at result))
-        (should= (sut/updated-at updated) (:db/updated-at result))))))
+        (should= (sut/updated-at updated) (:db/updated-at result))))
+
+    (it "new history API uses deletion marker"
+      (let [e  (api/tx :kind :bibelot :name "Marker" :size 1 :color "blue")
+            _  (api/delete e)
+            hs (history/history e)]
+        (should= true (:db/deleted? (last hs)))
+        (should-not (some nil? hs))))))

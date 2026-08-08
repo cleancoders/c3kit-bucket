@@ -3,6 +3,7 @@
             [c3kit.apron.legend :as legend]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.datomic-common :as common-api]
+            [c3kit.bucket.history :as history]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [datomic.client.api :as datomic]))
@@ -19,7 +20,7 @@
   "Takes an id and determines if it is temporary"
   [id] (neg? id))
 
-(defn db-as-of [t] (common-api/as-of (.-api @api/impl) t))
+(defn db-as-of [t] (common-api/-as-of-db @api/impl t))
 
 (defn update-refs [entity]
   (update-vals entity (fn [v] (:db/id v v))))
@@ -37,7 +38,7 @@
 (defn pull-entity [ddb id] (datomic/pull ddb '[*] id))
 
 (defn- id->entity [db id attributes->entity]
-  (when-let [attributes (common-api/d-entity (.-api db) (common-api/datomic-db db) id)]
+  (when-let [attributes (common-api/-d-entity db (common-api/datomic-db db) id)]
     (attributes->entity attributes)))
 
 (defn- entity
@@ -79,7 +80,7 @@
   (reduce (partial ->cardinality-many-retract-form updated original) [] updated))
 
 (defn update-form [db id updated]
-  (let [original          (dissoc (common-api/d-entity (.-api db) (common-api/datomic-db db) id) :db/id)
+  (let [original          (dissoc (common-api/-d-entity db (common-api/datomic-db db) id) :db/id)
         retracted-keys    (doall (filter #(nil? (get updated %)) (keys original)))
         updated           (-> (apply dissoc updated retracted-keys)
                               ccc/remove-nils
@@ -109,14 +110,14 @@
 
 (defn tx [db e]
   (let [[[kind id] form] (common-api/tx-form db e tx-entity-form :db/retractEntity)
-        result (common-api/transact (.-api db) form)
+        result (common-api/-transact db form)
         id     (resolve-id db result id)]
     (tx-result db kind id)))
 
 (defn tx* [db entities]
   (let [id-forms (ccc/some-map #(common-api/tx-form db % tx-entity-form :db/retractEntity) entities)
         tx-forms (mapcat second id-forms)
-        result   (common-api/transact (.-api db) tx-forms)
+        result   (common-api/-transact db tx-forms)
         ids      (resolve-ids* result)]
     (map #(tx-result db (ffirst %1) %2) id-forms ids)))
 
@@ -126,7 +127,7 @@
 (defn do-find [db kind options]
   (if-let [where (seq (common-api/build-where-datalog db kind (:where options)))]
     (let [query (concat '[:find (pull ?e [*]) :in $ :where] where)]
-      (->> (common-api/q (.-api db) query)
+      (->> (common-api/-q db query)
            (api/-apply-drop-take options)
            q->cloud-entities))
     []))
@@ -140,17 +141,57 @@
           (map #(update % :db/valueType :db/ident))
           common-api/attributes->legend))))
 
-(deftype DatomicCloudDB [db-schema legend config api]
+(deftype DatomicCloudAsOfView [impl aodb]
+  common-api/DatomicApi
+  (-connect [_] (throw (ex-info "as-of view is read-only" {})))
+  (-db [_] aodb)
+  (-transact [_ _] (throw (ex-info "as-of view is read-only" {})))
+  (-delete-database [_] (throw (ex-info "as-of view is read-only" {})))
+  (-q [_ query] (common-api/-q impl query aodb []))
+  (-q [_ query db args] (common-api/-q impl query db args))
+  (-d-entity [_ ddb eid] (common-api/-d-entity impl ddb eid))
+  (-history-db [_] (common-api/-history-db impl))
+  (-as-of-db [_ t] (common-api/-as-of-db impl t))
+  api/DB
+  (close [_] nil)
+  (-legend [_] (api/-legend impl))
+  (-entity [this kind id] (entity this kind id))
+  (-find [this kind options] (do-find this kind options))
+  (-count [this kind options] (common-api/do-count this kind options))
+  (-reduce [this kind f init options] (reduce f init (do-find this kind options)))
+  (-tx [_ _] (throw (ex-info "as-of view is read-only" {})))
+  (-tx* [_ _] (throw (ex-info "as-of view is read-only" {})))
+  (-clear [_] (throw (ex-info "as-of view is read-only" {})))
+  (-delete-all [_ _] (throw (ex-info "as-of view is read-only" {}))))
+
+(deftype DatomicCloudDB [db-schema legend config client conn]
   api/DB
   (close [_this] nil)
+  (-legend [_this] legend)
   (-clear [this] (common-api/clear this))
   (-delete-all [this kind] (common-api/delete-all this kind))
   (-count [this kind options] (common-api/do-count this kind options))
   (-entity [this kind id] (entity this kind id))
-  (-find [this kind options] (common-api/do-find api this kind options))
-  (-reduce [this kind f init options] (reduce f init (common-api/do-find api this kind options)))
-  (-tx [this entity] (common-api/tx api this entity))
-  (-tx* [this entities] (common-api/tx* api this entities))
+  (-find [this kind options] (do-find this kind options))
+  (-reduce [this kind f init options] (reduce f init (do-find this kind options)))
+  (-tx [this entity] (tx this entity))
+  (-tx* [this entities] (tx* this entities))
+  common-api/DatomicApi
+  (-connect [_this] (reset! conn (connect config client)))
+  (-db [_this] (datomic/db @conn))
+  (-transact [_this transaction] (datomic/transact @conn {:tx-data transaction}))
+  (-delete-database [_this] (datomic/delete-database client config))
+  (-q [_this query] (datomic/q query (datomic/db @conn)))
+  (-q [_this query db args] (apply datomic/q query db args))
+  (-d-entity [_this ddb eid] (pull-entity ddb eid))
+  (-history-db [_this] (datomic/history (datomic/db @conn)))
+  (-as-of-db [_this t] (datomic/as-of (datomic/db @conn) t))
+  history/HistoryDB
+  (-history [this entity] (common-api/history-versions- this entity attributes->entity))
+  (-as-of [this t] (history/->ReadOnlyDB (DatomicCloudAsOfView. this (common-api/-as-of-db this t))))
+  (-created-at [this id-or-entity] (common-api/created-at- this id-or-entity))
+  (-updated-at [this id-or-entity] (common-api/updated-at- this id-or-entity))
+  (-excise! [this id-or-entity] (common-api/excise!- this id-or-entity))
   migrator/Migrator
   (-schema-exists? [this schema] (common-api/schema-exists? this schema))
   (-installed-schema-legend [this _expected-legend] (installed-schema-legend this))
@@ -160,31 +201,12 @@
   (-remove-attribute! [this kind attr] (common-api/do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (common-api/do-rename-attribute! this kind attr new-kind new-attr)))
 
-(deftype DatomicCloudApi [config client conn]
-  common-api/DatomicApi
-  (connect [_this] (reset! conn (connect config client)))
-  (db [_this] (datomic/db @conn))
-  (transact [_this transaction] (datomic/transact @conn {:tx-data transaction}))
-  (delete-database [_this]
-    (datomic/delete-database client config))
-  (as-of [_this t] (datomic/as-of (datomic/db @conn) t))
-  (q [_this query] (datomic/q query (datomic/db @conn)))
-  (q [_this query db args]
-    (apply datomic/q query db args))
-  (history [_this]
-    (datomic/history (datomic/db @conn)))
-  (do-find [_this db kind options] (do-find db kind options))
-  (tx [_this db e] (tx db e))
-  (tx* [_this db entities] (tx* db entities))
-  (d-entity [_this ddb eid] (pull-entity ddb eid)))
-
 (defmethod api/-create-impl :datomic-cloud [config schemas]
   (let [datomic-client (datomic/client config)
         legend         (atom (legend/build schemas))
         db-schemas     (->> (flatten schemas) (mapcat #(common-api/->db-schema % false)))
-        api            (->DatomicCloudApi config datomic-client (atom nil))
-        db             (DatomicCloudDB. db-schemas legend config api)]
-    (common-api/connect api)
+        db             (DatomicCloudDB. db-schemas legend config datomic-client (atom nil))]
+    (common-api/-connect db)
     db))
 
 (defmethod migrator/migration-schema :datomic-cloud [_]

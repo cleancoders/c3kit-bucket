@@ -12,6 +12,7 @@
 (defprotocol DB
   "API for database operations"
   (close [this])
+  (-legend [this])
   (-clear [this])
   (-count [this kind options])
   (-delete-all [this kind])
@@ -70,7 +71,7 @@
 
 (defn legend
   "Returns the legend (map of :kind -> schema) of the database implementation."
-  [db] (deref (.-legend db)))
+  [db] (deref (-legend db)))
 
 (defn entity-
   "entity with explicit db"
@@ -249,9 +250,11 @@ Requires the *safety* be turned off."
 (defn create-db
   "Create an instance of DB based off the configuration.
   config - a map that may contain the following keys
-    :impl - :memory | :datomic | :jdbc
+    :impl - :memory | :memory-history | :datomic | :datomic-cloud | :jdbc | :indexeddb | :re-memory | :re-indexeddb
     :on-save - a fn called on each entity before it is saved in the database (fn [entity] ...)
     :on-load - a fn called on each entity after it is loaded from the database (fn [entity] ...)
+    MEMORY-HISTORY
+    :storage - nested config for the wrapped storage impl (default {:impl :memory})
     DATOMIC
     :uri - datomic connection uri
     JDBC (included keys for jdbc/next library https://github.com/seancorfield/next-jdbc/blob/develop/src/next/jdbc.clj#L76)

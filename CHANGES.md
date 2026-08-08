@@ -1,3 +1,15 @@
+### Unreleased
+* **History API** (`c3kit.bucket.history`): impl-agnostic entity timelines, `as-of` point-in-time reads, timestamps, and excision. See `docs/history-guide.md`.
+  * Native `HistoryDB` on `:datomic` and `:datomic-cloud`
+  * `:memory-history` decorator (`c3kit.bucket.memory-history`) composes over any `api/DB` via `{:impl :memory-history :storage {...}}`
+  * Shared history specs in `impl-spec`
+* **Datomic-layer refactor**
+  * Merged `DatomicOnPremApi` / `DatomicCloudApi` into `DatomicDB` / `DatomicCloudDB` (one deftype per product)
+  * Slimmed `DatomicApi` to a pure driver port with `-method` names (`-connect`, `-db`, `-transact`, `-q`, `-d-entity`, `-history-db`, `-as-of-db`); removed `tx`/`tx*`/`do-find` callbacks
+  * **Breaking (internal):** anyone implementing `c3kit.bucket.datomic-common/DatomicApi` outside this repo must update to the new protocol methods
+* Added `api/DB` `-legend` (returns the legend atom); `api/legend` uses it. Cross-namespace `(.-legend db)` access replaced.
+* re-memory: `active-store` for slice cursors so history decorators do not break field access; `select-tx` routes through `api/-tx`
+
 ### 2.14.0
 * Upgraded `apron` to `3.0.1`, which pins `com.fasterxml.jackson.core/jackson-core` to `2.18.6` transitively (patching CVE-2025-52999 (High) and GHSA-72hv-8253-57qq (Medium)). **Note:** apron `3.0.0` was a breaking major release restructuring the ref/registry system into a `lexicon`; consumers relying on apron's schema internals transitively via bucket should review the apron `3.0.0` changelog
 * Removed bucket's direct `jackson-core` override; the CVE fix now comes from apron's own pin

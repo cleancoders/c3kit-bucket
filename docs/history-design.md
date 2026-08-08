@@ -1,6 +1,6 @@
 # Bucket History — Design & Implementation Plan
 
-Status: **approved design, not yet implemented**
+Status: **implemented** (see `docs/history-guide.md`)
 
 ## Motivation
 

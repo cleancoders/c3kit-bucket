@@ -12,4 +12,5 @@
         db-name   (or (:db-name config) "c3kit-bucket")
         online-fn (or (:online? config) (constantly true))
         strategy  (or (:idb-strategy config) :primary)]
+    (re-memory/set-active-store! store)
     (idb/->IndexedDB legend store idb-atom db-name online-fn strategy re-memory/entity re-memory/do-find)))

@@ -15,6 +15,7 @@
     (memory/clear this)
     (when @idb-atom (idb/clear-all @idb-atom)))
   (close [_this] (io/close @idb-atom))
+  (-legend [_this] legend)
   (-count [this kind options] (core-count (api/-find this kind options)))
   (-delete-all [this kind]
     (memory/delete-all this kind)

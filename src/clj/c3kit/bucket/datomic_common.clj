@@ -103,20 +103,18 @@
        (reduce add-spec-to-legend {})))
 
 (defprotocol DatomicApi
-  (connect [this])
-  (db [this])
-  (transact [this transaction])
-  (delete-database [this])
-  (as-of [this t])
-  (q [this query] [this query db args])
-  (history [this])
-  (do-find [this db kind options])
-  (tx [this db e])
-  (tx* [this db entities])
-  (d-entity [this ddb eid]))
+  "Driver port: the variance between datomic on-prem (datomic.api) and cloud (datomic.client.api)."
+  (-connect [impl])
+  (-db [impl])
+  (-transact [impl transaction])
+  (-delete-database [impl])
+  (-q [impl query] [impl query db args])
+  (-d-entity [impl ddb eid])
+  (-history-db [impl])
+  (-as-of-db [impl t]))
 
 (defn datomic-db [impl]
-  (db (.-api impl)))
+  (-db impl))
 
 (defn entity-
   ([db id id->entity attributes->entity]
@@ -141,20 +139,17 @@
   ([transaction]
    (transact! @api/impl transaction))
   ([impl transaction]
-   (let [api        (.-api impl)
-         connection @(.-conn api)]
-     (assert (some? connection))
-     (transact api transaction))))
+   (assert (some? @(.-conn impl)))
+   (-transact impl transaction)))
 
 (defn install-schema! [impl]
   (transact! impl (.-db-schema impl)))
 
 (defn clear [impl]
   (api/-assert-safety-off! "clear")
-  (let [api (.-api impl)]
-    (delete-database api)
-    (connect api)
-    (install-schema! impl)))
+  (-delete-database impl)
+  (-connect impl)
+  (install-schema! impl))
 
 (defn scope-attribute [kind attr] (keyword (name kind) (name attr)))
 
@@ -268,7 +263,7 @@
         :else (list (attr=-clause attr value))))
 
 (defn- where-all-of-kind [db kind]
-  (let [schema       (legend/for-kind @(.-legend db) kind)
+  (let [schema       (legend/for-kind @(api/-legend db) kind)
         attrs        (keys (dissoc schema :id :kind))
         scoped-attrs (map #(scope-attribute kind %) attrs)]
     [(cons 'or (map (fn [a] ['?e a]) scoped-attrs))]))
@@ -305,22 +300,22 @@
 (defn do-count [db kind options]
   (if-let [where (build-where-datalog db kind (:where options))]
     (let [query   (concat '[:find (count ?e) :in $ :where] where)
-          results (q (.-api db) query)]
+          results (-q db query)]
       (or (ffirst results) 0))
     0))
 
 (defn delete-all [db kind]
   (api/-assert-safety-off! "delete-all")
-  (->> (do-find (.-api db) db kind {})
+  (->> (api/-find db kind {})
        (partition-all 100)
-       (map (fn [batch] (tx* (.-api db) db (map api/soft-delete batch))))
+       (map (fn [batch] (api/-tx* db (map api/soft-delete batch))))
        doall))
 
 (defn installed-schema-idents
   "Returns a list of all the fully qualified idents in the schema."
   ([] (installed-schema-idents @api/impl))
   ([db]
-   (->> (q (.-api db) '[:find ?ident ?e :where [?e :db/ident ?ident]])
+   (->> (-q db '[:find ?ident ?e :where [?e :db/ident ?ident]])
         (map first)
         (filter (comp not reserved-attr-namespaces namespace))
         sort)))
@@ -330,7 +325,7 @@
     (boolean (some #(= kind (namespace %)) (installed-schema-idents db)))))
 
 (defn schema-attr-id [db datomic-db key]
-  (first (map first (q (.-api db) '[:find ?e :in $ ?ident :where [?e :db/ident ?ident]] datomic-db [key]))))
+  (first (map first (-q db '[:find ?e :in $ ?ident :where [?e :db/ident ?ident]] datomic-db [key]))))
 
 (defn do-add-attribute! [db kind attr spec index-allowed?]
   (let [qualified-attr (keyword (name kind) (name attr))
@@ -347,7 +342,7 @@
         attr-id        (schema-attr-id db ddb qualified-attr)]
     (when attr-id
       (log/info "  retracting all values for " qualified-attr)
-      (doall (->> (q (.-api db) '[:find ?e ?v :in $ ?attr :where [?e ?attr ?v]] ddb [qualified-attr])
+      (doall (->> (-q db '[:find ?e ?v :in $ ?attr :where [?e ?attr ?v]] ddb [qualified-attr])
                   (map (fn [[id v]] [:db/retract id qualified-attr v]))
                   (partition-all 100)
                   (map (partial transact! db)))))))
@@ -387,31 +382,51 @@
 (defn tx-ids-
   "Same as td-ids but with explicit db instance."
   [impl eid]
-  (let [api (.-api impl)]
-    (->> (q api '[:find ?tx :in $ ?e :where [?e _ _ ?tx _]] (history api) [eid])
-         (sort-by first)
-         (map first))))
+  (->> (-q impl '[:find ?tx :in $ ?e :where [?e _ _ ?tx _]] (-history-db impl) [eid])
+       (sort-by first)
+       (map first)))
+
+(defn- entity-attrs?
+  "true when attributes represent a live entity (not merely {:db/id ...})."
+  [attributes]
+  (when attributes
+    (seq (dissoc (into {} attributes) :db/id))))
 
 (defn entity-as-of-tx
   "Loads the entity as it existed when the transaction took place, adding :db/tx (transaction id)
    and :db/instant (date) attributes to the entity."
   [impl eid kind txid attributes->entity]
-  (let [tx         (d-entity (.-api impl) (datomic-db impl) txid)
+  (let [tx         (-d-entity impl (datomic-db impl) txid)
         timestamp  (:db/txInstant tx)
-        attributes (d-entity (.-api impl) (as-of (.-api impl) txid) eid)]
-    (when (seq attributes)
+        attributes (-d-entity impl (-as-of-db impl txid) eid)]
+    (when (entity-attrs? attributes)
       (-> attributes
           (attributes->entity kind)
-          (assoc :db/tx txid :db/instant timestamp)))))
+          (assoc :id eid :db/tx txid :db/instant timestamp)))))
 
 (defn history-
-  "Same as history but with explicit db instance"
+  "Same as history but with explicit db instance.
+  Legacy behavior: deleted versions appear as nil."
   [impl entity attributes->entity]
   (let [id   (:id entity)
         kind (:kind entity)]
     (assert id)
     (assert kind)
     (reduce #(conj %1 (entity-as-of-tx impl id kind %2 attributes->entity)) [] (tx-ids- impl (:id entity)))))
+
+(defn history-versions-
+  "Entity versions oldest→newest. Deletions appear as {:db/tx :db/instant :db/deleted? true}."
+  [impl entity attributes->entity]
+  (let [id   (:id entity)
+        kind (:kind entity)]
+    (assert id)
+    (assert kind)
+    (mapv (fn [txid]
+            (or (entity-as-of-tx impl id kind txid attributes->entity)
+                {:db/tx       txid
+                 :db/instant  (:db/txInstant (-d-entity impl (datomic-db impl) txid))
+                 :db/deleted? true}))
+          (tx-ids- impl id))))
 
 (defn ->eid
   "Returns the entity id"
@@ -421,26 +436,26 @@
 (defn created-at-
   "Same as created-at but with explicit db"
   [impl id-or-entity]
-  (let [eid (->eid id-or-entity)
-        api (.-api impl)]
-    (ffirst (q
-              api
-              '[:find (min ?inst)
-                :in $ ?e
-                :where [?e _ _ ?tx]
-                [?tx :db/txInstant ?inst]] (history api) [eid]))))
+  (let [eid (->eid id-or-entity)]
+    (ffirst (-q impl
+                '[:find (min ?inst)
+                  :in $ ?e
+                  :where [?e _ _ ?tx]
+                  [?tx :db/txInstant ?inst]]
+                (-history-db impl)
+                [eid]))))
 
 (defn updated-at-
   "Same as updated-at but with explicit db"
   [impl id-or-entity]
-  (let [eid (->eid id-or-entity)
-        api (.-api impl)]
-    (ffirst (q
-              api
-              '[:find (max ?inst)
-                :in $ ?e
-                :where [?e _ _ ?tx]
-                [?tx :db/txInstant ?inst]] (history api) [eid]))))
+  (let [eid (->eid id-or-entity)]
+    (ffirst (-q impl
+                '[:find (max ?inst)
+                  :in $ ?e
+                  :where [?e _ _ ?tx]
+                  [?tx :db/txInstant ?inst]]
+                (-history-db impl)
+                [eid]))))
 
 (defn with-timestamps-
   "Same as with-timestamps but with explicit db"

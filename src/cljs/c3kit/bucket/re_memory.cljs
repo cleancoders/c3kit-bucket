@@ -25,8 +25,13 @@
        (map? id) @(r/cursor (.-store db) [kind (api/-coerced-id @(.-legend db) kind (:id id))])
        :else @(r/cursor (.-store db) [kind (api/-coerced-id @(.-legend db) kind id)])))))
 
-(defn- slice-by-kind ([kind] (get @(.-store @api/impl) kind)))
-(defn- slice-by-ids [ids] (select-keys (get @(.-store @api/impl) :all) ids))
+(def ^:private active-store (atom nil))
+
+(defn- store-val []
+  (when-let [store @active-store] @store))
+
+(defn- slice-by-kind ([kind] (get (store-val) kind)))
+(defn- slice-by-ids [ids] (select-keys (get (store-val) :all) ids))
 (defn- ids-not-fns? [id] (or (int? id) (and (coll? id) (int? (first (remove nil? id))))))
 
 (defn- slice-db [[kind-or-ids keyseq]]
@@ -40,7 +45,7 @@
 (defn- ->keyseq [kind & colls]
   (if (= 'dissoc (-> colls first first))
     (let [keys-to-dissoc (rest (-> colls first))
-          legend (legend/for-kind @(.-legend @api/impl) kind)]
+          legend (legend/for-kind (api/legend @api/impl) kind)]
       (keys (apply (partial dissoc legend) keys-to-dissoc)))
     (set (conj (apply concat colls) :id :kind))))
 
@@ -61,6 +66,7 @@
   api/DB
   (-clear [this] (memory/clear this))
   (close [_this] nil)
+  (-legend [_this] legend)
   (-count [this kind options] (core-count (do-find this kind options)))
   (-delete-all [this kind] (memory/delete-all this kind))
   (-entity [this kind id] (entity this kind id))
@@ -80,15 +86,22 @@
 (defn- clear-slice-db-cache! []
   (set! (.-reagReactionCache slice-db) nil))
 
+(defn set-active-store!
+  "Register the reagent store used by select-* / do-find slice cursors.
+  Called by :re-memory and :re-indexeddb create-impl."
+  [store]
+  (clear-slice-db-cache!)
+  (reset! active-store store))
+
 (defmethod api/-create-impl :re-memory [config schemas]
   (let [store (or (:store config) (r/atom {}))]
-    (clear-slice-db-cache!)
+    (set-active-store! store)
     (ReMemoryDB. (atom (legend/build schemas)) store)))
 
 (defn do-select-find [kind keyseq options]
   (let [where (:where options)
         cursor (r/cursor slice-db [(->kind-or-ids where kind) (->keyseq kind keyseq (map first where))])]
-    (legend/for-kind @(.-legend @api/impl) kind)
+    (legend/for-kind (api/legend @api/impl) kind)
     (really-do-find cursor options kind)))
 
 (defn- coll-not-map? [thing] (or (seq? thing) (vector? thing)))
@@ -140,27 +153,33 @@
     (core-count (do-select-find kind keyseq {:where (api/-kvs->kv-pairs options)}))))
 
 (defn- ensure-full-entity-and-meta [db e]
-  (let [meta (meta e)
-        full (get-in @(.-store db) [:all (:id e)])]
-    (with-meta (merge full e) meta)))
+  (let [m    (meta e)
+        full (or (api/entity- db (:kind e) (:id e)) {})]
+    (with-meta (merge full e) m)))
 (defn- ensure-entity-or-id [db {:keys [id] :as e}]
   (if id (ensure-full-entity-and-meta db e) (memory/ensure-id e)))
 
-(defn select-tx- [db & args]
+(defn select-tx-
+  "select-tx with explicit db. Merges full entity before writing so partial
+  select-find results do not drop attributes. Routes through api/-tx so
+  decorators (e.g. memory-history) still record the change."
+  [db & args]
   (let [e (ccc/->options args)
         e (ensure-entity-or-id db e)]
-    (swap! (.-store db) #(memory/tx-entity @(.-legend db) % e))
-    (memory/tx-result db e)))
+    (api/-tx db e)))
 
-(defn select-tx*- [db entities]
+(defn select-tx*-
+  "select-tx* with explicit db. See select-tx-."
+  [db entities]
   (let [entities (map #(ensure-entity-or-id db %) entities)]
-    (swap! (.-store db) (fn [store] (core-reduce #(memory/tx-entity @(.-legend db) %1 %2) store entities)))
-    (map #(memory/tx-result db %) entities)))
+    (api/-tx* db entities)))
 
 (defn select-tx
   "Since select-find only returns partial entities, this will reload the entity
    before transacting to prevent data loss.
-   As a result, attributes must be explicitly set to nil in order to delete them."
+   As a result, attributes must be explicitly set to nil in order to delete them.
+   When @api/impl is decorated (e.g. with history), writes go through the
+   decorator so history is recorded."
   [& args]
   (apply select-tx- @api/impl args))
 

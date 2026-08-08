@@ -3,6 +3,7 @@
             [c3kit.apron.legend :as legend]
             [c3kit.bucket.api :as api]
             [c3kit.bucket.datomic-common :as common-api]
+            [c3kit.bucket.history :as history]
             [c3kit.bucket.migrator :as migrator]
             [clojure.set :as set]
             [datomic.api :as datomic]))
@@ -31,7 +32,7 @@
     (:db/id v)
     v))
 
-(defn db-as-of [t] (common-api/as-of (.-api @api/impl) t))
+(defn db-as-of [t] (common-api/-as-of-db @api/impl t))
 
 (defn attributes->entity
   ([attributes id]
@@ -49,7 +50,7 @@
      attributes)))
 
 (defn- id->entity [db id attributes->entity]
-  (when-let [attributes (seq (common-api/d-entity (.-api db) (common-api/datomic-db db) id))]
+  (when-let [attributes (seq (common-api/-d-entity db (common-api/datomic-db db) id))]
     (attributes->entity attributes id)))
 
 (defn- entity
@@ -90,7 +91,7 @@
           [] updated))
 
 (defn update-form [db id updated]
-  (let [original          (into {} (common-api/d-entity (.-api db) (common-api/datomic-db db) id))
+  (let [original          (into {} (common-api/-d-entity db (common-api/datomic-db db) id))
         retracted-keys    (doall (filter #(nil? (get updated %)) (keys original)))
         updated           (-> (apply dissoc updated retracted-keys)
                               ccc/remove-nils
@@ -119,20 +120,20 @@
 
 (defn tx [db e]
   (let [[[kind id] form] (common-api/tx-form db e tx-entity-form :db.fn/retractEntity)
-        result @(common-api/transact (.-api db) form)
+        result @(common-api/-transact db form)
         id     (resolve-id result id)]
     (tx-result db kind id)))
 
 (defn tx* [db entities]
   (let [id-forms (ccc/some-map #(common-api/tx-form db % tx-entity-form :db.fn/retractEntity) entities)
         tx-forms (mapcat second id-forms)
-        result   @(common-api/transact (.-api db) tx-forms)]
+        result   @(common-api/-transact db tx-forms)]
     (map (fn [[kind id]] (tx-result db kind (resolve-id result id))) (map first id-forms))))
 
 (defn do-find [db kind options]
   (if-let [where (seq (common-api/build-where-datalog db kind (:where options)))]
     (let [query (concat '[:find ?e :in $ :where] where)]
-      (->> (common-api/q (.-api db) query)
+      (->> (common-api/-q db query)
            (api/-apply-drop-take options)
            (q->entities db)))
     []))
@@ -142,20 +143,60 @@
   ([db]
    (let [ddb (common-api/datomic-db db)]
      (->> (common-api/installed-schema-idents db)
-          (map #(->> % (common-api/d-entity (.-api db) ddb) (into {})))
+          (map #(->> % (common-api/-d-entity db ddb) (into {})))
           common-api/attributes->legend))))
 
-(deftype DatomicDB [db-schema legend config api]
+(deftype DatomicAsOfView [impl aodb]
+  common-api/DatomicApi
+  (-connect [_] (throw (ex-info "as-of view is read-only" {})))
+  (-db [_] aodb)
+  (-transact [_ _] (throw (ex-info "as-of view is read-only" {})))
+  (-delete-database [_] (throw (ex-info "as-of view is read-only" {})))
+  (-q [_ query] (common-api/-q impl query aodb []))
+  (-q [_ query db args] (common-api/-q impl query db args))
+  (-d-entity [_ ddb eid] (common-api/-d-entity impl ddb eid))
+  (-history-db [_] (common-api/-history-db impl))
+  (-as-of-db [_ t] (common-api/-as-of-db impl t))
+  api/DB
+  (close [_] nil)
+  (-legend [_] (api/-legend impl))
+  (-entity [this kind id] (entity this kind id))
+  (-find [this kind options] (do-find this kind options))
+  (-count [this kind options] (common-api/do-count this kind options))
+  (-reduce [this kind f init options] (reduce f init (do-find this kind options)))
+  (-tx [_ _] (throw (ex-info "as-of view is read-only" {})))
+  (-tx* [_ _] (throw (ex-info "as-of view is read-only" {})))
+  (-clear [_] (throw (ex-info "as-of view is read-only" {})))
+  (-delete-all [_ _] (throw (ex-info "as-of view is read-only" {}))))
+
+(deftype DatomicDB [db-schema legend config conn]
   api/DB
   (close [_this] nil)
+  (-legend [_this] legend)
   (-clear [this] (common-api/clear this))
   (-delete-all [this kind] (common-api/delete-all this kind))
   (-count [this kind options] (common-api/do-count this kind options))
   (-entity [this kind id] (entity this kind id))
-  (-find [this kind options] (common-api/do-find api this kind options))
-  (-reduce [this kind f init options] (reduce f init (common-api/do-find api this kind options)))
-  (-tx [this entity] (common-api/tx api this entity))
-  (-tx* [this entities] (common-api/tx* api this entities))
+  (-find [this kind options] (do-find this kind options))
+  (-reduce [this kind f init options] (reduce f init (do-find this kind options)))
+  (-tx [this entity] (tx this entity))
+  (-tx* [this entities] (tx* this entities))
+  common-api/DatomicApi
+  (-connect [_this] (reset! conn (connect (:uri config))))
+  (-db [_this] (datomic/db @conn))
+  (-transact [_this transaction] (datomic/transact @conn transaction))
+  (-delete-database [_this] (datomic/delete-database (:uri config)))
+  (-q [_this query] (datomic/q query (datomic/db @conn)))
+  (-q [_this query db args] (apply datomic/q query db args))
+  (-d-entity [_this ddb eid] (datomic/entity ddb eid))
+  (-history-db [_this] (datomic/history (datomic/db @conn)))
+  (-as-of-db [_this t] (datomic/as-of (datomic/db @conn) t))
+  history/HistoryDB
+  (-history [this entity] (common-api/history-versions- this entity attributes->entity))
+  (-as-of [this t] (history/->ReadOnlyDB (DatomicAsOfView. this (common-api/-as-of-db this t))))
+  (-created-at [this id-or-entity] (common-api/created-at- this id-or-entity))
+  (-updated-at [this id-or-entity] (common-api/updated-at- this id-or-entity))
+  (-excise! [this id-or-entity] (common-api/excise!- this id-or-entity))
   migrator/Migrator
   (-schema-exists? [this schema] (common-api/schema-exists? this schema))
   (-installed-schema-legend [this _expected-legend] (installed-schema-legend this))
@@ -165,33 +206,11 @@
   (-remove-attribute! [this kind attr] (common-api/do-remove-attribute! this kind attr))
   (-rename-attribute! [this kind attr new-kind new-attr] (common-api/do-rename-attribute! this kind attr new-kind new-attr)))
 
-(deftype DatomicOnPremApi [config conn]
-  common-api/DatomicApi
-  (connect [_this] (reset! conn (connect (:uri config))))
-  (db [_this] (datomic/db @conn))
-  (transact [_this transaction]
-    (datomic/transact @conn transaction))
-  (delete-database [_this]
-    (datomic/delete-database (:uri config)))
-  (as-of [_this t]
-    (datomic/as-of (datomic/db @conn) t))
-  (q [_this query]
-    (datomic/q query (datomic/db @conn)))
-  (q [_this query db args]
-    (apply datomic/q query db args))
-  (history [_this]
-    (datomic/history (datomic/db @conn)))
-  (do-find [_this db kind options] (do-find db kind options))
-  (tx [_this db e] (tx db e))
-  (tx* [_this db entities] (tx* db entities))
-  (d-entity [_this ddb eid] (datomic/entity ddb eid)))
-
 (defmethod api/-create-impl :datomic [config schemas]
   (let [legend     (atom (legend/build schemas))
         db-schemas (->> (flatten schemas) (mapcat #(common-api/->db-schema % true)))
-        api        (->DatomicOnPremApi config (atom nil))
-        db         (DatomicDB. db-schemas legend config api)]
-    (common-api/connect api)
+        db         (DatomicDB. db-schemas legend config (atom nil))]
+    (common-api/-connect db)
     db))
 
 (defmethod migrator/migration-schema :datomic [_]
@@ -200,8 +219,8 @@
 (defn find-max-of-all-
   "Finds the entity with the max attribute for a given kind with specific db instance"
   [db kind attr]
-  (->> (common-api/q
-         (.-api db)
+  (->> (common-api/-q
+         db
          '[:find (max ?e) :in $ ?attribute
            :where [?e ?attribute]]
          (common-api/datomic-db db)
@@ -227,8 +246,8 @@
 (defn find-min-of-all-
   "Finds the entity with the min attribute for a given kind with specific db instance"
   [db kind attr]
-  (->> (common-api/q
-         (.-api db)
+  (->> (common-api/-q
+         db
          '[:find (min ?e) :in $ ?attribute
            :where [?e ?attribute]]
          (common-api/datomic-db db)
@@ -259,19 +278,12 @@
 (defn ->eid
   "Returns the entity id"
   [id-or-entity]
-  (if (number? id-or-entity) id-or-entity (:id id-or-entity)))
+  (common-api/->eid id-or-entity))
 
 (defn created-at-
   "Same as created-at but with explicit db"
   [impl id-or-entity]
-  (let [eid (->eid id-or-entity)
-        api (.-api impl)]
-    (ffirst (common-api/q
-              api
-              '[:find (min ?inst)
-                :in $ ?e
-                :where [?e _ _ ?tx]
-                [?tx :db/txInstant ?inst]] (common-api/history api) [eid]))))
+  (common-api/created-at- impl id-or-entity))
 
 (defn created-at
   "Returns the instant (java.util.Date) the entity was created."
@@ -281,14 +293,7 @@
 (defn updated-at-
   "Same as updated-at but with explicit db"
   [impl id-or-entity]
-  (let [eid (->eid id-or-entity)
-        api (.-api impl)]
-    (ffirst (common-api/q
-              api
-              '[:find (max ?inst)
-                :in $ ?e
-                :where [?e _ _ ?tx]
-                [?tx :db/txInstant ?inst]] (common-api/history api) [eid]))))
+  (common-api/updated-at- impl id-or-entity))
 
 (defn updated-at
   "Returns the instant (java.util.Date) this entity was last updated."
@@ -298,7 +303,7 @@
 (defn with-timestamps-
   "Same as with-timestamps but with explicit db"
   [impl entity]
-  (assoc entity :db/created-at (created-at- impl entity) :db/updated-at (updated-at- impl entity)))
+  (common-api/with-timestamps- impl entity))
 
 (defn with-timestamps
   "Adds :created-at and :updated-at timestamps to the entity."
@@ -308,8 +313,7 @@
 (defn excise!-
   "Same as excise! but with explicit db"
   [impl id-or-e]
-  (let [id (if-let [id? (:id id-or-e)] id? id-or-e)]
-    (common-api/transact! impl [{:db/excise id}])))
+  (common-api/excise!- impl id-or-e))
 
 (defn excise!
   "Remove entity from database history."
