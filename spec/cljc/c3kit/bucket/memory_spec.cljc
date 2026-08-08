@@ -1,16 +1,12 @@
 (ns c3kit.bucket.memory-spec
   (:require [c3kit.apron.log :as log]
-            [c3kit.bucket.history :as history]
             [c3kit.bucket.migrator :as migrator]
             [speclj.core #?(:clj :refer :cljs :refer-macros) [around before context describe it should-contain should-not-contain should-not-throw should-throw should= with]]
             [c3kit.bucket.api :as api #?(:clj :refer :cljs :refer-macros) [with-safety-off]]
             [c3kit.bucket.impl-spec :as spec]
-            [c3kit.bucket.memory :as sut]
-            #?(:clj [c3kit.bucket.memory-history]
-               :cljs [c3kit.bucket.memory-history])))
+            [c3kit.bucket.memory :as sut]))
 
 (def config {:impl :memory})
-(def history-config {:impl :memory-history :storage {:impl :memory}})
 (declare db)
 
 (defn migrator-specs []
@@ -109,6 +105,7 @@
   (spec/cas config)
   (spec/order-by-specs config)
   (spec/order-by-vector-specs config)
+  (spec/pagination-specs config)
   (migrator-specs)
 
   (context "safety"
@@ -120,36 +117,4 @@
   (it "specifying the store"
     (let [store (atom {:foo :bar})
           db    (api/create-db {:impl :memory :store store} [])]
-      (should= :bar (:foo @(.-store db)))))
-
-  (context "history decorator"
-    (spec/history-specs history-config)
-    (spec/excise-specs history-config)
-
-    (context "decorator specifics"
-      (it "plain memory does not support history"
-        (let [db (api/create-db config [spec/bibelot])]
-          (should= false (history/supported? db))))
-
-      (it "history starts at wrap time"
-        (let [store (atom {})
-              inner (api/create-db {:impl :memory :store store} [spec/bibelot])
-              pre   (api/tx- inner {:kind :bibelot :name "Pre" :size 1 :color "gray"})
-              db    (api/create-db {:impl :memory-history :storage {:impl :memory :store store}} [spec/bibelot])]
-          (should= [] (history/history- db pre))
-          (let [post (api/tx- db (assoc pre :size 2))]
-            (should= 1 (count (history/history- db post))))))
-
-      (it "clear resets the log"
-        (let [db (api/create-db history-config [spec/bibelot])
-              e  (api/tx- db {:kind :bibelot :name "ClearMe" :size 1 :color "red"})]
-          (api/clear- db)
-          (should= [] (history/history- db e))))
-
-      (it "delete-all records deletion markers"
-        (let [db (api/create-db history-config [spec/bibelot])
-              a  (api/tx- db {:kind :bibelot :name "A" :size 1 :color "red"})
-              b  (api/tx- db {:kind :bibelot :name "B" :size 1 :color "blue"})]
-          (api/delete-all- db :bibelot)
-          (should= true (:db/deleted? (last (history/history- db a))))
-          (should= true (:db/deleted? (last (history/history- db b)))))))))
+      (should= :bar (:foo @(.-store db))))))

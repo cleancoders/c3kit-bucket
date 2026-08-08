@@ -93,37 +93,38 @@
 
 (def ^:private vector-operators #{'<-> '<=> '<#>})
 
+(defn- compare-with-dir [dir a b]
+  (let [c (compare a b)]
+    (if (= :desc dir) (- c) c)))
+
 (defn- apply-order-by
   "Apply ordering to a collection of entities.
    order-by is a map of {field direction-or-op} where direction-or-op can be:
-   - :asc or :desc for standard ordering
-   - ['<-> query-vec] for L2 distance
-   - ['<=> query-vec] for cosine distance
-   - ['<#> query-vec] for inner product"
+   - :asc or :desc for standard ordering (all entries honored, map order, :id tie-break)
+   - ['<-> query-vec] for L2 distance (first entry only)
+   - ['<=> query-vec] for cosine distance (first entry only)
+   - ['<#> query-vec] for inner product (first entry only)"
   [order-by entities]
   (if-not (and order-by (map? order-by) (seq order-by))
     entities
-    (let [entry (first order-by)
-          field (key entry)
-          direction-or-op (val entry)]
-      (cond
-        ;; Vector similarity ordering
-        (and (sequential? direction-or-op)
-             (vector-operators (first direction-or-op)))
-        (let [[op query-vec] direction-or-op
+    (let [entries (vec order-by)
+          first-dir (val (first entries))]
+      (if (and (sequential? first-dir) (vector-operators (first first-dir)))
+        (let [field (key (first entries))
+              [op query-vec] first-dir
               distance-fn (case op
                             <-> l2-distance
                             <=> cosine-distance
                             <#> inner-product-distance)]
           (sort-by #(safe-distance distance-fn (get % field) query-vec) entities))
-
-        ;; Standard descending
-        (= :desc direction-or-op)
-        (sort-by field #(compare %2 %1) entities)
-
-        ;; Standard ascending (default)
-        :else
-        (sort-by field entities)))))
+        (sort (fn [a b]
+                (or (first
+                      (keep (fn [[field dir]]
+                              (let [c (compare-with-dir dir (get a field) (get b field))]
+                                (when-not (zero? c) c)))
+                            entries))
+                    (compare (:id a) (:id b))))
+              entities)))))
 
 (defn do-find [db kind options]
   (ensure-schema! @(.-legend db) kind)

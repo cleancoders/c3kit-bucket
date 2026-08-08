@@ -260,7 +260,14 @@
       (spec/kind-is-required config)
       (spec/cas config)
       (type-specs config)
-      (reserved-word-specs config))
+      (reserved-word-specs config)
+      (with-redefs [spec/orderable (schema/merge-schemas
+                                     spec/orderable
+                                     {:id   {:db {:type "serial PRIMARY KEY"}}
+                                      :name {:db {:type "varchar(255)"}}
+                                      :size {:db {:type "int"}}})]
+        (spec/order-by-specs config)
+        (spec/pagination-specs config)))
 
     (context "safety"
       (around [it] (with-redefs [api/*safety* true] (it)))

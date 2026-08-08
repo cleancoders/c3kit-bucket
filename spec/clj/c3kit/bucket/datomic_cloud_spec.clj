@@ -37,7 +37,24 @@
     (impl-spec/count-specs config)
     (impl-spec/kind-in-entity-is-optional config)
     (impl-spec/multi-value-fields config)
-    (impl-spec/cas config))
+    (impl-spec/cas config)
+    (impl-spec/order-by-specs config)
+    (impl-spec/pagination-specs config)
+    (impl-spec/order-by-cardinality-many-specs config))
+
+  (context "cloud page order after batch pull"
+    (helper/with-schemas config [impl-spec/orderable])
+    (before
+      (api/clear)
+      ;; sizes sort opposite to typical eid insertion order
+      (api/tx {:kind :orderable :name "z" :size 1})
+      (api/tx {:kind :orderable :name "y" :size 2})
+      (api/tx {:kind :orderable :name "x" :size 3}))
+
+    (it "preserves order-by after hydrate"
+      (should= ["z" "y" "x"] (map :name (api/find :orderable :order-by {:size :asc})))
+      (should= ["x" "y" "z"] (map :name (api/find :orderable :order-by {:size :desc})))
+      (should= ["z" "y"] (map :name (api/find :orderable :order-by {:size :asc} :take 2)))))
 
   (context "ref attribute"
     (helper/with-schemas config [impl-spec/bibelot (assoc impl-spec/thingy :fuzz {:type :ref}) impl-spec/disorganized])

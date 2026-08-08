@@ -8,7 +8,8 @@
             [c3kit.bucket.spec-helperc :as helper]
             [c3kit.apron.log :as log]
             [c3kit.apron.schema :as s]
-            [c3kit.apron.time :as time]))
+            [c3kit.apron.time :as time]
+            [clojure.set :as set]))
 
 (def bibelot
   {:kind  (s/kind :bibelot)
@@ -339,26 +340,28 @@
         (should= 1 (count (sut/find :thingy))))
 
       (it ":take option"
-        (let [all (sut/find :bibelot)]
-          (should= (take 1 all) (sut/find :bibelot {:take 1}))
-          (should= (take 2 all) (sut/find :bibelot {:take 2}))
-          (should= (take 3 all) (sut/find :bibelot {:take 3}))
-          (should= all (sut/find :bibelot {:take 4}))
-          (should= all (sut/find :bibelot {:take 99}))))
+        ;; Use :order-by so pages are comparable across impls (datomic sorts by eid when
+        ;; paging without order-by; memory uses store iteration order).
+        (let [all (sut/find :bibelot :order-by {:id :asc})]
+          (should= (take 1 all) (sut/find :bibelot :order-by {:id :asc} :take 1))
+          (should= (take 2 all) (sut/find :bibelot :order-by {:id :asc} :take 2))
+          (should= (take 3 all) (sut/find :bibelot :order-by {:id :asc} :take 3))
+          (should= all (sut/find :bibelot :order-by {:id :asc} :take 4))
+          (should= all (sut/find :bibelot :order-by {:id :asc} :take 99))))
 
       (it ":drop option"
-        (let [all (sut/find :bibelot)]
-          (should= (drop 1 all) (sut/find :bibelot {:drop 1}))
-          (should= (drop 2 all) (sut/find :bibelot {:drop 2}))
-          (should= (drop 3 all) (sut/find :bibelot {:drop 3}))
-          (should= [] (sut/find :bibelot {:drop 4}))
-          (should= [] (sut/find :bibelot {:drop 99}))))
+        (let [all (sut/find :bibelot :order-by {:id :asc})]
+          (should= (drop 1 all) (sut/find :bibelot :order-by {:id :asc} :drop 1))
+          (should= (drop 2 all) (sut/find :bibelot :order-by {:id :asc} :drop 2))
+          (should= (drop 3 all) (sut/find :bibelot :order-by {:id :asc} :drop 3))
+          (should= [] (sut/find :bibelot :order-by {:id :asc} :drop 4))
+          (should= [] (sut/find :bibelot :order-by {:id :asc} :drop 99))))
 
       (it "drop and take options (pagination)"
-        (let [all (sut/find :bibelot)]
-          (should= (take 1 (drop 1 all)) (sut/find :bibelot {:drop 1 :take 1}))
-          (should= (take 1 (drop 2 all)) (sut/find :bibelot {:drop 2 :take 1}))
-          (should= (take 3 all) (sut/find :bibelot {:drop 0 :take 3}))))
+        (let [all (sut/find :bibelot :order-by {:id :asc})]
+          (should= (take 1 (drop 1 all)) (sut/find :bibelot :order-by {:id :asc} :drop 1 :take 1))
+          (should= (take 1 (drop 2 all)) (sut/find :bibelot :order-by {:id :asc} :drop 2 :take 1))
+          (should= (take 3 all) (sut/find :bibelot :order-by {:id :asc} :drop 0 :take 3))))
 
       (it "by :name"
         (let [[entity :as entities] (sut/find-by :bibelot :name "hello")]
@@ -819,7 +822,78 @@
 
     (it "combines order-by with take"
       (let [results (sut/find :orderable :order-by {:size :asc} :take 2)]
-        (should= ["b" "c"] (map :name results))))))
+        (should= ["b" "c"] (map :name results))))
+
+    (it "multi-key order-by"
+      (sut/clear)
+      (sut/tx {:kind :orderable :name "a" :size 1})
+      (sut/tx {:kind :orderable :name "c" :size 1})
+      (sut/tx {:kind :orderable :name "b" :size 2})
+      (should= ["a" "c" "b"] (map :name (sut/find :orderable :order-by {:size :asc :name :asc})))
+      (should= ["c" "a" "b"] (map :name (sut/find :orderable :order-by {:size :asc :name :desc})))
+      (should= ["b" "c" "a"] (map :name (sut/find :orderable :order-by {:size :desc :name :desc}))))))
+
+(defn pagination-specs [config]
+  (context "pagination"
+    (helper/with-schemas config [orderable])
+
+    (before
+      (sut/clear)
+      (doseq [[name size] [["a" 1] ["b" 2] ["c" 3] ["d" 4] ["e" 5]
+                           ["f" 6] ["g" 7] ["h" 8] ["i" 9] ["j" 10]]]
+        (sut/tx {:kind :orderable :name name :size size})))
+
+    (it "pages with order-by asc without gaps or overlaps"
+      (let [full  (mapv :name (sut/find :orderable :order-by {:size :asc}))
+            pages (mapcat #(map :name (sut/find :orderable :order-by {:size :asc} :take 3 :drop %))
+                          [0 3 6 9])]
+        (should= ["a" "b" "c" "d" "e" "f" "g" "h" "i" "j"] full)
+        (should= full pages)))
+
+    (it "pages with order-by desc without gaps or overlaps"
+      (let [full  (mapv :name (sut/find :orderable :order-by {:size :desc}))
+            pages (mapcat #(map :name (sut/find :orderable :order-by {:size :desc} :take 3 :drop %))
+                          [0 3 6 9])]
+        (should= ["j" "i" "h" "g" "f" "e" "d" "c" "b" "a"] full)
+        (should= full pages)))
+
+    (it "drop/take without order-by is deterministic"
+      (let [page1 (mapv :id (sut/find :orderable :take 4 :drop 0))
+            page2 (mapv :id (sut/find :orderable :take 4 :drop 0))
+            page3 (mapv :id (sut/find :orderable :take 4 :drop 4))
+            page4 (mapv :id (sut/find :orderable :take 4 :drop 8))
+            all   (mapv :id (sut/find :orderable :order-by {:id :asc}))]
+        (should= page1 page2)
+        (should= (set all) (set (concat page1 page3 page4)))
+        (should= 10 (count (set (concat page1 page3 page4))))
+        (should= 0 (count (set/intersection (set page1) (set page3))))
+        (should= 0 (count (set/intersection (set page1) (set page4))))
+        (should= 0 (count (set/intersection (set page3) (set page4))))))
+
+    (it "entities missing order-by attr appear nil-first ascending"
+      (sut/tx {:kind :orderable :name "nil-size"})
+      (let [names (mapv :name (sut/find :orderable :order-by {:size :asc}))]
+        (should= "nil-size" (first names))))
+
+    (it "entities missing order-by attr appear nil-last descending"
+      (sut/tx {:kind :orderable :name "nil-size"})
+      (let [names (mapv :name (sut/find :orderable :order-by {:size :desc}))]
+        (should= "nil-size" (last names))))
+
+    (it "order-by on :id"
+      (let [ids (mapv :id (sut/find :orderable :order-by {:id :asc}))]
+        (should= (sort ids) ids))
+      (let [ids (mapv :id (sut/find :orderable :order-by {:id :desc}))]
+        (should= (reverse (sort ids)) ids)))))
+
+(defn order-by-cardinality-many-specs [config]
+  (context "order-by cardinality-many"
+    (helper/with-schemas config [doodad])
+
+    (it "throws on cardinality-many attribute"
+      (sut/tx {:kind :doodad :names ["a" "b"] :numbers [1] :letters [:x]})
+      (should-throw #?(:clj clojure.lang.ExceptionInfo :cljs cljs.core.ExceptionInfo)
+                    (sut/find :doodad :order-by {:names :asc})))))
 
 (defn order-by-vector-specs [config]
   (context "order-by vector distance"

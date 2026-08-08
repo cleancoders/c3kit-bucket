@@ -119,6 +119,54 @@ Enums install Datomic ident datoms for use as keyword references:
 
 Pass both schemas in the `schemas` vector to `create-db`.
 
+## Find: `:order-by` and Pagination
+
+Both Datomic backends support `db/find` options `:order-by`, `:drop`, and `:take` with the same
+consumer API as memory and JDBC.
+
+```clojure
+(db/find :bibelot
+  :where {:color "blue"}
+  :order-by {:size :asc}
+  :drop 40
+  :take 20)
+```
+
+### Pipeline
+
+1. Query **ids + sort-key columns** only (no full entity hydration).
+2. Sort tuples in process memory (tie-break by eid).
+3. Apply `:drop` / `:take`.
+4. Hydrate **only the page**:
+   - on-prem: lazy `d/entity` per survivor
+   - cloud: one batch `pull` for the page ids, re-ordered to match the page
+
+`:order-by` values use `get-else` so entities missing the attribute still appear (`nil` sorts first
+ascending / last descending, matching memory). Sorting by `:id` is supported. Cardinality-many
+attributes and vector-distance operators (`'<->`, etc.) throw.
+
+Without `:order-by`, plain finds are unchanged. With `:drop`/`:take` alone, results are sorted by
+eid so pages are deterministic.
+
+### Performance
+
+Datalog is set-semantics: any paged or ordered find realizes **all matching `[eid sort-key]`
+tuples** in peer (on-prem) or client (cloud) memory, then sorts — O(n log n) per page request,
+repeated every page. Tuples are cheap (two scalars); entities are never bulk-hydrated.
+
+Practical guidance:
+
+| Match set size | Expectation |
+|---|---|
+| up to ~100k | typically tens of ms |
+| ~1M | seconds per page; ~100MB transient allocation |
+
+SQL with a covering index does the same page in milliseconds at O(offset+take). Datomic’s
+mitigation is that the sort runs on *your* peer, not a shared server. At very large scale the
+right tool is a hand-written AVET index walk (`d/datoms :avet` / `d/index-range`): index-ordered,
+lazy, O(offset+take) per indexed attribute. Bucket’s generic `find` intentionally does not abstract
+that. Cloud additionally ships the id/sort-key tuple set over the wire from the query group.
+
 ## Entity History and Time-Travel
 
 Both backends share the history API, exposed as namespace-level functions (not on the `api/DB` protocol).

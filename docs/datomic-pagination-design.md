@@ -1,6 +1,6 @@
 # Datomic Pagination & :order-by — Design & Implementation Plan
 
-Status: **approved design, not yet implemented**
+Status: **implemented**
 
 Builds on the refactored datomic layer (merged deftypes, `DatomicApi` driver port — see
 `docs/history-design.md`). All code references below are to the post-history-refactor sources.

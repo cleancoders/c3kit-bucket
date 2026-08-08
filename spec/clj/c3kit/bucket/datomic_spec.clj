@@ -30,7 +30,10 @@
     (spec/count-specs config)
     (spec/kind-in-entity-is-optional config)
     (spec/multi-value-fields config)
-    (spec/cas config))
+    (spec/cas config)
+    (spec/order-by-specs config)
+    (spec/pagination-specs config)
+    (spec/order-by-cardinality-many-specs config))
 
   (context "safety"
     (around [it] (with-redefs [api/*safety* true] (it)))

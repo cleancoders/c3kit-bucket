@@ -132,9 +132,11 @@
 
 (defn do-find [db kind options]
   (if-let [where (seq (common-api/build-where-datalog db kind (:where options)))]
-    (let [query (concat '[:find ?e :in $ :where] where)]
+    (let [{:keys [syms clauses dirs cols]} (common-api/order-by->extra db kind (:order-by options))
+          where (if (seq clauses) (common-api/ensure-e-bound db kind where) where)
+          query (concat (into [:find '?e] syms) '[:in $ :where] where clauses)]
       (->> (common-api/-q db query)
-           (api/-apply-drop-take options)
+           (common-api/sort-and-page-tuples options dirs cols)
            (q->entities db)))
     []))
 

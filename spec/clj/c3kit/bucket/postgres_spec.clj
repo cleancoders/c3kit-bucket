@@ -45,6 +45,7 @@
       (jdbc-spec/type-specs config)
       (jdbc-spec/reserved-word-specs config)
       (spec/order-by-specs config)
+      (spec/pagination-specs config)
       (context "with pgvector"
         (before-all
           (let [db (api/create-db config [])]

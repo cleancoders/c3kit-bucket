@@ -189,6 +189,84 @@
     :db/id
     (keyword (name kind) (name attr))))
 
+(def ^:private order-nil-sentinel ::nil)
+(def ^:private vector-order-ops #{'<-> '<=> '<#>})
+
+(defn- many-attr-type? [type]
+  (or (vector? type) (= :seq type)))
+
+(defn- assert-orderable-attr! [legend kind attr]
+  (when-not (= :id attr)
+    (let [spec (get (legend/for-kind legend kind) attr)]
+      (when (and spec (many-attr-type? (:type spec)))
+        (throw (ex-info "Cannot :order-by a cardinality-many attribute"
+                        {:kind kind :attr attr}))))))
+
+(defn order-by->extra
+  "Build extra find vars/clauses for :order-by.
+  Returns {:syms [?v0 ...] :clauses [[(get-else $ ?e attr ::nil) ?v0] ...]
+           :dirs [:asc ...] :cols [1 ...]}
+  :id sorts by ?e (column 0) with no extra clause. :cols are tuple indexes for sort keys."
+  [db kind order-by]
+  (if-not (and (map? order-by) (seq order-by))
+    {:syms [] :clauses [] :dirs [] :cols []}
+    (let [legend @(api/-legend db)]
+      (loop [entries  (seq order-by)
+             syms     []
+             clauses  []
+             dirs     []
+             cols     []
+             next-col 1]
+        (if-let [[attr dir] (first entries)]
+          (do
+            (when (and (sequential? dir) (vector-order-ops (first dir)))
+              (throw (ex-info "Vector-distance :order-by is not supported on datomic"
+                              {:kind kind :attr attr :op (first dir)})))
+            (assert-orderable-attr! legend kind attr)
+            (if (= :id attr)
+              (recur (next entries) syms clauses (conj dirs dir) (conj cols 0) next-col)
+              (let [sym     (symbol (str "?v" (dec next-col)))
+                    attr-kw (->attr-kw kind attr)
+                    clause  [(list 'get-else '$ '?e attr-kw order-nil-sentinel) sym]]
+                (recur (next entries)
+                       (conj syms sym)
+                       (conj clauses clause)
+                       (conj dirs dir)
+                       (conj cols next-col)
+                       (inc next-col)))))
+          {:syms syms :clauses clauses :dirs dirs :cols cols})))))
+
+(defn- replace-order-sentinel [v]
+  (if (= order-nil-sentinel v) nil v))
+
+(defn- compare-with-dir [dir a b]
+  (let [c (compare a b)]
+    (if (= :desc dir) (- c) c)))
+
+(defn- compare-tuples
+  "Compare two result tuples by order-by columns, then by eid (index 0)."
+  [cols dirs a b]
+  (or (first
+        (keep (fn [[col dir]]
+                (let [c (compare-with-dir dir
+                                          (replace-order-sentinel (nth a col))
+                                          (replace-order-sentinel (nth b col)))]
+                  (when-not (zero? c) c)))
+              (map vector cols dirs)))
+      (compare (first a) (first b))))
+
+(defn sort-and-page-tuples
+  "Sorts result tuples by the order-by columns (tie-break: eid), then applies :drop/:take.
+  With no :order-by but with :drop/:take, sorts by eid for deterministic pages.
+  With neither, returns tuples untouched (no cost added to plain finds)."
+  [options dirs cols tuples]
+  (let [need-sort? (or (seq cols) (:drop options) (:take options))
+        sorted     (cond
+                     (not need-sort?) tuples
+                     (seq cols) (sort #(compare-tuples cols dirs %1 %2) tuples)
+                     :else (sort-by first tuples))]
+    (api/-apply-drop-take options sorted)))
+
 (declare where-clause)
 
 (defn attr->sym [attr]
@@ -267,6 +345,22 @@
         attrs        (keys (dissoc schema :id :kind))
         scoped-attrs (map #(scope-attribute kind %) attrs)]
     [(cons 'or (map (fn [a] ['?e a]) scoped-attrs))]))
+
+(defn- binds-e?
+  "true when clause positively patterns on ?e (so not/get-else can use it)."
+  [clause]
+  (cond
+    (and (vector? clause) (= '?e (first clause))) true
+    (and (sequential? clause) (#{'or 'and} (first clause))) (some binds-e? (rest clause))
+    :else false))
+
+(defn ensure-e-bound
+  "Prepend where-all-of-kind when :where does not already bind ?e
+  (e.g. lone not=). Required before get-else order-by clauses."
+  [db kind where]
+  (if (some binds-e? where)
+    where
+    (concat (where-all-of-kind db kind) where)))
 
 (defn- clause-or-all-of-kind [db kind attr clause]
   (cond

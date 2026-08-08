@@ -111,14 +111,16 @@ Options:
     ['> value]    - (> % value)
     ['< value]    - (< % value)
     ['like str]   - (re-matches str %) where '_' = single char wildcard and '%' = multi char wildcard
-  :order-by - map of {field direction} to sort results (not supported by datomic)
+  :order-by - map of {field direction} to sort results
     :asc          - ascending order
     :desc         - descending order
-    ['<-> vec]    - L2 distance (memory, postgres with pgvector)
-    ['<=> vec]    - cosine distance (memory, postgres with pgvector)
-    ['<#> vec]    - inner product distance (memory, postgres with pgvector)
+    ['<-> vec]    - L2 distance (memory, postgres with pgvector; not datomic)
+    ['<=> vec]    - cosine distance (memory, postgres with pgvector; not datomic)
+    ['<#> vec]    - inner product distance (memory, postgres with pgvector; not datomic)
   :take   - int - returns only this many entities
-  :drop   - int - skips this many entities"
+  :drop   - int - skips this many entities
+  On datomic, :order-by and :drop/:take realize all matching [eid sort-key] tuples then
+  sort/page in process memory (O(n log n) in the match set); only the page is hydrated."
   [kind & opt-args] (apply find- @impl kind opt-args))
 
 (defn ffind-

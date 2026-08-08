@@ -465,7 +465,7 @@ Tests (run against decorated memory, `:datomic`, and `:datomic-cloud` — identi
 
 Wire-up:
 
-- `spec/cljc/c3kit/bucket/memory_spec.cljc`: add a history context using
+- `spec/cljc/c3kit/bucket/memory_history_spec.cljc`: history context using
   `{:impl :memory-history :storage {:impl :memory}}`, running `(spec/history-specs config)` +
   decorator-specific tests:
   - history starts at wrap time (pre-existing entities in a supplied `:storage` store have no versions),

@@ -1,4 +1,9 @@
 ### Unreleased
+* **Datomic `:order-by` and pagination** — both on-prem and cloud `find` support `:order-by` plus deterministic `:drop`/`:take` pages. Pipeline: query id/sort-key tuples → sort/page in process → hydrate only the page (cloud uses one batch pull). See `docs/datomic-guide.md`.
+  * Cloud no longer hydrates the full match set before paging (was a full `pull` in the main query)
+  * Without `:order-by`, `:drop`/`:take` sorts by eid for stable pages; plain finds stay unsorted
+  * Cardinality-many and vector-distance order-by throw on datomic
+  * Multi-key `:order-by` honored on memory and datomic (map entry order; `:id` tie-break)
 * **History API** (`c3kit.bucket.history`): impl-agnostic entity timelines, `as-of` point-in-time reads, timestamps, and excision. See `docs/history-guide.md`.
   * Native `HistoryDB` on `:datomic` and `:datomic-cloud`
   * `:memory-history` decorator (`c3kit.bucket.memory-history`) composes over any `api/DB` via `{:impl :memory-history :storage {...}}`
