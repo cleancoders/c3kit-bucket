@@ -2,6 +2,9 @@
   (:require [c3kit.bucket.jdbc :as jdbc]
             [clojure.string :as str]))
 
+(defmethod jdbc/null-ordering :postgres [_]
+  {:asc " NULLS FIRST" :desc " NULLS LAST"})
+
 (defmethod jdbc/schema->db-type-map :postgres [_]
   {:int     "int4"
    :long    "int4"

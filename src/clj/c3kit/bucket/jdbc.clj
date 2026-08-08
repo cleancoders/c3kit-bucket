@@ -496,6 +496,14 @@
         param      (->sql-param dialect type cast-type)]
     [(str field-name " " op-str " " param) (->sql-value dialect type query-vec)]))
 
+(defmulti null-ordering
+  "SQL suffixes forcing bucket's order-by null semantics (nulls first ASC, last DESC —
+   matching memory/datomic). Dialects whose defaults already sort NULL lowest
+   (h2, sqlite3, mssql) need no suffix; postgres sorts NULL highest and overrides."
+  (fn [dialect] dialect))
+
+(defmethod null-ordering :default [_] {:asc "" :desc ""})
+
 (defn- build-order-clause
   "Build a single ORDER BY clause. Returns [sql-fragment & args].
    direction-or-op can be:
@@ -508,13 +516,13 @@
       (build-vector-order-clause dialect t-map field op query-vec))
 
     (= :desc direction-or-op)
-    [(str (->field-name dialect t-map field) " DESC")]
+    [(str (->field-name dialect t-map field) " DESC" (:desc (null-ordering dialect)))]
 
     (= :asc direction-or-op)
-    [(str (->field-name dialect t-map field) " ASC")]
+    [(str (->field-name dialect t-map field) " ASC" (:asc (null-ordering dialect)))]
 
     :else
-    [(str (->field-name dialect t-map field) " ASC")]))
+    [(str (->field-name dialect t-map field) " ASC" (:asc (null-ordering dialect)))]))
 
 (defn -build-order-by
   "Build ORDER BY clause from order-by option. Returns [sql-fragment & args].

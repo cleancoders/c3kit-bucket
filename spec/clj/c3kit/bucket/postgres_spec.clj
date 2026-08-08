@@ -22,6 +22,7 @@
 (with-redefs [spec/bibelot      jdbc-spec/bibelot
               spec/thingy       jdbc-spec/thingy
               spec/disorganized jdbc-spec/disorganized
+              spec/orderable    jdbc-spec/orderable
               spec/vectorable   vectorable]
 
   (describe "PostgresSQL"

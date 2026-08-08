@@ -61,6 +61,13 @@
      :spell   {:db {:cast "spell_type"}}
      :truthy? {:db {:column "truthy"}}}))
 
+(def orderable
+  (schema/merge-schemas
+    spec/orderable
+    {:id   {:db {:type "serial PRIMARY KEY"}}
+     :name {:db {:type "varchar(255)"}}
+     :size {:db {:type "int"}}}))
+
 (def variform
   {:kind (schema/kind :variform)
    :id   {:type :ref :db {:type "serial PRIMARY KEY"}}})
@@ -261,11 +268,7 @@
       (spec/cas config)
       (type-specs config)
       (reserved-word-specs config)
-      (with-redefs [spec/orderable (schema/merge-schemas
-                                     spec/orderable
-                                     {:id   {:db {:type "serial PRIMARY KEY"}}
-                                      :name {:db {:type "varchar(255)"}}
-                                      :size {:db {:type "int"}}})]
+      (with-redefs [spec/orderable orderable]
         (spec/order-by-specs config)
         (spec/pagination-specs config)))
 

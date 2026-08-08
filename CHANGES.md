@@ -4,6 +4,7 @@
   * Without `:order-by`, `:drop`/`:take` sorts by eid for stable pages; plain finds stay unsorted
   * Cardinality-many and vector-distance order-by throw on datomic
   * Multi-key `:order-by` honored on memory and datomic (map entry order; `:id` tie-break)
+  * jdbc: postgres `ORDER BY` now emits `NULLS FIRST`/`NULLS LAST` so nil ordering matches bucket semantics (nils first ascending); other dialects already match by default
 * **History API** (`c3kit.bucket.history`): impl-agnostic entity timelines, `as-of` point-in-time reads, timestamps, and excision. See `docs/history-guide.md`.
   * Native `HistoryDB` on `:datomic` and `:datomic-cloud`
   * `:memory-history` decorator (`c3kit.bucket.memory-history`) composes over any `api/DB` via `{:impl :memory-history :storage {...}}`
