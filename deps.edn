@@ -8,7 +8,7 @@
  :aliases {:antq            {:deps      {com.github.liquidz/antq {:mvn/version "2.11.1276"}}
                              :main-opts ["-m" "antq.core"]}
            :build           {:extra-deps {io.github.cleancoders/github-actions
-                                          {:git/sha "821c7e7c131226aa74fcf269d45f6e71d560efed" :deps/root "clj"}}
+                                          {:git/sha "f17a82e164d6afd185b508c3111ed15a42c60b5a" :deps/root "clj"}}
                              :ns-default cleancoders.build.api
                              :exec-args  {:group       "com.cleancoders.c3kit"
                                           :lib-name    "bucket"
